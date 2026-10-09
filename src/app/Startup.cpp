@@ -1094,6 +1094,12 @@ int InitApp(FrameCtx& fc, int argc, char** argv)
       if (const char* portEnv = getenv("INFINITE_CONTROL_PORT"))
          controlPort = atoi(portEnv);
       RemoteControl::Start(controlPort);
+
+      // Assistant panel opens by default when it can work (a `claude`
+      // executable was found). Here rather than in AppState so headless/test
+      // runs keep the old layout, and a machine without Claude Code never
+      // reserves an empty dock it has no menu item to close.
+      gAssistantPanelOpen = AssistantAvailable();
    }
 
    // The audio engine no longer auto-starts at launch: someone opening the
