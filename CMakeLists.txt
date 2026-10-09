@@ -1477,3 +1477,43 @@ if(APPLE)
     target_sources(Infinite PRIVATE ${INFINITE_DRUMKIT_FILES})
     set_source_files_properties(${INFINITE_DRUMKIT_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/drumkits/infinite-basic")
 endif()
+
+# Precompiled header (docs/plans/compile-times/include-split.md, Phase 1): only stable,
+# outside code - the standard library, ImGui and nlohmann/json - never a
+# project header, or every project edit would rebuild the PCH and with it
+# every TU. Cuts the per-TU parse cost; the include split cuts how many TUs
+# an edit recompiles. Applied to Infinite's own C++ under src/ only: vendored
+# sources keep their exact flags, Objective-C++ (.mm) has no PCH, and the /Od
+# self-test files above stay byte-for-byte as they were (a PCH built at /O2
+# must not meet their /Od ICE workaround). -DINFINITE_PCH=OFF to compare.
+option(INFINITE_PCH "Precompile std/ImGui/json headers for the Infinite target" ON)
+if(INFINITE_PCH)
+    set(_pch_headers
+        <algorithm> <array> <atomic> <chrono> <cmath> <cstdint> <cstdio> <cstdlib>
+        <cstring> <deque> <filesystem> <fstream> <functional> <map> <memory>
+        <mutex> <optional> <random> <set> <sstream> <string> <thread>
+        <unordered_map> <unordered_set> <utility> <vector>
+        <imgui.h> <imgui_internal.h> <json.hpp>)
+    list(TRANSFORM _pch_headers PREPEND "$<$<COMPILE_LANGUAGE:CXX>:")
+    list(TRANSFORM _pch_headers APPEND ">")
+    target_precompile_headers(Infinite PRIVATE ${_pch_headers})
+
+    get_target_property(_infinite_sources Infinite SOURCES)
+    foreach(_src IN LISTS _infinite_sources)
+        if(_src MATCHES "^\$<")
+            continue()
+        endif()
+        set(_rel "${_src}")
+        if(IS_ABSOLUTE "${_src}")
+            file(RELATIVE_PATH _rel "${CMAKE_CURRENT_SOURCE_DIR}" "${_src}")
+        endif()
+        if(NOT _rel MATCHES "^src/" OR NOT _rel MATCHES "\.(cpp|cc|cxx)$")
+            set_source_files_properties("${_src}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+        endif()
+    endforeach()
+    set_source_files_properties(
+        src/app/selftest/DspFixtures2.cpp
+        src/app/selftest/DspFixtures3.cpp
+        src/app/selftest/FieldTests2.cpp
+        PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+endif()
