@@ -1,5 +1,23 @@
 // Generic node parameter bodies, part 2: curves, palettes, ramps, analyze (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/dsp/AudioFilterKernel.h"
+#include "audio/dsp/DriveKernel.h"
+#include "audio/dsp/EqKernel.h"
+#include "audio/dsp/WavetableShaperKernel.h"
+#include "core/CurveShape.h"
+#include "core/ExprGlobals.h"
+#include "core/Expression.h"
+#include "core/UpdateCheck.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/ColorRampNode.h"
+#include "nodes/CurvesNode.h"
+#include "nodes/FeedbackNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/PaletteNode.h"
+#include "nodes/PredictiveColoringNode.h"
+#include "nodes/RampNode.h"
+#include "nodes/RemoveBgNode.h"
 
 namespace app
 {

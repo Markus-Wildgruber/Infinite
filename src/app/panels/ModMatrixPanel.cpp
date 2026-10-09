@@ -1,5 +1,7 @@
 // Modulation matrix panel (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/Mesh.h"
 
 namespace app
 {

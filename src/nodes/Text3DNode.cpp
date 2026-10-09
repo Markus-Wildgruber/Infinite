@@ -2,7 +2,8 @@
 
 #include "gl3.h"
 
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 #include "Transport.h"
 
 Text3DNode::~Text3DNode()

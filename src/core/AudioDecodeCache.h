@@ -2,7 +2,8 @@
 
 #include <string>
 
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 // Shared decode-and-cache entry point for every sample-based audio node
 // (AudioFileNode/AnalyzeNodes, SamplerNode, GranularNode, PaulStretchNode,

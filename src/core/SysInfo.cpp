@@ -1,7 +1,10 @@
 #include "SysInfo.h"
 #include "audio/PluginScanner.h"
 #include "core/gl3.h"
-#include "platform/Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformPlugins.h"
+#include "platform/PlatformMidi.h"
+#include "platform/PlatformVideoIO.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -23,7 +26,6 @@
 #endif
 
 #if defined(__linux__)
-#include "platform/Platform.h"
 extern "C"
 {
 #include <libavcodec/avcodec.h>

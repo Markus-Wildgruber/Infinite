@@ -7,6 +7,7 @@
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
+#include "platform/PlatformApp.h"
 
 namespace
 {

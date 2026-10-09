@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <cmath>
 
-#include "Platform.h"
+#include "platform/PlatformApp.h"
+#include "platform/PlatformAudio.h"
 #include "Transport.h"
 
 namespace

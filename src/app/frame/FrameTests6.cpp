@@ -1,5 +1,13 @@
 // Per-frame self-test blocks moved verbatim out of the main loop in main.cpp.
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/frame/FrameTests.h"
+#include "core/PatchJson.h"
+#include "nodes/MidiNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/MpcNode.h"
+#include "nodes/ShapeNode.h"
+#include "platform/PlatformMidi.h"
 
 namespace app
 {

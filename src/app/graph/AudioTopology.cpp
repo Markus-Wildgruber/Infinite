@@ -1,5 +1,20 @@
 // Audio chain collection, topology rebuild, engine start and recovery (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioCaptureRing.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioNode.h"
+#include "audio/CompensationDelay.h"
+#include "audio/DspMath.h"
+#include "audio/NoteEventQueue.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/OscillatorNode.h"
+#include "nodes/OutputNode.h"
+#include "nodes/SamplerNode.h"
+#include "nodes/WavetableNode.h"
 
 namespace app
 {

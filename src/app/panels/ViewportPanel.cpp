@@ -1,5 +1,18 @@
 // Viewport panel cards and mini viewports (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppViewports.h"
+#include "audio/dsp/MolderDsp.h"
+#include "core/NodeViewport.h"
+#include "core/SharedViewportCamera.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/DrawNode.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/ProjectionNode.h"
+#include "nodes/SceneNodes.h"
+#include "nodes/SimulationNodes.h"
+#include "nodes/UtilityNodes.h"
+#include "nodes/VideoSourceNode.h"
 
 namespace app
 {

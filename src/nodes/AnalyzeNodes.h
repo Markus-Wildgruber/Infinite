@@ -7,7 +7,8 @@
 #include "INode.h"
 #include "ImageCable.h"
 #include "Modulation.h"
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 #include "core/AudioCable.h"
 
 class AudioFilePlayerAudioNode; // defined in AnalyzeNodes.cpp - see SamplerNode.h's

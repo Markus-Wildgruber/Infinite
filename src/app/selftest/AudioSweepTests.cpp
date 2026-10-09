@@ -1,5 +1,16 @@
 // Audio-node sweep discovery + AUDIOPARAMSWEEPTEST / FM checks (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppSelfTest.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioNode.h"
+#include "audio/EffectDefs.h"
+#include "audio/NoteEvent.h"
+#include "audio/NoteEventQueue.h"
+#include "nodes/OscillatorNode.h"
+#include "nodes/WavetableNode.h"
 
 namespace app
 {

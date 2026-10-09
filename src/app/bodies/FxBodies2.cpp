@@ -1,5 +1,21 @@
 // Modulation/spectral effect bodies + visualizers (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/AudioEngine.h"
+#include "audio/DspMath.h"
+#include "audio/SynthModes.h"
+#include "audio/dsp/EquationDsp.h"
+#include "audio/dsp/FormantFilterKernel.h"
+#include "audio/dsp/KeySnapKernel.h"
+#include "audio/dsp/MeshModalSolver.h"
+#include "audio/dsp/PhaserKernel.h"
+#include "audio/dsp/ShapeResonatorKernel.h"
+#include "audio/dsp/StutterKernel.h"
+#include "audio/dsp/TremoloKernel.h"
+#include "audio/dsp/WaveTerrainDsp.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/WavetableSynthCore.h"
+#include "platform/common/SingleInstance.h"
 
 namespace app
 {

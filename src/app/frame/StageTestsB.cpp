@@ -1,5 +1,33 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppViewports.h"
+#include "app/frame/FrameTests.h"
+#include "audio/dsp/MolderDsp.h"
+#include "core/ExprGlobals.h"
+#include "core/NodeViewport.h"
+#include "core/PatchJson.h"
+#include "core/SharedViewportCamera.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/CurveNode.h"
+#include "nodes/DepthProjectionNode.h"
+#include "nodes/GenerativeNodes.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/Group3DNode.h"
+#include "nodes/ModelSourceNode.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/OceanNode.h"
+#include "nodes/OscNodes.h"
+#include "nodes/ProjectionNode.h"
+#include "nodes/SceneNodes.h"
+#include "nodes/ShapeNode.h"
+#include "nodes/SimulationNodes.h"
+#include "nodes/Switcher3DNode.h"
+#include "nodes/Text3DNode.h"
+#include "nodes/TextNode.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

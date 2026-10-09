@@ -1,5 +1,11 @@
 // Settings window (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/AudioEngine.h"
+#include "core/AISkillContent.h"
+#include "core/ExprGlobals.h"
+#include "core/UpdateCheck.h"
+#include "nodes/DrumPatterns.h"
 
 namespace app
 {

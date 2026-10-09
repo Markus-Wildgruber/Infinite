@@ -11,7 +11,8 @@
 
 #include "json.hpp"
 #include "platform/AppPaths.h"
-#include "platform/Platform.h"
+#include "platform/PlatformApp.h"
+#include "platform/PlatformAudio.h"
 
 #ifndef INFINITE_VERSION_STRING
 #define INFINITE_VERSION_STRING "0.0.0"

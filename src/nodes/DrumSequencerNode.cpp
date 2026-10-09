@@ -17,7 +17,8 @@
 #include "audio/SampleSlot.h"
 #include "core/Transport.h"
 #include "core/AudioDecodeCache.h"
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 namespace
 {

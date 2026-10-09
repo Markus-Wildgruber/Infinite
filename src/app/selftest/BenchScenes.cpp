@@ -1,5 +1,21 @@
 // Benchmark scene builders (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppBench.h"
+#include "audio/AudioEngine.h"
+#include "audio/EffectDefs.h"
+#include "core/ImageCable.h"
+#include "core/UpdateCheck.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/EnvironmentNode.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/OceanNode.h"
+#include "nodes/SamplerNode.h"
+#include "nodes/SceneNodes.h"
+#include "nodes/UtilityNodes.h"
+#include "nodes/VideoSourceNode.h"
 
 namespace app
 {

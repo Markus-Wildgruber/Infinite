@@ -1,5 +1,13 @@
 // RPC command handler (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppUndo.h"
+#include "core/ExprGlobals.h"
+#include "core/ImageCable.h"
+#include "core/PatchJson.h"
+#include "nodes/DrumPatterns.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/OutputNode.h"
 
 namespace app
 {

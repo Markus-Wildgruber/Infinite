@@ -1,5 +1,33 @@
 // DSP self-test fixtures, part 1: gain..wavetable shaper (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppSelfTest.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioNode.h"
+#include "audio/AudioVoice.h"
+#include "audio/DspMath.h"
+#include "audio/EffectDefs.h"
+#include "audio/MeterRing.h"
+#include "audio/NoteEvent.h"
+#include "audio/NoteEventQueue.h"
+#include "audio/ParamMailbox.h"
+#include "audio/SynthModes.h"
+#include "audio/Wavetable.h"
+#include "audio/dsp/AudioFilterKernel.h"
+#include "audio/dsp/DriveKernel.h"
+#include "audio/dsp/DynamicsKernel.h"
+#include "audio/dsp/EquationDsp.h"
+#include "audio/dsp/GrainMolderDsp.h"
+#include "audio/dsp/MolderDsp.h"
+#include "audio/dsp/ReverbKernel.h"
+#include "audio/dsp/WaveTerrainDsp.h"
+#include "audio/dsp/WavetableShaperKernel.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/WavetableNode.h"
 
 namespace app
 {

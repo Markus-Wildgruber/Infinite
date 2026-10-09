@@ -3,7 +3,8 @@
 #include <algorithm>
 #include <sstream>
 
-#include "Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformMidi.h"
 #include "Transport.h"
 
 namespace

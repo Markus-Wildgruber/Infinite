@@ -1,6 +1,7 @@
 #pragma once
 
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 #include <cmath>
 

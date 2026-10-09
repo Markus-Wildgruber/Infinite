@@ -6,7 +6,8 @@
 #include "INode.h"
 #include "ImageCable.h"
 #include "GLUtil.h"
-#include "Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformVideoIO.h"
 
 // Syphon Out node: broadcasts any connected video, 3D render, or visual shader
 // to other macOS apps (Resolume, OBS, TouchDesigner, MadMapper) in real-time

@@ -5,7 +5,7 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "Platform.h"
+#include "platform/PlatformPlugins.h"
 #include "PluginVST3.h"
 
 int main(int argc, char** argv)

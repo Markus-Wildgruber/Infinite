@@ -1,5 +1,7 @@
 // Node help text tables, shortcuts and help windows (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "arrange/ArrangeModel.h"
 
 namespace app
 {

@@ -1,5 +1,7 @@
 // PNG / image export (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "nodes/OutputNode.h"
 
 namespace app
 {

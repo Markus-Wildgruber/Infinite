@@ -1,5 +1,23 @@
 // Arrange panel support: position formatting, typed edit, sliders, media import (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "arrange/ArrangeMediaImport.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioEngine.h"
+#include "audio/MediaExtensions.h"
+#include "audio/NoteModel.h"
+#include "audio/dsp/GrainMolderDsp.h"
+#include "audio/dsp/SlicerDsp.h"
+#include "core/Mesh.h"
+#include "core/PatchLayout.h"
+#include "core/field/FieldGraphOwnership.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/ImageSourceNode.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/OutputNode.h"
+#include "nodes/VideoSourceNode.h"
 
 namespace app
 {

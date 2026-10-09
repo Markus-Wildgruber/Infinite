@@ -1,5 +1,8 @@
 // Dropdowns, drop handling, browser filter strip + favourites, discrete param slots (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/Palette.h"
+#include "nodes/DrumSequencerNode.h"
 
 namespace app
 {

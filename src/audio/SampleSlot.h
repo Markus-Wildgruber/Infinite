@@ -3,7 +3,8 @@
 #include <atomic>
 #include <cstddef>
 
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 // Main-thread-hands-a-buffer-to-the-audio-thread lifetime management,
 // lifted out of SamplerNode.cpp (where it first shipped as a single

@@ -391,8 +391,9 @@ endif()
 
 # ---- per-platform sources ---------------------------------------------------
 #
-# Everything OS-specific funnels through src/platform/Platform.h, so exactly
-# one platform backend TU set is ever compiled:
+# Everything OS-specific funnels through src/platform/Platform.h (an umbrella
+# over the per-topic src/platform/Platform<Topic>.h headers that callers
+# include), so exactly one platform backend TU set is ever compiled:
 #
 #   macOS : Platform.mm (CoreAudio/CoreMIDI/AVFoundation/...) + AudioFileWriter.mm
 #           + the Syphon library

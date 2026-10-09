@@ -1,5 +1,25 @@
 // Application state: every non-const namespace variable, in the original definition order (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppUndo.h"
+#include "app/AppViewports.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/MediaExtensions.h"
+#include "audio/Wavetable.h"
+#include "core/Mesh.h"
+#include "core/NodeViewport.h"
+#include "core/SharedViewportCamera.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/FieldElementNode.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/FieldPixelNode.h"
+#include "nodes/FieldPrimitiveNode.h"
+#include "nodes/FieldSampleNode.h"
+#include "nodes/FieldSynthNode.h"
+#include "nodes/FormulaNode.h"
+#include "nodes/OutputNode.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

@@ -1,5 +1,26 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppSelfTest.h"
+#include "app/AppUndo.h"
+#include "app/frame/FrameTests.h"
+#include "arrange/ArrangeMediaImport.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioNode.h"
+#include "audio/MediaExtensions.h"
+#include "audio/NoteModel.h"
+#include "audio/dsp/GrainMolderDsp.h"
+#include "audio/dsp/MolderDsp.h"
+#include "audio/dsp/SlicerDsp.h"
+#include "core/ImageCable.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

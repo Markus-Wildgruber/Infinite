@@ -1,5 +1,17 @@
 // Per-frame modulation + palette application (runtime code that sat among the fixtures in main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "arrange/ArrangeModel.h"
+#include "core/ExprGlobals.h"
+#include "core/Expression.h"
+#include "core/Palette.h"
+#include "nodes/FieldElementNode.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/FieldPixelNode.h"
+#include "nodes/FieldPrimitiveNode.h"
+#include "nodes/MacroNodes.h"
+#include "nodes/MidiNodes.h"
 
 namespace app
 {

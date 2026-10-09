@@ -4,7 +4,8 @@
 #include <vector>
 #include "INode.h"
 #include "GLUtil.h"
-#include "Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformVideoIO.h"
 
 // Syphon In node: ingests real-time video/graphics from any active Syphon server
 // on macOS (Resolume, OBS, TouchDesigner, MadMapper, Unreal, Unity) via zero-copy

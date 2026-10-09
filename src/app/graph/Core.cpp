@@ -1,5 +1,13 @@
 // Node names, titles, links and field-bridge helpers (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "arrange/ArrangeModel.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/OutputNode.h"
+#include "nodes/ShapeNode.h"
+#include "platform/PlatformMidi.h"
 
 namespace app
 {

@@ -1,5 +1,16 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "audio/MediaExtensions.h"
+#include "core/Mesh.h"
+#include "core/Palette.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/EnvironmentNode.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/SceneNodes.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

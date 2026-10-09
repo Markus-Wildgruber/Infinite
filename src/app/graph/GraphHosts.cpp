@@ -1,5 +1,13 @@
 // Node removal and graph hosts (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppViewports.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioEngine.h"
+#include "core/Palette.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

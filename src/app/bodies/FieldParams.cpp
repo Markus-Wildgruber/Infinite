@@ -1,5 +1,14 @@
 // Field node parameter bodies and scopes (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/UpdateCheck.h"
+#include "nodes/FieldElementNode.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/FieldPixelNode.h"
+#include "nodes/FieldPrimitiveNode.h"
+#include "nodes/FieldSampleNode.h"
+#include "nodes/FieldSynthNode.h"
+#include "nodes/WavetableNode.h"
 
 namespace app
 {

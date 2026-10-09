@@ -7,7 +7,8 @@
 
 #include "AssetCache.h"
 #include "GltfImport.h"
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 #include "Transport.h"
 
 namespace

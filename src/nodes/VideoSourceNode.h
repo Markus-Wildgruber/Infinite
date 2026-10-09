@@ -8,7 +8,8 @@
 
 #include "BenchMediaIo.h"
 #include "INode.h"
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 #include "Transport.h"
 
 class VideoAudioNode;

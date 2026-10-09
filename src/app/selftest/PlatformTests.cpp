@@ -1,5 +1,8 @@
 // Platform / patch-layout self-tests (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppSelfTest.h"
+#include "core/PatchLayout.h"
 #if defined(__linux__)
 #include "platform/linux/HostEnvironmentLinux.h"
 #endif

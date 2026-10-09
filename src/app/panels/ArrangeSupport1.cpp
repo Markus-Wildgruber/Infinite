@@ -1,5 +1,18 @@
 // Arrange panel support: undo, selection, clipboard, drag, add-to-timeline (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppViewports.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioEngine.h"
+#include "audio/ClipPeakRing.h"
+#include "audio/MediaExtensions.h"
+#include "audio/dsp/MolderDsp.h"
+#include "core/Palette.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/ImageSourceNode.h"
+#include "nodes/VideoSourceNode.h"
 
 namespace app
 {

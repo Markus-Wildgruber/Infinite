@@ -1,5 +1,17 @@
 // Filter, EQ, dynamics, delay, reverb and drive bodies + visualizers (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/AudioEngine.h"
+#include "audio/Wavetable.h"
+#include "audio/dsp/AudioFilterKernel.h"
+#include "audio/dsp/DriveKernel.h"
+#include "audio/dsp/DynamicsKernel.h"
+#include "audio/dsp/EqKernel.h"
+#include "audio/dsp/EquationDsp.h"
+#include "audio/dsp/WaveTerrainDsp.h"
+#include "audio/dsp/WavetableShaperKernel.h"
+#include "nodes/AudioEffectNode.h"
+#include "platform/common/SingleInstance.h"
 
 namespace app
 {

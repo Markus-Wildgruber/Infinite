@@ -1,5 +1,11 @@
 // Arrange panel content and docking (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "arrange/ArrangeMediaImport.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioEngine.h"
+#include "core/Mesh.h"
 
 namespace app
 {

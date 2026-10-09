@@ -1,5 +1,9 @@
 // Projector windows and pacing (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppViewports.h"
+#include "core/UpdateCheck.h"
+#include "platform/common/SingleInstance.h"
 
 namespace app
 {

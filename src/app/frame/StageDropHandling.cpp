@@ -1,5 +1,29 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/AudioDecodeCache.h"
+#include "core/GltfImport.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/AudioPluginNode.h"
+#include "nodes/DrumSequencerNode.h"
+#include "nodes/FieldElementNode.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/FieldPixelNode.h"
+#include "nodes/FieldPrimitiveNode.h"
+#include "nodes/FieldSampleNode.h"
+#include "nodes/FieldSynthNode.h"
+#include "nodes/FormulaNode.h"
+#include "nodes/GrainMolderNode.h"
+#include "nodes/GranularNode.h"
+#include "nodes/ImageSourceNode.h"
+#include "nodes/ModelSourceNode.h"
+#include "nodes/MolderNode.h"
+#include "nodes/MpcNode.h"
+#include "nodes/NoteNodes.h"
+#include "nodes/PaulStretchNode.h"
+#include "nodes/SamplerNode.h"
+#include "nodes/SlicerNode.h"
+#include "nodes/VideoSourceNode.h"
 
 namespace app
 {

@@ -1,5 +1,17 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppUndo.h"
+#include "app/AppArrange.h"
+#include "app/frame/FrameTests.h"
+#include "core/PatchLayout.h"
+#include "core/UpdateCheck.h"
+#include "nodes/MacroNodes.h"
+#include "nodes/NdiOutNode.h"
+#include "nodes/OscNodes.h"
+#include "nodes/OutputNode.h"
+#include "nodes/ShapeNode.h"
+#include "nodes/SyphonOutNode.h"
 
 namespace app
 {

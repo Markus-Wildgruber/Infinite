@@ -1,5 +1,11 @@
 // Performance matrix panel, MIDI learn, modulator meter (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/PatchLayout.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/MidiNodes.h"
+#include "nodes/PredictiveModulatorNode.h"
+#include "platform/PlatformMidi.h"
 
 namespace app
 {

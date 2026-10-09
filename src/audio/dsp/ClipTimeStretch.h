@@ -5,7 +5,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 // Accelerate FFT on macOS; Windows/Linux use Signalsmith's portable C++ FFT.
 // INFINITE_TEST_PORTABLE_FFT forces the portable path on macOS for testing.

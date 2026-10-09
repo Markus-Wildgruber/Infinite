@@ -1,5 +1,30 @@
 // Field self-tests, part 1 (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppSelfTest.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/dsp/EquationDsp.h"
+#include "core/ExprGlobals.h"
+#include "core/Expression.h"
+#include "core/Mesh.h"
+#include "core/PatchLayout.h"
+#include "core/UpdateCheck.h"
+#include "core/field/ElementBackend.h"
+#include "core/field/ElementStore.h"
+#include "core/field/FieldAst.h"
+#include "core/field/FieldBytecode.h"
+#include "core/field/FieldError.h"
+#include "core/field/FieldIR.h"
+#include "core/field/FieldLex.h"
+#include "core/field/FieldParse.h"
+#include "core/field/FieldRandom.h"
+#include "core/field/FieldState.h"
+#include "core/field/FieldSwizzle.h"
+#include "core/field/FieldTypes.h"
+#include "core/field/FieldVM.h"
+#include "nodes/FieldElementNode.h"
+#include "nodes/FieldPrimitiveNode.h"
+#include "nodes/Geometry3DNodes.h"
 
 namespace app
 {

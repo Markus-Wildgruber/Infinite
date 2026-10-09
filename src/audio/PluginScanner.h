@@ -6,7 +6,8 @@
 #include <thread>
 #include <vector>
 
-#include "platform/Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformPlugins.h"
 
 // Background scanner backing the Plugins mode of the docked node-browser
 // panel. Same thread + mutex + PollResults() try_lock shape as SampleScanner,

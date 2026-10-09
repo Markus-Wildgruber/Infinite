@@ -1,5 +1,22 @@
 // Patch build, settings files, autosave, new patch (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppUndo.h"
+#include "app/AppViewports.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioEngine.h"
+#include "audio/Wavetable.h"
+#include "core/ExprGlobals.h"
+#include "core/ImageCable.h"
+#include "core/Palette.h"
+#include "nodes/DrumPatterns.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/PredictiveNotesNode.h"
+#include "nodes/PredictiveQuantizeNode.h"
+#include "nodes/PredictiveRhythmNode.h"
+#include "nodes/PredictiveVelocityNode.h"
 
 namespace app
 {

@@ -9,7 +9,7 @@
 #include "audio/DspMath.h"
 #include "audio/MeterRing.h"
 #include "audio/ParamMailbox.h"
-#include "platform/Platform.h"
+#include "platform/PlatformAudio.h"
 
 namespace
 {

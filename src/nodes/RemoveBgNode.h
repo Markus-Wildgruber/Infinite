@@ -10,7 +10,8 @@
 #include "INode.h"
 #include "ImageCable.h"
 #include "GLUtil.h"
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 // Background removal using on-device segmentation (Vision on macOS, a
 // bundled ONNX model on Windows - see Platform::SubjectMask) - no network

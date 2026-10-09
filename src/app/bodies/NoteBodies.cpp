@@ -1,5 +1,17 @@
 // Audio-in, mixer, keyboard and note node bodies (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "audio/DspMath.h"
+#include "audio/MidiFile.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/NoteNodes.h"
+#include "nodes/PredictiveNotesNode.h"
+#include "nodes/PredictiveQuantizeNode.h"
+#include "nodes/PredictiveRhythmNode.h"
+#include "nodes/PredictiveVelocityNode.h"
+#include "platform/PlatformMidi.h"
 
 namespace app
 {

@@ -1,5 +1,7 @@
 // Interface-translation self-test (docs/plans/i18n). Headless, runs before glfwInit().
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppSelfTest.h"
 
 #include <clocale>
 #include <cstdlib>

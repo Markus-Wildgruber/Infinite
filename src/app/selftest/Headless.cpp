@@ -1,5 +1,22 @@
 // Headless jobs: ExplainLive, ParamKeyJoiner, HeadlessTick (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioCaptureRing.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioNode.h"
+#include "audio/MediaExtensions.h"
+#include "audio/NoteEvent.h"
+#include "audio/NoteEventQueue.h"
+#include "audio/Wavetable.h"
+#include "audio/dsp/MolderDsp.h"
+#include "core/Mesh.h"
+#include "core/PatchLayout.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/OutputNode.h"
+#include "platform/ndi/NdiRuntime.h"
 
 namespace app
 {

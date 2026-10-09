@@ -1,5 +1,18 @@
 // Comment, group, draw and preview node bodies (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "arrange/ArrangeModel.h"
+#include "nodes/DrawNode.h"
+#include "nodes/EquationNode.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/FieldSampleNode.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/ImageSpectralSynthNode.h"
+#include "nodes/MetallicNode.h"
+#include "nodes/OscillatorNode.h"
+#include "nodes/UtilityNodes.h"
+#include "nodes/WaveTerrainNode.h"
+#include "nodes/WavetableNode.h"
 
 namespace app
 {

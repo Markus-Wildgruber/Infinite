@@ -1,5 +1,19 @@
 // Sampler, slicer, molder, granular, drum sequencer, looper and MPC bodies (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/ExprGlobals.h"
+#include "nodes/AudioMeterNode.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/DrumPatterns.h"
+#include "nodes/DrumSequencerNode.h"
+#include "nodes/GrainMolderNode.h"
+#include "nodes/GranularNode.h"
+#include "nodes/LooperNode.h"
+#include "nodes/MolderNode.h"
+#include "nodes/MpcNode.h"
+#include "nodes/PaulStretchNode.h"
+#include "nodes/SamplerNode.h"
+#include "nodes/SlicerNode.h"
 
 namespace app
 {

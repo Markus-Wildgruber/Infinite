@@ -1,5 +1,18 @@
 // Link disconnect helpers (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/AudioNode.h"
+#include "core/ImageCable.h"
+#include "core/Palette.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/AudioColorRampNode.h"
+#include "nodes/AudioDisplacementNode.h"
+#include "nodes/AudioRibbonNode.h"
+#include "nodes/AudioTextureNode.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/MacroNodes.h"
+#include "nodes/Switcher3DNode.h"
 
 namespace app
 {

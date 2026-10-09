@@ -10,7 +10,8 @@
 #include "ImageCable.h"
 #include "AudioCable.h"
 #include "GLUtil.h"
-#include "Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformVideoIO.h"
 #include "gl3.h" // GLsync, for the recording readback fences below
 #include "audio/AudioCaptureRing.h"
 

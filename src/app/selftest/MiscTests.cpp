@@ -1,5 +1,23 @@
 // Browser / appearance / plugin / network / perf-panel self-tests (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppSelfTest.h"
+#include "app/AppUndo.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioNode.h"
+#include "audio/MediaExtensions.h"
+#include "audio/NoteEvent.h"
+#include "audio/NoteEventQueue.h"
+#include "audio/Wavetable.h"
+#include "audio/dsp/WaveTerrainDsp.h"
+#include "core/ExprGlobals.h"
+#include "core/ImageCable.h"
+#include "nodes/AudioPluginNode.h"
+#include "nodes/DrumPatterns.h"
+#include "nodes/MacroNodes.h"
+#include "platform/PluginHandleInternal.h"
+#include "platform/linux/PluginHandleInternalLinux.h"
+#include "platform/win/PluginHandleInternalWin.h"
 
 namespace app
 {

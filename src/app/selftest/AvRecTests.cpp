@@ -1,6 +1,20 @@
 // Recording / AV / PDC / MIDI self-tests (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "NdiRuntime.h"
+#include "app/AppSelfTest.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioCaptureRing.h"
+#include "audio/AudioEngine.h"
+#include "audio/AudioNode.h"
+#include "audio/Wavetable.h"
+#include "audio/dsp/LimiterKernel.h"
+#include "audio/dsp/WaveTerrainDsp.h"
+#include "core/ExprGlobals.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/OutputNode.h"
+#include "platform/ndi/NdiRuntime.h"
+#include "platform/PlatformMidi.h"
 
 namespace app
 {

@@ -7,7 +7,8 @@
 #include "core/AudioCable.h"
 #include "core/INode.h"
 #include "core/NoteCable.h"
-#include "platform/Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformPlugins.h"
 
 class AudioPluginAudioNode;
 

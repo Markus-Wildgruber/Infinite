@@ -15,7 +15,8 @@
 #include "audio/NoteTheory.h"
 #include "audio/NoteEventQueue.h"
 #include "core/Transport.h"
-#include "platform/Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformMidi.h"
 
 namespace
 {

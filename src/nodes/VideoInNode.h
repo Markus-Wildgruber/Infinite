@@ -6,7 +6,8 @@
 
 #include "BenchMediaIo.h"
 #include "INode.h"
-#include "Platform.h"
+#include "platform/PlatformAudio.h"
+#include "platform/PlatformVideoIO.h"
 
 // Live camera video source (built-in FaceTime HD camera, external USB webcams, Continuity Camera).
 class VideoInNode : public INode

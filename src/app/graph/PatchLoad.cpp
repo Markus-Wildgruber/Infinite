@@ -1,5 +1,20 @@
 // Patch load, auto layout, field graph regenerate, undo/redo, copy/paste (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "app/AppUndo.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/Wavetable.h"
+#include "core/ExprGlobals.h"
+#include "core/ImageCable.h"
+#include "core/Palette.h"
+#include "core/PatchLayout.h"
+#include "core/field/FieldGraphKernel.h"
+#include "nodes/DrumPatterns.h"
+#include "nodes/FieldGraphNode.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

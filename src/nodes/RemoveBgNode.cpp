@@ -4,7 +4,8 @@
 #include <algorithm>
 #include <mutex>
 
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 namespace
 {

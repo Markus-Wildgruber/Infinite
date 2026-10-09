@@ -1,5 +1,10 @@
 // Modulatable sliders, knobs, faders, toggles, pins (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "core/Mesh.h"
+#include "core/Palette.h"
+#include "nodes/NoteNodes.h"
+#include "nodes/PredictiveNotesNode.h"
 
 namespace app
 {

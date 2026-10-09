@@ -12,6 +12,7 @@
 #include "app/AppShared.h"
 
 #include "core/RemoteControl.h"
+#include "platform/PlatformProcess.h"
 
 #include <atomic>
 #include <deque>

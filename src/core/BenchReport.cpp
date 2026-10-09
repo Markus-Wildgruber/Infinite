@@ -3,7 +3,8 @@
 #include <cstring>
 
 #include "gl3.h"
-#include "../platform/Platform.h"
+#include "platform/PlatformApp.h"
+#include "platform/PlatformAudio.h"
 
 #include <chrono>
 #include <cstdio>

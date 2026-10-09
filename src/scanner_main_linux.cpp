@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "platform/Platform.h"
+#include "platform/PlatformPlugins.h"
 #include "platform/PluginVST3.h"
 
 int main(int argc, char** argv)

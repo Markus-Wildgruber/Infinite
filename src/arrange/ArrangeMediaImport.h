@@ -5,7 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 // Background decode for media files dropped onto the Arrange timeline
 // (audio samples, video files, images) - see ArrangeMediaImport.cpp for the

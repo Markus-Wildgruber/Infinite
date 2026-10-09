@@ -1,6 +1,13 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "app/frame/FrameTests.h"
+#include "audio/AudioEngine.h"
+#include "core/UpdateCheck.h"
+#include "nodes/PredictiveNotesNode.h"
+#include "nodes/PredictiveQuantizeNode.h"
+#include "nodes/PredictiveRhythmNode.h"
+#include "nodes/PredictiveVelocityNode.h"
 
 namespace app
 {

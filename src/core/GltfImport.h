@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "Platform.h"
+#include "platform/PlatformMedia.h"
 
 // Decodes a .gltf/.glb file into geometry + up-to-six derived textures, all
 // through cgltf rather than Platform::LoadModel (ModelIO does not read glTF -

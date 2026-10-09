@@ -1,5 +1,32 @@
 // Geometry / 3D / material / render parameter bodies (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/dsp/AudioFilterKernel.h"
+#include "audio/dsp/EqKernel.h"
+#include "core/Mesh.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/AudioColorRampNode.h"
+#include "nodes/AudioDisplacementNode.h"
+#include "nodes/AudioRibbonNode.h"
+#include "nodes/AudioTextureNode.h"
+#include "nodes/BlendNode.h"
+#include "nodes/CurveNode.h"
+#include "nodes/DepthProjectionNode.h"
+#include "nodes/FilterNode.h"
+#include "nodes/GenerativeNodes.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/GeometryTableNode.h"
+#include "nodes/LayerStackNode.h"
+#include "nodes/ModelSourceNode.h"
+#include "nodes/OceanNode.h"
+#include "nodes/PathNode.h"
+#include "nodes/PointDistributionNodes.h"
+#include "nodes/SceneNodes.h"
+#include "nodes/SimulationNodes.h"
+#include "nodes/Switcher3DNode.h"
+#include "nodes/Text3DNode.h"
+#include "nodes/UtilityNodes.h"
 
 namespace app
 {

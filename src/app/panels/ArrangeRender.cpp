@@ -1,5 +1,12 @@
 // Offline render windows, arrange clip settings and render queue (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppArrange.h"
+#include "arrange/ArrangeModel.h"
+#include "audio/AudioBuffer.h"
+#include "audio/AudioEngine.h"
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/OutputNode.h"
 
 namespace app
 {

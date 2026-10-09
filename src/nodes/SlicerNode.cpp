@@ -17,7 +17,8 @@
 #include "audio/dsp/SlicerDsp.h"
 #include "core/AudioDecodeCache.h"
 #include "core/AudioTopologyRequest.h"
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 #include "Transport.h"
 
 namespace

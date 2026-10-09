@@ -1,5 +1,21 @@
 // Library / plugin / field search panels (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/AudioEngine.h"
+#include "audio/MediaExtensions.h"
+#include "audio/SamplePreviewPlayer.h"
+#include "audio/Wavetable.h"
+#include "core/ExprGlobals.h"
+#include "nodes/AudioPluginNode.h"
+#include "nodes/FieldElementNode.h"
+#include "nodes/FieldPixelNode.h"
+#include "nodes/FieldPrimitiveNode.h"
+#include "nodes/FieldSampleNode.h"
+#include "nodes/FieldSynthNode.h"
+#include "nodes/ImageSourceNode.h"
+#include "nodes/SamplerNode.h"
+#include "nodes/VideoSourceNode.h"
+#include "platform/ndi/NdiRuntime.h"
 
 namespace app
 {

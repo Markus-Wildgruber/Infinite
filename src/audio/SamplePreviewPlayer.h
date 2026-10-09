@@ -6,7 +6,8 @@
 #include "AudioBuffer.h"
 #include "AudioVoice.h" // Envelope - reused for the few-ms fade in/out
 #include "SampleSlot.h"
-#include "platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 // Single-voice, stereo-aware, one-shot file player for auditioning a sample
 // from the search panel's Samples mode without touching the node graph at

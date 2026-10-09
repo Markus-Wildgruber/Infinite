@@ -1,7 +1,8 @@
 #include "TextNode.h"
 
 #include "core/gl3.h"
-#include "../platform/Platform.h"
+#include "platform/PlatformMedia.h"
+#include "platform/PlatformAudio.h"
 
 #include <algorithm>
 #include <cmath>

@@ -1,5 +1,24 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "app/AppBench.h"
+#include "app/frame/FrameTests.h"
+#include "audio/AudioEngine.h"
+#include "core/BenchMediaIo.h"
+#include "core/PatchLayout.h"
+#include "core/UpdateCheck.h"
+#include "nodes/AudioEffectNode.h"
+#include "nodes/GenerativeNodes.h"
+#include "nodes/Geometry3DNodes.h"
+#include "nodes/GeometryOpNodes.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/OutputNode.h"
+#include "nodes/SimulationNodes.h"
+#include "nodes/SyphonOutNode.h"
+#include "nodes/UtilityNodes.h"
+#include "nodes/VideoInNode.h"
+#include "nodes/VideoSourceNode.h"
+#include "platform/PlatformMidi.h"
 
 namespace app
 {

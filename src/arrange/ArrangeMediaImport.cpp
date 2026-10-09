@@ -1,4 +1,5 @@
 #include "ArrangeMediaImport.h"
+#include "platform/PlatformApp.h"
 
 #include <thread>
 #include <utility>

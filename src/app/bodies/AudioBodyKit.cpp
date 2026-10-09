@@ -1,5 +1,24 @@
 // Audio node body building blocks: columns, sections, knob rows, drift meters, gates (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "nodes/AnalyzeNodes.h"
+#include "nodes/AudioColorRampNode.h"
+#include "nodes/AudioMeterNode.h"
+#include "nodes/AudioNodes.h"
+#include "nodes/AudioTextureNode.h"
+#include "nodes/DrumSequencerNode.h"
+#include "nodes/FieldSampleNode.h"
+#include "nodes/FieldSynthNode.h"
+#include "nodes/ModulatorNodes.h"
+#include "nodes/MpcNode.h"
+#include "nodes/NoteNodes.h"
+#include "nodes/PredictionNodes.h"
+#include "nodes/PredictiveModulatorNode.h"
+#include "nodes/PredictiveQuantizeNode.h"
+#include "nodes/PredictiveRhythmNode.h"
+#include "nodes/PredictiveVelocityNode.h"
+#include "nodes/VideoSourceNode.h"
+#include "nodes/WavetableNode.h"
 
 namespace app
 {

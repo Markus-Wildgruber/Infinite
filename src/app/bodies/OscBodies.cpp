@@ -1,5 +1,25 @@
 // Oscillator, wavetable, ADSR, equation and spectral-synth bodies (moved verbatim from main.cpp).
 #include "app/AppShared.h"
+// Non-core headers this file uses (docs/plans/compile-times/include-split.md).
+#include "audio/SynthModes.h"
+#include "audio/Wavetable.h"
+#include "audio/dsp/EquationDsp.h"
+#include "audio/dsp/MetallicResonator.h"
+#include "audio/dsp/SpectralAdditiveSynth.h"
+#include "audio/dsp/WaveTerrainDsp.h"
+#include "core/UpdateCheck.h"
+#include "nodes/AnalogSynthCore.h"
+#include "nodes/EquationNode.h"
+#include "nodes/GranularNode.h"
+#include "nodes/ImageSpectralSynthNode.h"
+#include "nodes/MetallicNode.h"
+#include "nodes/OscillatorNode.h"
+#include "nodes/PaulStretchNode.h"
+#include "nodes/SamplerNode.h"
+#include "nodes/SlicerNode.h"
+#include "nodes/WaveTerrainNode.h"
+#include "nodes/WavetableNode.h"
+#include "nodes/WavetableSynthCore.h"
 
 namespace app
 {
