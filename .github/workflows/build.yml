@@ -66,6 +66,18 @@ jobs:
             echo "::notice::No src/platform/linux - skipping the Linux jobs."
           fi
 
+  # Static, no build: keeps node/DSP/arrangement/viewport headers and the
+  # Platform.h umbrella out of the app core headers every app/ TU reads, so
+  # one header edit does not recompile all of them again
+  # (docs/plans/compile-times/include-split.md). Its own job so a failure
+  # here never blocks the platform builds.
+  include-guard:
+    name: Include split guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/check-include-split.py
+
   macos:
     name: macOS (arm64)
     runs-on: macos-14

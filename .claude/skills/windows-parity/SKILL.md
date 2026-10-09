@@ -77,7 +77,7 @@ Three consequences, and they are the whole reason this section exists:
 
 | File | Why |
 |---|---|
-| `src/platform/Platform.h` | the whole contract. Read the doc comments — they say who owns the memory and what the failure return means |
+| `src/platform/Platform<Topic>.h` | the whole contract, split by topic (App, Media, Audio, Plugins, Process, Midi, VideoIO); `Platform.h` is only the umbrella the per-OS files include. A new function goes in its topic header, never in a caller-facing umbrella. Read the doc comments — they say who owns the memory and what the failure return means |
 | `src/platform/win/WinCommon.h` | `Utf8ToWide` / `WideToUtf8` / `HrToString`. Deliberately on no include path — only Windows TUs may include it |
 | `src/platform/AppPaths.h` | settings/desktop path resolution, shared by both platforms |
 | `src/platform/NetCompat.h` | the sockets shim, and a written-up MSVC ICE caused by one careless `#define` |

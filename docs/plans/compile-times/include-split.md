@@ -1,6 +1,7 @@
 # Include split: recompile less per edit
 
-Status: Phase 0 done, Phase 1 in progress (2026-10-09).
+Status (2026-10-09): all phases written; **not yet compiled on any
+platform**. See "State after the first pass" at the end before merging.
 Measure with `tools/include-fanin.py` before and after every phase.
 
 ## Problem
@@ -116,3 +117,58 @@ on Linux), plus a grep that `AppCommon.h` includes nothing under `nodes/`,
   everything. Small commits, landed quickly, coordinated with that work.
 - No behaviour change is intended; run the self-test round trip after
   Phases 2 and 3 anyway.
+
+## State after the first pass (2026-10-09)
+
+Written in worktree `D:\Breathwork\Infinite-split`, branch
+`feature/include-split`. Nothing below has been compiled yet: the machine was
+shared with other sessions' builds, so the work was done with static analysis
+and one compile check at the end is still owed.
+
+What changed:
+
+| Phase | Result |
+|---|---|
+| 1 | `target_precompile_headers` (std, ImGui, json) for `src/**/*.cpp` only, option `INFINITE_PCH`. |
+| 2 | `AppCommon.h` keeps ~37 core project headers (was 234 via the umbrella). `AppForward.h` forward-declares ~170 classes. Every app TU got a "Non-core headers this file uses" include block (median 12, max 96 in `NodeRegistry.cpp`). |
+| 3 | `AppShared.h` split: `AppArrange.h` (27 TUs), `AppUndo.h` (11), `AppViewports.h` (10), `AppSelfTest.h` (13), `AppBench.h` (3). |
+| 4 | `Platform.h` is an umbrella over `PlatformApp/Media/Audio/Plugins/Process/Midi/VideoIO.h`; 44 direct includers and every app TU include only the topics they use. Only `src/platform/` includes the umbrella. |
+| 5 | `tools/check-include-split.py` + CI job "Include split guardrail"; `codebase-navigation`, `windows-parity`, `linux-parity` skills updated. |
+
+Static effect (include closure, not yet measured with a build):
+
+| | Before | After |
+|---|---|---|
+| Project headers every app TU reads (`AppShared.h` closure) | 234 | 55 |
+| App TUs reading `nodes/Geometry3DNodes.h` (37 edits / 120 days) | 78 | ~30 |
+| App TUs reading `arrange/ArrangeModel.h` (20 edits) | 78 | ~31 |
+| App TUs reading `audio/AudioEngine.h` (31 edits) | 78 | ~31 |
+| App TUs reading `platform/Platform.h` content (69 edits) | 78, all of it | per topic |
+
+Verified so far (static only):
+- `AppShared.h` alone passed an MSVC `/Zs` syntax check at the end of Phase 2.
+- A reachability check: every name an app file or app header uses that is
+  declared in some `src/` header is reachable through its includes (only
+  generic member names like `Load`/`Run` remain, which are not free names).
+- `tools/check-include-split.py` passes.
+
+Still to do before merging:
+1. Full Windows build (MultiToolTask x8, ~20 min). Expect a handful of
+   missing-include errors the static checks cannot see (names declared in
+   more than three headers, templates, ADL-found functions, macros).
+2. macOS and Linux CI: `#ifdef`'d paths were only checked by name scan.
+3. `run-infinite-hygiene` self-test round trip.
+4. `tools/include-fanin.py` on the new build, compared with the baseline
+   above; full-build time with and without `-DINFINITE_PCH=OFF`.
+5. Link check for forward declarations: a `class`/`struct` mismatch only
+   shows up as an unresolved symbol on MSVC.
+
+Merging with work in progress elsewhere: on 2026-10-09 the main checkout had
+uncommitted changes from other sessions that touch the same files:
+- `src/app/AppCommon.h` adds `#include "nodes/AudioToMidiNode.h"`: put it in
+  the TUs that use the node instead (`graph/NodeRegistry.cpp`,
+  `bodies/AudioNodeBodies.cpp`); the guardrail rejects it in AppCommon.h.
+- `src/platform/Platform.h` gains new declarations: move each into the
+  matching `Platform<Topic>.h`.
+- `AppShared.h`, `StageMenuBar.cpp`, `StageSidePanels.cpp` (assistant panel):
+  ordinary text merges.

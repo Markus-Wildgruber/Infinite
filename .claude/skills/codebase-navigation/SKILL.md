@@ -231,6 +231,8 @@ entry if a refactor makes it stale.
 
 - **Render 3D draws a flattened list, not its four pins.** `Render3DNode::CollectDraw()`/`FlattenedGeometry()` (`Geometry3DNodes.cpp`) expand `Group3DNode` children (`GroupChildCount`/`GroupChild` on `IGeometrySource`) depth-first into `mDraw`, capped at `kMaxDraw` (64) and depth 8. `mGpu` and `SceneSignature` are sized from it, so any new per-slot loop in Render 3D must iterate `mDraw`, not `kSlots`. `kSlots` itself must not change: saved pin indices depend on it.
 
+- **Where an app/ declaration or include goes (include split).** `app/AppCommon.h` + `app/AppShared.h` are read by every app/ TU (~78), so they hold only core state; node classes they mention are forward-declared in `app/AppForward.h` (keep the `class`/`struct` keyword identical to the definition - MSVC mangles them differently). Topic state lives in `app/AppArrange.h`, `AppUndo.h`, `AppViewports.h`, `AppSelfTest.h`, `AppBench.h`; a `.cpp` includes the node/DSP/topic headers it uses in its "Non-core headers this file uses" block. Platform calls: include `platform/Platform<Topic>.h`, never the `Platform.h` umbrella outside `src/platform/`. `tools/check-include-split.py` (CI job "Include split guardrail") enforces this; `tools/include-fanin.py` measures it. Easy to miss: a new include in AppShared.h recompiles all 78 TUs on every edit of that header.
+
 ## Adding to this map
 
 At the end of a task that touched `src/`, if you found a cross-file wiring

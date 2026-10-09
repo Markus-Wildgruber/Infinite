@@ -70,7 +70,7 @@ platform-specific or merely *lives* in `win/`. If it is portable, move it to
 
 | File | Why |
 |---|---|
-| `src/platform/Platform.h` | the whole contract, all three implementations |
+| `src/platform/Platform<Topic>.h` | the whole contract, all three implementations, split by topic (App, Media, Audio, Plugins, Process, Midi, VideoIO); `Platform.h` is only the umbrella the per-OS files include |
 | `src/platform/linux/PlatformLinux.cpp` | the core surface — paths, dialogs, HTTP, clipboard |
 | `src/platform/common/PathOpen.h` | UTF-8 file opening; use it, don't hand-roll |
 | `docs/plans/linux/README.md` | phase plan, status table, and the verified/unverified split |
