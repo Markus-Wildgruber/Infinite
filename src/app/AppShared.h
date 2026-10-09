@@ -715,6 +715,8 @@ extern bool gModRangeTypedNoAutoSelect;
 
 extern bool gNodePanelOpen;
 
+extern bool gAssistantPanelOpen;
+
 extern bool gViewportPanelOpen;
 
 extern std::vector<int> gViewportPanelNodes;
@@ -4142,6 +4144,13 @@ float ApplyModulationCurve(float v, float curve);
 extern std::map<std::pair<int, int>, SparklineHistory> gModMatrixSparklines;
 
 void DrawModMatrixDocked(const char* id, const ImVec2& size);
+
+// Assistant panel (panels/AssistantPanel.cpp): chat that runs the user's
+// Claude Code against this instance. Available = built with
+// INFINITE_AI_SIDEBAR and a `claude` executable was found.
+bool AssistantAvailable();
+void DrawAssistantPanelDocked(const char* id, const ImVec2& size);
+constexpr float kAssistantPanelWidth = 380.0f;
 
 bool IsNodeVideoCompatible(const GraphNode& gn);
 

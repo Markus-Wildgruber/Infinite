@@ -4,7 +4,7 @@ dist/
 *.dmg
 !website/assets/*.dmg
 !website/*.dmg
-
+Projects
 # editor/runtime state written next to the app
 Infinite.json
 imgui.ini

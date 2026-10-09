@@ -263,6 +263,13 @@ void DrawSidePanels(FrameCtx& fc)
          DrawArrangePanelDocked("##arrangepanel_right", ImVec2(gArrangePanelWidth, graphHeight));
       }
 
+      // Assistant chat, just left of the node browser (which stays rightmost).
+      if (gAssistantPanelOpen)
+      {
+         ImGui::SameLine(0.0f, 0.0f);
+         DrawAssistantPanelDocked("##assistantpanel", ImVec2(kAssistantPanelWidth, graphHeight));
+      }
+
       // ---- node browser / search panel ----
       // Always sticks to the rightmost edge of the window
       if (gNodePanelOpen)

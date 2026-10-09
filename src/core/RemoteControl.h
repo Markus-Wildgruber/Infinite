@@ -26,11 +26,18 @@ namespace RemoteControl
    using Handler = std::function<bool(const std::string& method, const nlohmann::json& params,
                                        nlohmann::json& outResult, std::string& outError)>;
 
-   // Starts the accept thread bound to 127.0.0.1:port. Writes a random auth
-   // token to ~/Library/Application Support/Infinite/control_token (creating
-   // the directory if needed). Safe to call once at startup; no-op if a
-   // server is already running.
+   // Binds 127.0.0.1:port and starts the accept thread. Only once listening,
+   // writes a random auth token to control_token in AppPaths::AppSupportDir()
+   // - a second instance that finds the port taken must not overwrite the
+   // first one's token. Safe to call once at startup; no-op afterwards.
+   // Each client connection gets its own network thread; requests from all
+   // of them still run one at a time on the main thread (DrainPending).
    void Start(int port);
+
+   // The port Start() was given, and whether it is actually listening (false
+   // when another process - often another Infinite - holds the port).
+   int Port();
+   bool Listening();
 
    // Runs `handler` for every request received since the last call, in
    // receipt order, on the calling (main) thread. Must be called every frame.

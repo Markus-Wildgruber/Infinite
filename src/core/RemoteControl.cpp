@@ -10,6 +10,7 @@
 #include <random>
 #include <sstream>
 #include <sys/stat.h>
+#include <filesystem>
 #include <thread>
 #include "platform/AppPaths.h"
 
@@ -32,6 +33,8 @@ namespace RemoteControl
 
       std::string gToken;
       bool gStarted = false;
+      int gPort = 0;
+      bool gListening = false;
 
       std::string SettingsDir()
       {
@@ -56,7 +59,9 @@ namespace RemoteControl
          const std::string dir = SettingsDir();
          if (dir.empty())
             return;
-         std::ofstream file(dir + "/control_token");
+         // u8path: the folder is under the user's profile, which may hold
+         // non-ASCII characters (a narrow-char path is mangled on Windows).
+         std::ofstream file(std::filesystem::u8path(dir + "/control_token"));
          file << token;
       }
 
@@ -125,11 +130,12 @@ namespace RemoteControl
          NetCompat::NetClose(fd);
       }
 
-      void AcceptLoop(int port)
+      // -1 when the port cannot be bound (usually another Infinite holds it).
+      int OpenListener(int port)
       {
          int listenFd = socket(AF_INET, SOCK_STREAM, 0);
          if (listenFd < 0)
-            return;
+            return -1;
 
          int yes = 1;
          NetCompat::NetSetSockOpt(listenFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -139,23 +145,26 @@ namespace RemoteControl
          addr.sin_port = htons(static_cast<uint16_t>(port));
          addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // loopback only - never 0.0.0.0
 
-         if (bind(listenFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0)
+         if (bind(listenFd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || listen(listenFd, 4) != 0)
          {
             NetCompat::NetClose(listenFd);
-            return;
+            return -1;
          }
-         if (listen(listenFd, 4) != 0)
-         {
-            NetCompat::NetClose(listenFd);
-            return;
-         }
+         return listenFd;
+      }
 
+      void AcceptLoop(int listenFd)
+      {
          for (;;)
          {
             int clientFd = accept(listenFd, nullptr, nullptr);
             if (clientFd < 0)
                continue;
-            ServeConnection(clientFd, nullptr);
+            // One thread per client, so one long-lived client (an MCP bridge
+            // holds its connection open) cannot starve another. The thread
+            // only reads, queues and writes replies; requests still run on
+            // the main thread in DrainPending.
+            std::thread(ServeConnection, clientFd, nullptr).detach();
          }
       }
    }
@@ -165,12 +174,20 @@ namespace RemoteControl
       if (gStarted)
          return;
       gStarted = true;
+      gPort = port;
 
+      const int listenFd = OpenListener(port);
+      if (listenFd < 0)
+         return; // the port's owner keeps its token file; see Listening()
+      gListening = true;
       gToken = GenerateToken();
       WriteTokenFile(gToken);
 
-      std::thread(AcceptLoop, port).detach();
+      std::thread(AcceptLoop, listenFd).detach();
    }
+
+   int Port() { return gPort; }
+   bool Listening() { return gListening; }
 
    void DrainPending(const Handler& handler)
    {

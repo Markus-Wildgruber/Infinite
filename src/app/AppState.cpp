@@ -417,6 +417,9 @@ bool gHeadlessNeedProbe = false;
    // so modules can be found without knowing the double-click gesture exists.
    bool gNodePanelOpen = false;
 
+   // The assistant chat dock, right of the canvas next to the node browser.
+   bool gAssistantPanelOpen = false;
+
    // The dockable viewport panel: every node index in this list gets its own
    // card, stacked left-to-right when bottom-docked or top-to-bottom when
    // right/left-docked (see DrawViewportPanelContainer). Serialized to

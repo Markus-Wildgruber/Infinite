@@ -172,7 +172,8 @@ namespace McpBridge
 
          bool Open(std::string& err)
          {
-            std::ifstream tok(AppPaths::AppSupportDir() + "/control_token");
+            // u8path: the same UTF-8-safe path RemoteControl writes it to.
+            std::ifstream tok(std::filesystem::u8path(AppPaths::AppSupportDir() + "/control_token"));
             std::getline(tok, mToken);
             int port = 7777;
             if (const char* p = std::getenv("INFINITE_CONTROL_PORT"))

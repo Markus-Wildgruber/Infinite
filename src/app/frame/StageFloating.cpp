@@ -51,7 +51,7 @@ int DrawFloating(FrameCtx& fc)
                for (int i = 0; i < ImGuiCol_COUNT; i++)
                {
                   const char* name = ImGui::GetStyleColorName((ImGuiCol)i);
-                  if (colorFilter[0] != '\0' && !strcasestr(name, colorFilter))
+                  if (colorFilter[0] != '\0' && !ImStristr(name, nullptr, colorFilter, nullptr))
                      continue;
                   ImGui::PushID(i);
                   ImGui::ColorEdit4("##col", (float*)&style.Colors[i], ImGuiColorEditFlags_AlphaBar);

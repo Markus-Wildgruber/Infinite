@@ -125,6 +125,10 @@ void DrawMenuBar(FrameCtx& fc)
             if (ImGui::MenuItem(L("Settings..."), MODKEY "+0"))
                gSettingsOpen = true;
 
+            // Only when a `claude` executable exists: the panel is nothing without it.
+            if (AssistantAvailable() && ImGui::MenuItem(L("Assistant panel"), nullptr, gAssistantPanelOpen))
+               gAssistantPanelOpen = !gAssistantPanelOpen;
+
             ImGui::Separator();
 
             if (ImGui::BeginMenu(L("Viewport panel")))

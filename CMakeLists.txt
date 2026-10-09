@@ -333,6 +333,11 @@ endif()
 # sign-off - it's a licensing decision, not a technical one.
 option(INFINITE_ENABLE_VST3 "Build the GPLv3 VST3 plugin backend" ON)
 
+# Assistant panel: a chat dock that runs the user's own Claude Code (`claude`
+# CLI) against this instance through `Infinite --mcp`. It only appears when a
+# `claude` executable is found; Infinite never handles Claude credentials.
+option(INFINITE_AI_SIDEBAR "Build the assistant panel (drives Claude Code)" ON)
+
 set(IMGUI_DIR external/imgui)
 set(NODE_EDITOR_DIR external/imgui-node-editor)
 set(STB_DIR external/stb)
@@ -529,6 +534,7 @@ set(COMMON_SOURCES
     src/arrange/ArrangeMediaImport.cpp
     src/core/RemoteControl.cpp
     src/core/McpBridge.cpp
+    src/app/panels/AssistantPanel.cpp
     src/core/PatchJson.cpp
     src/core/OscMessage.cpp
     src/core/UpdateCheck.cpp
@@ -724,6 +730,7 @@ file(GLOB INFINITE_NOTO_FILES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ext
 
 set(APPLE_SOURCES
     src/platform/Platform.mm
+    src/platform/posix/ChildProcessPosix.cpp
     src/audio/AudioFileWriter.mm
     ${SYPHON_SOURCES}
 )
@@ -758,6 +765,7 @@ set(WIN32_SOURCES
     # exe shows Explorer's generic application icon everywhere.
     ${CMAKE_CURRENT_BINARY_DIR}/generated/Infinite.rc
     src/platform/win/PlatformWin.cpp
+    src/platform/win/ChildProcessWin.cpp
     src/platform/win/TextWin.cpp
     src/platform/win/CrashHandlerWin.cpp
     # GL-only half of the Spout bridge (glad), kept out of PlatformWin.cpp's
@@ -789,6 +797,7 @@ set(WIN32_SOURCES
 
 set(LINUX_SOURCES
     src/platform/linux/PlatformLinux.cpp
+    src/platform/posix/ChildProcessPosix.cpp
     src/platform/linux/TextLinux.cpp
     src/platform/linux/CrashHandlerLinux.cpp
     src/platform/linux/AudioDeviceLinux.cpp
@@ -851,18 +860,13 @@ target_include_directories(field-preset-check PRIVATE src src/core)
 
 add_executable(Infinite ${COMMON_SOURCES})
 
-# Parallel compile inside the one big Infinite project: MSBuild's -m only runs
-# projects side by side, so without /MP its ~300 files compile one at a time.
-# 8, not every core: these TUs are heavy (AppShared.h) and 16 at once can run a
-# 16 GB machine out of memory. Local builds only - CI (GitHub sets CI) keeps its
-# known-good serial build, which has hit CL.exe internal errors before.
-if(MSVC AND NOT DEFINED ENV{CI})
-    target_compile_options(Infinite PRIVATE /MP8)
-endif()
-
 # Exposes INFINITE_VERSION to C++ as a string literal (UpdateCheck.cpp,
 # User-Agent header, etc.).
 target_compile_definitions(Infinite PRIVATE INFINITE_VERSION_STRING="${INFINITE_VERSION}")
+
+if(INFINITE_AI_SIDEBAR)
+    target_compile_definitions(Infinite PRIVATE INFINITE_AI_SIDEBAR=1)
+endif()
 
 if(APPLE)
     target_sources(Infinite PRIVATE ${APPLE_SOURCES})
