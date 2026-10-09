@@ -114,12 +114,13 @@ namespace Platform
       const BOOL ok = CreateProcessW(wexe.c_str(), cmdBuf.data(), nullptr, nullptr, TRUE,
                                      CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, nullptr,
                                      cwd.empty() ? nullptr : wcwd.c_str(), &si, &pi);
+      const DWORD createError = ok ? 0 : GetLastError(); // before CloseHandle can overwrite it
       CloseIf(inRead);
       CloseIf(outWrite);
       CloseIf(nul);
       if (!ok)
       {
-         outError = "could not start " + exe + ": " + WinCommon::HrToString(HRESULT_FROM_WIN32(GetLastError()));
+         outError = "could not start " + exe + ": " + WinCommon::HrToString("CreateProcessW", HRESULT_FROM_WIN32(createError));
          CloseIf(inWrite);
          CloseIf(outRead);
          CloseIf(job);
