@@ -126,6 +126,13 @@ namespace PatchSchema
    // Never parses as an integer, so it cannot be mistaken for a slot number.
    std::vector<std::string> SlotNames(const TypeSchema& t);
 
+   // The input slot a SlotNames word stands for. False when none matches, with
+   // `names` holding every valid one for the error hint.
+   bool FindSlot(const TypeSchema& t, const std::string& word, int& slot, std::vector<std::string>& names);
+   // The output an output label stands for (case-insensitive). False when none
+   // matches, with `labels` holding every valid one for the error hint.
+   bool FindOutput(const TypeSchema& t, const std::string& word, int& output, std::vector<std::string>& labels);
+
    // Turns every `id`/slot word in `data` into the index it stands for, so
    // Validate and ApplyPatchData only ever see numbers. Reports E_BAD_ID,
    // E_DUPLICATE_ID and E_BAD_REF (unknown node, slot or output word, with the

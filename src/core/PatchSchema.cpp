@@ -95,6 +95,32 @@ namespace PatchSchema
       return out;
    }
 
+   bool FindSlot(const TypeSchema& t, const std::string& word, int& slot, std::vector<std::string>& names)
+   {
+      names = SlotNames(t);
+      for (size_t i = 0; i < names.size(); i++)
+         if (names[i] == word)
+         {
+            slot = t.inputs[i].slot;
+            return true;
+         }
+      return false;
+   }
+
+   bool FindOutput(const TypeSchema& t, const std::string& word, int& output, std::vector<std::string>& labels)
+   {
+      labels.clear();
+      for (const OutputInfo& o : t.outputs)
+         labels.push_back(o.label);
+      for (size_t i = 0; i < t.outputs.size(); i++)
+         if (Lower(t.outputs[i].label) == Lower(word))
+         {
+            output = (int)i;
+            return true;
+         }
+      return false;
+   }
+
    void Resolve(Patch::Data& data, const Env& env, std::vector<Headless::Issue>& errors)
    {
       if (!data.hasNamedRefs)
@@ -146,20 +172,8 @@ namespace PatchSchema
             return;
          auto nd = byIndex.find(dstIndex);
          const TypeSchema* t = nd == byIndex.end() || !env.schema ? nullptr : env.schema(nd->second->typeName);
-         bool found = false;
          std::vector<std::string> names;
-         if (t != nullptr)
-         {
-            names = SlotNames(*t);
-            for (size_t i = 0; i < names.size(); i++)
-               if (names[i] == word)
-               {
-                  out = t->inputs[i].slot;
-                  found = true;
-                  break;
-               }
-         }
-         if (!found && t != nullptr)
+         if (t != nullptr && !FindSlot(*t, word, out, names))
             errors.push_back(Make("E_BAD_REF", "'" + word + "' is not an input of " + t->name, line, dstIndex,
                                   "inputs: " + Join(names)));
          word.clear();
@@ -172,19 +186,8 @@ namespace PatchSchema
          auto nd = byIndex.find(srcIndex);
          const TypeSchema* t = nd == byIndex.end() || !env.schema ? nullptr : env.schema(nd->second->typeName);
          std::vector<std::string> labels;
-         bool found = false;
-         if (t != nullptr)
-            for (size_t i = 0; i < t->outputs.size(); i++)
-            {
-               labels.push_back(t->outputs[i].label);
-               if (!found && Lower(t->outputs[i].label) == Lower(word))
-               {
-                  out = (int)i;
-                  found = true;
-               }
-            }
          // An unknown source type is E_UNKNOWN_TYPE's to report; a dangling one E_DANGLING's.
-         if (!found && t != nullptr)
+         if (t != nullptr && !FindOutput(*t, word, out, labels))
             errors.push_back(Make("E_BAD_REF", "'" + word + "' is not an output of " + t->name, line, srcIndex,
                                   labels.empty() ? t->name + " has no outputs" : "outputs: " + Join(labels)));
          word.clear();

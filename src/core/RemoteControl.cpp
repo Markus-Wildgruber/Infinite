@@ -193,7 +193,19 @@ namespace RemoteControl
          {
             std::string error;
             json out;
-            if (handler(cmd->method, cmd->params, out, error))
+            bool ok = false;
+            // A client's wrong JSON type (a string where an index belongs)
+            // throws from json::value() - on the main thread, where it would
+            // take the app down and leave the client waiting on fut.get().
+            try
+            {
+               ok = handler(cmd->method, cmd->params, out, error);
+            }
+            catch (const std::exception& e)
+            {
+               error = std::string("bad params: ") + e.what();
+            }
+            if (ok)
             {
                cmd->response.set_value(out);
             }

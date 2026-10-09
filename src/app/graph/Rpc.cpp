@@ -3,6 +3,215 @@
 
 namespace app
 {
+   namespace
+   {
+      using json = nlohmann::json;
+
+      bool IsDigits(const std::string& s)
+      {
+         return !s.empty() && s.size() < 10 &&
+                std::all_of(s.begin(), s.end(), [](char c) { return c >= '0' && c <= '9'; });
+      }
+
+      std::string JoinNames(const std::vector<std::string>& v)
+      {
+         std::string out;
+         for (const std::string& s : v)
+            out += (out.empty() ? "" : ", ") + s;
+         return out;
+      }
+
+      // A live node's index from params[key] (or params[alias]): an integer or
+      // a string of digits. Inside a batch, "$label" strings have already been
+      // replaced with the index they stand for (see the batch branch).
+      bool ReadNodeIndex(const json& params, const char* key, const char* alias, int& out, std::string& err)
+      {
+         const json* v = params.contains(key) ? &params[key]
+                       : (alias != nullptr && params.contains(alias)) ? &params[alias] : nullptr;
+         if (v == nullptr)
+         {
+            err = std::string("missing '") + key + "'";
+            return false;
+         }
+         if (v->is_number_integer())
+            out = v->get<int>();
+         else if (v->is_string() && IsDigits(v->get<std::string>()))
+            out = std::stoi(v->get<std::string>());
+         else
+         {
+            const std::string s = v->is_string() ? v->get<std::string>() : v->dump();
+            err = !s.empty() && s[0] == '$' ? "'" + s + "': $references only work inside a batch"
+                                            : std::string("'") + key + "' must be a node index, got " + s;
+            return false;
+         }
+         if (FindNodeByIndex(out) == nullptr)
+         {
+            err = "unknown node index " + std::to_string(out);
+            return false;
+         }
+         return true;
+      }
+
+      // An input slot (number) or its authoring name from `describe` (input, input_2, ...).
+      bool ReadSlot(const json& v, const GraphNode& dst, int& out, std::string& err)
+      {
+         if (v.is_number_integer())
+         {
+            out = v.get<int>();
+            return true;
+         }
+         const std::string word = v.is_string() ? v.get<std::string>() : v.dump();
+         if (IsDigits(word))
+         {
+            out = std::stoi(word);
+            return true;
+         }
+         const PatchSchema::TypeSchema* t = SchemaFor(dst.typeName);
+         std::vector<std::string> names;
+         if (t != nullptr && PatchSchema::FindSlot(*t, word, out, names))
+            return true;
+         err = "'" + word + "' is not an input of " + dst.typeName + " (inputs: " + JoinNames(names) + ")";
+         return false;
+      }
+
+      // An output (number) or its label from `describe` (case-insensitive).
+      bool ReadOutput(const json& v, const GraphNode& src, int& out, std::string& err)
+      {
+         if (v.is_number_integer())
+         {
+            out = v.get<int>();
+            return true;
+         }
+         const std::string word = v.is_string() ? v.get<std::string>() : v.dump();
+         if (IsDigits(word))
+         {
+            out = std::stoi(word);
+            return true;
+         }
+         const PatchSchema::TypeSchema* t = SchemaFor(src.typeName);
+         std::vector<std::string> labels;
+         if (t != nullptr && PatchSchema::FindOutput(*t, word, out, labels))
+            return true;
+         err = "'" + word + "' is not an output of " + src.typeName + " (outputs: " + JoinNames(labels) + ")";
+         return false;
+      }
+
+      // A modulatable parameter: its `mod`/`expr` index, or its saved key
+      // (`sizeX`), or failing that its on-screen label. Keys are only known for
+      // a type once a node of it has drawn a frame (JoinLiveTier1), so a node
+      // created in the same batch has to be addressed by index or bound later.
+      bool ReadParam(const json& v, const GraphNode& dst, int& out, std::string& err)
+      {
+         const auto maxIt = gModulatableMax.find(dst.typeName);
+         auto inRange = [&](int p)
+         {
+            if (p < 0 || (maxIt != gModulatableMax.end() && p > maxIt->second))
+            {
+               err = "param " + std::to_string(p) + " is out of range for " + dst.typeName;
+               return false;
+            }
+            return true;
+         };
+         if (v.is_number_integer())
+         {
+            out = v.get<int>();
+            return inRange(out);
+         }
+         const std::string word = v.is_string() ? v.get<std::string>() : v.dump();
+         if (IsDigits(word))
+         {
+            out = std::stoi(word);
+            return inRange(out);
+         }
+         JoinLiveTier1();
+         std::vector<std::string> pool;
+         auto join = gParamJoin.find(dst.typeName);
+         if (join != gParamJoin.end() && join->second.done)
+         {
+            auto k = join->second.paramOfKey.find(word);
+            if (k != join->second.paramOfKey.end())
+            {
+               out = k->second;
+               return true;
+            }
+            for (const auto& kv : join->second.paramOfKey)
+               pool.push_back(kv.first);
+         }
+         std::string lw = word;
+         std::transform(lw.begin(), lw.end(), lw.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+         for (const auto& kv : Modulation::Instance().AllKnownParams())
+         {
+            if (kv.second.nodeIndex != dst.index)
+               continue;
+            std::string ln = kv.second.name;
+            std::transform(ln.begin(), ln.end(), ln.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (ln == lw)
+            {
+               out = kv.second.paramIndex;
+               return true;
+            }
+            pool.push_back(kv.second.name);
+         }
+         if (pool.empty())
+            err = dst.typeName + " " + std::to_string(dst.index) +
+                  " has not drawn a frame yet, so its parameter keys are unknown - pass the numeric param, "
+                  "or retry in a later call";
+         else
+         {
+            const std::vector<std::string> near = PatchSchema::Nearest(word, pool, 3);
+            err = "'" + word + "' is not a modulatable parameter of " + dst.typeName +
+                  (near.empty() ? std::string() : " (did you mean: " + JoinNames(near) + ")");
+         }
+         return false;
+      }
+
+      // The saved key and on-screen label of a parameter index, when known.
+      void DescribeParam(const GraphNode& gn, int param, json& rec)
+      {
+         auto join = gParamJoin.find(gn.typeName);
+         if (join != gParamJoin.end())
+         {
+            auto k = join->second.keyOfParam.find(param);
+            if (k != join->second.keyOfParam.end())
+               rec["dstKey"] = k->second;
+         }
+         if (const ParamRef* ref = Modulation::Instance().KnownParam(gn.index, param))
+         {
+            rec["dstLabel"] = ref->name;
+            rec["min"] = ref->minValue;
+            rec["max"] = ref->maxValue;
+         }
+      }
+
+      // Inside a batch: swap "$label" strings for the node index a previous
+      // create_node {id: label} in the same batch returned. Only index-valued
+      // keys are touched, so expression text or string param values that start
+      // with '$' pass through untouched.
+      bool SubstituteRefs(json& params, const std::map<std::string, int>& labels, std::string& err)
+      {
+         static const char* kIndexKeys[] = { "index", "srcIndex", "dstIndex", "src", "dst", "output" };
+         if (!params.is_object())
+            return true;
+         for (const char* key : kIndexKeys)
+         {
+            if (!params.contains(key) || !params[key].is_string())
+               continue;
+            const std::string s = params[key].get<std::string>();
+            if (s.empty() || s[0] != '$')
+               continue;
+            auto it = labels.find(s.substr(1));
+            if (it == labels.end())
+            {
+               err = "unknown reference '" + s + "' (create_node with \"id\": \"" + s.substr(1) +
+                     "\" earlier in this batch)";
+               return false;
+            }
+            params[key] = it->second;
+         }
+         return true;
+      }
+   }
+
    // Dispatches one RemoteControl JSON-RPC request. Runs on the main thread,
    // once per frame per pending command (see RemoteControl::DrainPending's
    // call site, right after glfwPollEvents()) - so every case here is free to
@@ -30,16 +239,27 @@ namespace app
       else if (method == "create_node")
       {
          const std::string typeName = params.value("typeName", std::string());
-         const std::string category = params.value("category", std::string());
+         std::string category = params.value("category", std::string());
+         if (category.empty())
+            category = NodeFactory::Instance().CategoryOf(typeName);
          const float x = params.value("x", 0.0f);
          const float y = params.value("y", 0.0f);
          GraphNode* gn = SpawnNode(typeName, category, x, y);
          if (gn == nullptr)
          {
-            outError = "unknown node type '" + typeName + "'";
+            std::vector<std::string> pool;
+            for (const std::string& cat : NodeFactory::Instance().GetCategories())
+               for (const std::string& n : NodeFactory::Instance().GetNodesInCategory(cat))
+                  pool.push_back(n);
+            const std::vector<std::string> near = PatchSchema::Nearest(typeName, pool, 3);
+            outError = "unknown node type '" + typeName + "'" +
+                       (near.empty() ? std::string() : " (did you mean: " + JoinNames(near) + ")");
             return false;
          }
          outResult = { {"index", gn->index} };
+         // The batch branch records it so later calls can say "$<id>".
+         if (params.contains("id"))
+            outResult["id"] = params["id"];
          return true;
       }
       else if (method == "delete_node")
@@ -56,10 +276,14 @@ namespace app
       }
       else if (method == "connect")
       {
-         const int srcIndex = params.value("srcIndex", -1);
-         const int srcOutput = params.value("srcOutput", 0);
-         const int dstIndex = params.value("dstIndex", -1);
-         const int dstSlot = params.value("dstSlot", -1);
+         int srcIndex = -1, dstIndex = -1, srcOutput = 0, dstSlot = -1;
+         if (!ReadNodeIndex(params, "srcIndex", "src", srcIndex, outError) ||
+             !ReadNodeIndex(params, "dstIndex", "dst", dstIndex, outError))
+            return false;
+         if (params.contains("srcOutput") && !ReadOutput(params["srcOutput"], *FindNodeByIndex(srcIndex), srcOutput, outError))
+            return false;
+         if (params.contains("dstSlot") && !ReadSlot(params["dstSlot"], *FindNodeByIndex(dstIndex), dstSlot, outError))
+            return false;
          if (!ConnectNodes(srcIndex, srcOutput, dstIndex, dstSlot, outError))
             return false;
          outResult = json::object();
@@ -388,6 +612,9 @@ namespace app
          // The static schema of one node type (or the list of types when none is
          // given). Control ranges need a drawn node, so they are the CLI's job:
          // `Infinite --describe <type> --json`.
+         // `params` lists saved keys only; the modulatable parameter indices and
+         // keys `bind_modulator` takes are in get_bindings' `params` for a node
+         // that has drawn.
          const std::string type = params.value("type", std::string());
          if (type.empty())
          {
@@ -406,8 +633,10 @@ namespace app
          json pj = json::array(), in = json::array(), out = json::array();
          for (const auto& pi : ts->params)
             pj.push_back({ {"key", pi.key}, {"kind", std::string(1, pi.kind)}, {"default", pi.def} });
-         for (const auto& si : ts->inputs)
-            in.push_back({ {"slot", si.slot}, {"kind", si.kind}, {"label", si.label} });
+         const std::vector<std::string> slotNames = PatchSchema::SlotNames(*ts);
+         for (size_t i = 0; i < ts->inputs.size(); i++)
+            in.push_back({ {"slot", ts->inputs[i].slot}, {"name", slotNames[i]}, {"kind", ts->inputs[i].kind},
+                           {"label", ts->inputs[i].label} });
          for (const auto& oi : ts->outputs)
             out.push_back({ {"label", oi.label}, {"kind", oi.kind}, {"modulator", oi.modulator} });
          outResult = { {"type", ts->name}, {"category", ts->category}, {"params", pj}, {"inputs", in}, {"outputs", out},
@@ -420,6 +649,11 @@ namespace app
          // undo step. On the first failure everything already done is undone.
          // Node indices are renumbered by that undo (ApplyPatchData remaps), so
          // a caller that rolled back should re-read get_graph.
+         //
+         // A create_node with "id": "<label>" lets every later call in the same
+         // batch name that node as "$<label>" wherever a node index goes. The
+         // labels live only for this batch: indices are reused after a delete
+         // or undo, so a label kept beyond it could point at the wrong node.
          if (!params.contains("calls") || !params["calls"].is_array())
          {
             outError = "batch needs a 'calls' array of {method, params}";
@@ -430,26 +664,63 @@ namespace app
          const bool wasSuppressed = gSuppressUndoCheckpoints;
          gSuppressUndoCheckpoints = true; // calls inside must not add their own
          json results = json::array();
+         std::map<std::string, int> labels;
          std::string failMsg;
          int failAt = -1;
          for (size_t i = 0; i < params["calls"].size() && failAt < 0; i++)
          {
             const json& call = params["calls"][i];
-            const std::string m = call.value("method", std::string());
-            if (m.empty() || m == "batch" || m == "undo" || m == "redo" || m == "new_patch" || m == "load_patch")
+            const std::string m = call.is_object() ? call.value("method", std::string()) : std::string();
+            // load_patch_text replaces the whole graph and clears the undo
+            // suppression this batch relies on (ApplyPatchData).
+            if (m.empty() || m == "batch" || m == "undo" || m == "redo" || m == "new_patch" || m == "load_patch" ||
+                m == "load_patch_text")
             {
                failMsg = "method '" + m + "' is not allowed inside a batch";
                failAt = (int)i;
                break;
             }
+            json callParams = call.contains("params") ? call["params"] : json::object();
             json r;
             std::string e;
-            if (!HandleRpcCommand(m, call.contains("params") ? call["params"] : json::object(), r, e))
+            bool ok = SubstituteRefs(callParams, labels, e);
+            if (ok && m == "create_node" && callParams.contains("id"))
+            {
+               const json& id = callParams["id"];
+               const std::string label = id.is_string() ? id.get<std::string>() : std::string();
+               bool valid = !label.empty() && !std::isdigit((unsigned char)label[0]);
+               for (char ch : label)
+                  valid = valid && (std::isalnum((unsigned char)ch) || ch == '_');
+               if (!valid)
+               {
+                  ok = false;
+                  e = "id must start with a letter or _ and hold letters, digits and _";
+               }
+               else if (labels.count(label))
+               {
+                  ok = false;
+                  e = "id '" + label + "' is already used in this batch";
+               }
+            }
+            // An exception here must not skip the rollback below, or the
+            // batch would leave a half-applied graph with undo suppressed.
+            try
+            {
+               ok = ok && HandleRpcCommand(m, callParams, r, e);
+            }
+            catch (const std::exception& ex)
+            {
+               ok = false;
+               e = std::string("bad params: ") + ex.what();
+            }
+            if (!ok)
             {
                failMsg = m + ": " + e;
                failAt = (int)i;
                break;
             }
+            if (m == "create_node" && r.contains("id") && r["id"].is_string())
+               labels[r["id"].get<std::string>()] = r["index"].get<int>();
             results.push_back(r);
          }
          gSuppressUndoCheckpoints = wasSuppressed;
@@ -464,6 +735,230 @@ namespace app
             return false;
          }
          outResult = { {"results", results} };
+         return true;
+      }
+      else if (method == "get_bindings")
+      {
+         // Modulation cables, expressions and globals, with each destination's
+         // key/label/range when known. With `index`, also that node's
+         // modulatable parameters - what bind_modulator / set_expression take.
+         JoinLiveTier1();
+         const Patch::Data data = BuildPatchData();
+         json mods = json::array(), exprs = json::array(), globs = json::array();
+         for (const Patch::ModRecord& m : data.modulation)
+         {
+            json rec = { {"dst", m.dstIndex}, {"param", m.dstParam}, {"src", m.srcIndex}, {"srcOutput", m.srcOutput},
+                         {"lo", m.lo}, {"hi", m.hi}, {"hasRange", m.hasRange}, {"enabled", m.enabled}, {"curve", m.curve} };
+            if (const GraphNode* gn = FindNodeByIndex(m.dstIndex))
+               DescribeParam(*gn, m.dstParam, rec);
+            mods.push_back(rec);
+         }
+         for (const Patch::ExprRecord& e : data.expressions)
+         {
+            json rec = { {"dst", e.dstIndex}, {"param", e.dstParam}, {"text", e.text}, {"curve", e.curve} };
+            if (const GraphNode* gn = FindNodeByIndex(e.dstIndex))
+               DescribeParam(*gn, e.dstParam, rec);
+            if (const std::string* err = Modulation::Instance().ExpressionErrorFor(e.dstIndex, e.dstParam))
+               if (!err->empty())
+                  rec["error"] = *err;
+            if (Modulation::Instance().IsModulated(e.dstIndex, e.dstParam))
+               rec["shadowedByModulator"] = true;
+            exprs.push_back(rec);
+         }
+         for (const ExprGlobals::Global& g : ExprGlobals::All())
+         {
+            json rec = { {"name", g.name}, {"expr", g.expr}, {"value", g.value} };
+            if (!g.error.empty())
+               rec["error"] = g.error;
+            globs.push_back(rec);
+         }
+         outResult = { {"modulation", mods}, {"expressions", exprs}, {"globals", globs} };
+         if (params.contains("index"))
+         {
+            int index = -1;
+            if (!ReadNodeIndex(params, "index", nullptr, index, outError))
+               return false;
+            const GraphNode* gn = FindNodeByIndex(index);
+            json ps = json::array();
+            for (const auto& kv : Modulation::Instance().AllKnownParams())
+            {
+               if (kv.second.nodeIndex != index)
+                  continue;
+               json rec = { {"param", kv.second.paramIndex} };
+               DescribeParam(*gn, kv.second.paramIndex, rec);
+               if (kv.second.isEnum)
+                  rec["options"] = kv.second.enumOptions;
+               ps.push_back(rec);
+            }
+            outResult["params"] = ps;
+            if (ps.empty())
+               outResult["paramsNote"] = "this node has not drawn a frame yet; ask again in a later call";
+         }
+         return true;
+      }
+      else if (method == "bind_modulator")
+      {
+         // The live `mod` line: patch a modulator output onto a parameter.
+         // Installed with RestoreLink like a patch load (Bind() reads this
+         // frame's FrameParams, which the RPC drain runs before), so with no
+         // lo/hi the range becomes the destination's full span on its first draw.
+         int dst = -1, src = -1, param = -1, srcOutput = 0;
+         if (!ReadNodeIndex(params, "dst", "dstIndex", dst, outError) ||
+             !ReadNodeIndex(params, "src", "srcIndex", src, outError))
+            return false;
+         if (dst == src)
+         {
+            outError = "a node cannot modulate its own parameter";
+            return false;
+         }
+         const GraphNode* dstNode = FindNodeByIndex(dst);
+         const GraphNode* srcNode = FindNodeByIndex(src);
+         if (!params.contains("param"))
+         {
+            outError = "missing 'param'";
+            return false;
+         }
+         if (!ReadParam(params["param"], *dstNode, param, outError))
+            return false;
+         if (params.contains("srcOutput") && !ReadOutput(params["srcOutput"], *srcNode, srcOutput, outError))
+            return false;
+         const PatchSchema::TypeSchema* ts = SchemaFor(srcNode->typeName);
+         if (ts == nullptr || srcOutput < 0 || srcOutput >= (int)ts->outputs.size() || !ts->outputs[srcOutput].modulator)
+         {
+            outError = srcNode->typeName + " output " + std::to_string(srcOutput) +
+                       " is not a modulator (use an LFO, Envelope, Random, Macro, Audio Analyze, ...)";
+            return false;
+         }
+         const bool hasLo = params.contains("lo"), hasHi = params.contains("hi");
+         if (hasLo != hasHi)
+         {
+            outError = "pass both 'lo' and 'hi', or neither for the full range";
+            return false;
+         }
+         Modulation::Source source;
+         source.nodeIndex = src;
+         source.outputIndex = srcOutput;
+         if (hasLo)
+         {
+            source.lo = params["lo"].get<float>();
+            source.hi = params["hi"].get<float>();
+            if (!std::isfinite(source.lo) || !std::isfinite(source.hi))
+            {
+               outError = "'lo' and 'hi' must be finite numbers";
+               return false;
+            }
+            source.hasRange = true;
+         }
+         source.enabled = params.value("enabled", true);
+         source.curve = std::clamp(params.value("curve", 0.0f), -1.0f, 1.0f);
+         PushUndoCheckpoint();
+         Modulation::Instance().RestoreLink(dst, param, source);
+         outResult = { {"dst", dst}, {"param", param} };
+         return true;
+      }
+      else if (method == "unbind_modulator")
+      {
+         int dst = -1, param = -1;
+         if (!ReadNodeIndex(params, "dst", "dstIndex", dst, outError))
+            return false;
+         if (!params.contains("param"))
+         {
+            outError = "missing 'param'";
+            return false;
+         }
+         if (!ReadParam(params["param"], *FindNodeByIndex(dst), param, outError))
+            return false;
+         if (!Modulation::Instance().IsModulated(dst, param))
+         {
+            outError = "nothing modulates param " + std::to_string(param) + " of node " + std::to_string(dst);
+            return false;
+         }
+         PushUndoCheckpoint();
+         Modulation::Instance().Unbind(dst, param);
+         outResult = json::object();
+         return true;
+      }
+      else if (method == "set_expression")
+      {
+         // The live `expr` line. Empty text removes the expression. A wired
+         // modulator on the same parameter wins over it (reported, not refused).
+         int dst = -1, param = -1;
+         if (!ReadNodeIndex(params, "dst", "dstIndex", dst, outError))
+            return false;
+         if (!params.contains("param"))
+         {
+            outError = "missing 'param'";
+            return false;
+         }
+         if (!ReadParam(params["param"], *FindNodeByIndex(dst), param, outError))
+            return false;
+         std::string text = params.value("text", std::string());
+         if (!text.empty() && text[0] == '=')
+            text.erase(0, 1);
+         PushUndoCheckpoint();
+         if (text.empty())
+            Modulation::Instance().ClearExpression(dst, param);
+         else
+         {
+            Modulation::Instance().SetExpression(dst, param, text);
+            if (params.contains("curve"))
+               Modulation::Instance().SetExpressionCurve(dst, param, params["curve"].get<float>());
+            // As the in-node editor does: a looping recording left underneath
+            // would resurface once the expression is later removed.
+            GestureRecorder::Instance().CancelArm(dst, param);
+            GestureRecorder::Instance().StopPlayback(dst, param);
+         }
+         outResult = { {"dst", dst}, {"param", param} };
+         if (Modulation::Instance().IsModulated(dst, param))
+            outResult["shadowedByModulator"] = true;
+         return true;
+      }
+      else if (method == "set_global")
+      {
+         // The live `glob` line: replaces a global of the same name in place
+         // (its position matters - a global may read the ones above it), or
+         // appends a new one.
+         const std::string name = params.value("name", std::string());
+         std::string expr = params.value("expr", std::string());
+         if (!expr.empty() && expr[0] == '=')
+            expr.erase(0, 1);
+         std::string nameError;
+         if (!ExprGlobals::IsValidName(name, nameError))
+         {
+            outError = nameError;
+            return false;
+         }
+         if (expr.empty())
+         {
+            outError = "missing 'expr' (use remove_global to delete one)";
+            return false;
+         }
+         PushUndoCheckpoint();
+         std::vector<ExprGlobals::Global>& all = ExprGlobals::All();
+         auto it = std::find_if(all.begin(), all.end(), [&](const ExprGlobals::Global& g) { return g.name == name; });
+         if (it != all.end())
+         {
+            it->expr = expr;
+            it->error.clear();
+         }
+         else
+            all.push_back({ name, expr, 0.0f, std::string() });
+         outResult = json::object();
+         return true;
+      }
+      else if (method == "remove_global")
+      {
+         const std::string name = params.value("name", std::string());
+         std::vector<ExprGlobals::Global>& all = ExprGlobals::All();
+         auto it = std::find_if(all.begin(), all.end(), [&](const ExprGlobals::Global& g) { return g.name == name; });
+         if (it == all.end())
+         {
+            outError = "no global named '" + name + "'";
+            return false;
+         }
+         PushUndoCheckpoint();
+         all.erase(it);
+         outResult = json::object();
          return true;
       }
       else if (method == "save_patch")

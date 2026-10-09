@@ -1485,6 +1485,95 @@ void RunRpcBatchTest()
    Check("render_frame without an Output errors", !Call("render_frame", { {"path", "/tmp/infinite_rf.png"} }, r, e) &&
                                                      e.find("no Output") != std::string::npos);
 
+   // $references, slot names, modulation and globals - the calls a chat
+   // assistant builds a patch with.
+   NewPatch();
+   auto Step = [](const char* m, const json& p) { return json{ {"method", m}, {"params", p} }; };
+   json refs = { {"calls", json::array({
+      Step("create_node", { {"typeName", "Shape"}, {"id", "pic"} }), // no category: looked up
+      Step("create_node", { {"typeName", "Blend"}, {"category", "Compositing"}, {"id", "mix"} }),
+      Step("create_node", { {"typeName", "LFO"}, {"category", "Modulators"}, {"id", "lfo"} }),
+      Step("connect", { {"src", "$pic"}, {"dst", "$mix"}, {"dstSlot", "input_2"} }),
+      Step("bind_modulator", { {"dst", "$pic"}, {"param", 0}, {"src", "$lfo"}, {"srcOutput", "out"} }) })} };
+   const bool refsOk = Call("batch", refs, r, e);
+   Check("batch with $refs, a slot name and a binding succeeds", refsOk);
+   const int pic = refsOk ? r["results"][0]["index"].get<int>() : -1;
+   const int mix = refsOk ? r["results"][1]["index"].get<int>() : -1;
+   const int lfo = refsOk ? r["results"][2]["index"].get<int>() : -1;
+   GraphNode* picNode = FindNodeByIndex(pic);
+   Check("create_node without a category fills it in", picNode != nullptr && picNode->category == "Source");
+   GraphNode* mixNode = FindNodeByIndex(mix);
+   ImageCable* slot0 = mixNode != nullptr ? CableFor(*mixNode, 0) : nullptr;
+   ImageCable* slot1 = mixNode != nullptr ? CableFor(*mixNode, 1) : nullptr;
+   // The cable itself, not gLinks: that list is rebuilt when a frame draws.
+   Check("'input_2' wired slot 1", slot1 != nullptr && slot1->IsConnected() && !(slot0 != nullptr && slot0->IsConnected()));
+   Check("binding landed", Modulation::Instance().ModulatorFor(pic, 0).nodeIndex == lfo);
+   Check("get_bindings lists it", Call("get_bindings", json::object(), r, e) && r["modulation"].size() == 1 &&
+                                  r["modulation"][0]["src"] == lfo);
+
+   const size_t nodesBefore = gNodes.size();
+   json unknownRef = { {"calls", json::array({ Step("create_node", { {"typeName", "Shape"}, {"id", "a"} }),
+                                               Step("connect", { {"src", "$nope"}, {"dst", "$a"}, {"dstSlot", 0} }) })} };
+   Check("unknown $ref fails the batch and rolls back", !Call("batch", unknownRef, r, e) &&
+                                                         e.find("$nope") != std::string::npos && gNodes.size() == nodesBefore);
+   json dupId = { {"calls", json::array({ Step("create_node", { {"typeName", "Shape"}, {"id", "a"} }),
+                                          Step("create_node", { {"typeName", "Shape"}, {"id", "a"} }) })} };
+   Check("duplicate id fails the batch", !Call("batch", dupId, r, e) && gNodes.size() == nodesBefore);
+   json badType = { {"calls", json::array({ Step("create_node", { {"typeName", "Shape"} }),
+                                            Step("create_node", { {"typeName", "Shape"}, {"x", "left"} }) })} };
+   Check("a JSON type error inside a batch rolls back instead of throwing",
+         !Call("batch", badType, r, e) && e.find("bad params") != std::string::npos && gNodes.size() == nodesBefore);
+   Check("$refs are refused outside a batch", !Call("connect", { {"src", "$pic"}, {"dst", mix}, {"dstSlot", 0} }, r, e) &&
+                                               e.find("only work inside a batch") != std::string::npos);
+   Check("a bad slot name lists the valid ones", !Call("connect", { {"src", pic}, {"dst", mix}, {"dstSlot", "nope"} }, r, e) &&
+                                                 e.find("input_2") != std::string::npos);
+   Check("describe names the inputs", Call("describe", { {"type", "Blend"} }, r, e) && r["inputs"][1]["name"] == "input_2");
+
+   Check("a non-modulator source is refused", !Call("bind_modulator", { {"dst", mix}, {"param", 0}, {"src", pic} }, r, e) &&
+                                               e.find("not a modulator") != std::string::npos);
+   Check("self-modulation is refused", !Call("bind_modulator", { {"dst", lfo}, {"param", 0}, {"src", lfo} }, r, e));
+   Check("lo without hi is refused", !Call("bind_modulator", { {"dst", mix}, {"param", 0}, {"src", lfo}, {"lo", 0.2} }, r, e));
+   Check("explicit range is stored", Call("bind_modulator", { {"dst", mix}, {"param", 0}, {"src", lfo}, {"lo", 0.25}, {"hi", 0.75} }, r, e) &&
+                                     Modulation::Instance().ModulatorFor(mix, 0).hasRange &&
+                                     Modulation::Instance().ModulatorFor(mix, 0).hi == 0.75f);
+   Check("unbind removes it", Call("unbind_modulator", { {"dst", mix}, {"param", 0} }, r, e) &&
+                              !Modulation::Instance().IsModulated(mix, 0));
+   Check("unbinding nothing errors", !Call("unbind_modulator", { {"dst", mix}, {"param", 0} }, r, e));
+
+   Check("set_expression stores it", Call("set_expression", { {"dst", mix}, {"param", 0}, {"text", "=0.5 + 0.5*sin(t)"} }, r, e) &&
+                                     Modulation::Instance().HasExpression(mix, 0) && !r.contains("shadowedByModulator"));
+   Check("expression under a modulator is flagged", Call("set_expression", { {"dst", pic}, {"param", 0}, {"text", "t"} }, r, e) &&
+                                                    r.value("shadowedByModulator", false));
+   Check("empty text clears it", Call("set_expression", { {"dst", mix}, {"param", 0}, {"text", ""} }, r, e) &&
+                                 !Modulation::Instance().HasExpression(mix, 0));
+
+   const size_t globals0 = ExprGlobals::All().size(); // NewPatch does not clear globals
+   Check("set_global adds one", Call("set_global", { {"name", "rpcWobble"}, {"expr", "sin(t)"} }, r, e) &&
+                                ExprGlobals::All().size() == globals0 + 1);
+   Check("set_global replaces in place", Call("set_global", { {"name", "rpcWobble"}, {"expr", "cos(t)"} }, r, e) &&
+                                         ExprGlobals::All().size() == globals0 + 1 && ExprGlobals::All().back().expr == "cos(t)");
+   Check("reserved global name refused", !Call("set_global", { {"name", "t"}, {"expr", "1"} }, r, e));
+   Check("remove_global deletes it", Call("remove_global", { {"name", "rpcWobble"} }, r, e) &&
+                                     ExprGlobals::All().size() == globals0);
+
+   const size_t undoDepth = gUndoStack.size();
+   Check("bind is undoable", Call("bind_modulator", { {"dst", mix}, {"param", 0}, {"src", lfo} }, r, e) &&
+                             gUndoStack.size() == undoDepth + 1);
+   Undo();
+   // Undo renumbers nodes (ApplyPatchData remaps), so find them again by type.
+   int mixNow = -1, lfoNow = -1, picNow = -1;
+   for (const GraphNode& gn : gNodes)
+   {
+      if (gn.typeName == "Blend") mixNow = gn.index;
+      if (gn.typeName == "LFO") lfoNow = gn.index;
+      if (gn.typeName == "Shape") picNow = gn.index;
+   }
+   Check("undo removes the binding", mixNow >= 0 && !Modulation::Instance().IsModulated(mixNow, 0) &&
+                                     Modulation::Instance().IsModulated(picNow, 0));
+   Check("deleting the modulator drops its bindings", Call("delete_node", { {"index", lfoNow} }, r, e) &&
+                                                     !Modulation::Instance().IsModulated(picNow, 0));
+   NewPatch();
+
    printf("RPCBATCHTEST %s\n", ok ? "OK" : "FAIL");
 }
 
