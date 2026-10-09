@@ -343,6 +343,7 @@ void DrawFramePump(FrameCtx& fc)
 
       // Apply any RemoteControl RPC requests queued by the network thread
       // since last frame, before any ed:: drawing reads the graph this frame.
+      gRpcParamProbe.clear(); // last frame's requests were served by its DrawNodeBodies
       RemoteControl::DrainPending(HandleRpcCommand);
       PollPendingKeyed(); // before ClearFrameParams: last frame's registered controls are still here
 

@@ -1085,6 +1085,7 @@ bool gHeadlessNeedProbe = false;
    // so the widgets must NOT declare them again here: ed::BeginPin twice on
    // one id in a frame is undefined.
    bool gParamRegisterOnly = false;
+   std::set<int> gRpcParamProbe;
 
    // Nodes to select next frame; they do not exist in the editor until they
    // have been drawn once, so selection has to wait a frame.

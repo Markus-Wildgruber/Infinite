@@ -659,8 +659,9 @@ void DrawNodeBodies(FrameCtx& fc)
          // untouched, and an empty clip rect swallows any raw draw-list work
          // the params body does around them. Gated on there being a binding at
          // all so the common collapsed node costs exactly what it did before.
+         // gRpcParamProbe: an RPC client asked for this node's parameter keys.
          const bool registerOnlyParams = !isAudioBody && !isComment && !gn.showParams &&
-                                         (gn.IsParamDriven() || gHeadlessProbeAll);
+                                         (gn.IsParamDriven() || gHeadlessProbeAll || gRpcParamProbe.count(gn.index) != 0);
          ImGuiWindow* paramsWindow = ImGui::GetCurrentWindow();
          const bool savedSkipItems = paramsWindow->SkipItems;
          if (registerOnlyParams)

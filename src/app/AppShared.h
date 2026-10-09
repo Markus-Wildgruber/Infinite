@@ -1728,6 +1728,12 @@ extern std::set<int> gDrawnParamPins;
 
 extern bool gParamRegisterOnly;
 
+// Node indices whose controls must register this frame even while collapsed
+// and undriven, so an RPC client can address them by key (Rpc.cpp). Filled by
+// the RPC drain, consumed by DrawNodeBodies the same frame, cleared before the
+// next drain.
+extern std::set<int> gRpcParamProbe;
+
 extern std::vector<int> gPendingSelect;
 
 extern std::pair<int, int> gTypedParamJustOpened;

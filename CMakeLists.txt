@@ -528,6 +528,7 @@ set(COMMON_SOURCES
     src/arrange/ArrangeModel.cpp
     src/arrange/ArrangeMediaImport.cpp
     src/core/RemoteControl.cpp
+    src/core/McpBridge.cpp
     src/core/PatchJson.cpp
     src/core/OscMessage.cpp
     src/core/UpdateCheck.cpp

@@ -153,9 +153,14 @@ namespace app
             pool.push_back(kv.second.name);
          }
          if (pool.empty())
+         {
+            // A collapsed, undriven node never registers its controls; ask
+            // DrawNodeBodies to this frame, so the next request can resolve it.
+            gRpcParamProbe.insert(dst.index);
             err = dst.typeName + " " + std::to_string(dst.index) +
-                  " has not drawn a frame yet, so its parameter keys are unknown - pass the numeric param, "
-                  "or retry in a later call";
+                  " has not reported its parameters yet - retry this call once (they are being read now), "
+                  "or pass the numeric param";
+         }
          else
          {
             const std::vector<std::string> near = PatchSchema::Nearest(word, pool, 3);
@@ -257,6 +262,9 @@ namespace app
             return false;
          }
          outResult = { {"index", gn->index} };
+         // Have it register its controls on this frame's draw even though it
+         // starts collapsed, so its parameter keys resolve from the next request.
+         gRpcParamProbe.insert(gn->index);
          // The batch branch records it so later calls can say "$<id>".
          if (params.contains("id"))
             outResult["id"] = params["id"];
@@ -792,7 +800,10 @@ namespace app
             }
             outResult["params"] = ps;
             if (ps.empty())
-               outResult["paramsNote"] = "this node has not drawn a frame yet; ask again in a later call";
+            {
+               gRpcParamProbe.insert(index);
+               outResult["paramsNote"] = "this node has not reported its parameters yet; ask again once (they are being read now)";
+            }
          }
          return true;
       }
@@ -1128,8 +1139,34 @@ namespace app
             return false;
          }
          const ColorStats::FrameSummary fs = ColorStats::SummarizeRgba8(pixels.data(), w, h);
-         outResult = { { "file", path }, { "width", w }, { "height", h }, { "output", outIndex },
-                       { "frame_stats", json::parse("{" + ColorStats::FrameSummaryJsonFields(fs) + "}") } };
+         // maxSize: rewrite the file as a preview no larger than that on its long
+         // side (an assistant looking at the frame needs ~1000 px, not 4K).
+         // Stats above stay those of the full frame. `pixels` is GL's bottom-up
+         // order, which ExportImage writes with the flip it leaves enabled.
+         outResult = json::object();
+         const int maxSize = params.value("maxSize", 0);
+         if (maxSize > 0 && std::max(w, h) > maxSize)
+         {
+            const float s = (float)maxSize / (float)std::max(w, h);
+            const int nw = std::max(1, (int)std::lround(w * s)), nh = std::max(1, (int)std::lround(h * s));
+            std::vector<unsigned char> small = ResizeRgba8(pixels.data(), w, h, nw, nh);
+            stbi_flip_vertically_on_write(1);
+            std::string lower = path;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (lower.size() >= 4 && (lower.rfind(".jpg") == lower.size() - 4 || lower.rfind(".jpeg") == lower.size() - 5))
+            {
+               std::vector<unsigned char> rgb((size_t)nw * nh * 3);
+               for (size_t i = 0; i < (size_t)nw * nh; i++)
+                  std::memcpy(&rgb[i * 3], &small[i * 4], 3);
+               stbi_write_jpg(path.c_str(), nw, nh, 3, rgb.data(), 85);
+            }
+            else
+               stbi_write_png(path.c_str(), nw, nh, 4, small.data(), nw * 4);
+            outResult["previewWidth"] = nw;
+            outResult["previewHeight"] = nh;
+         }
+         outResult.update({ { "file", path }, { "width", w }, { "height", h }, { "output", outIndex },
+                       { "frame_stats", json::parse("{" + ColorStats::FrameSummaryJsonFields(fs) + "}") } });
          if (fs.blackPercent >= 100.0)
             outResult["warning"] = "W_BLACK_FRAME: the frame is entirely black";
          return true;

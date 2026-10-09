@@ -6,6 +6,18 @@ canvas while you watch. The authoritative code is `src/app/graph/Rpc.cpp` (metho
 `src/core/RemoteControl.cpp` (transport). For writing patches as files instead, see
 [patch-format.md](patch-format.md).
 
+## MCP bridge
+
+`Infinite --mcp` serves these methods as Model Context Protocol tools on stdin/stdout, for an MCP
+client such as Claude Code (`src/core/McpBridge.cpp`). It holds no state: each tool call is one
+request to the running instance below, so start Infinite first. It reads the token itself,
+honours `INFINITE_CONTROL_PORT`, trims `get_graph` to nodes, cables and bindings (no parameter
+dump), and returns `render_frame` as a 1024 px JPEG the model can look at.
+
+```json
+{"mcpServers": {"infinite": {"command": "C:/path/to/Infinite.com", "args": ["--mcp"]}}}
+```
+
 ## Connecting
 
 - Loopback only. The port is `7777`, or `INFINITE_CONTROL_PORT` when set before launch. Headless
@@ -36,9 +48,11 @@ canvas while you watch. The authoritative code is `src/app/graph/Rpc.cpp` (metho
 Node indices are not stable across `undo`, `redo` or a rolled-back `batch` (the graph is rebuilt and
 renumbered). Re-read `get_graph` after any of those.
 
-A parameter key or label only resolves once a node of that type has drawn a frame. A node created
-in the same `batch` has not, so address its parameters by number there, or bind them in a later
-request. `get_bindings {index}` lists a drawn node's parameters with their numbers and keys.
+A parameter key or label only resolves once the node has reported its controls, which happens on
+the frame after `create_node` (or, for an existing collapsed node, after the first request that
+asks for them: it answers "retry once" and the next request resolves). A node created in the same
+`batch` has not reported yet, so address its parameters by number there, or bind them in a later
+request. `get_bindings {index}` lists a node's parameters with their numbers, keys and ranges.
 
 ## Methods
 
@@ -106,5 +120,5 @@ Not allowed inside a batch: `batch`, `undo`, `redo`, `new_patch`, `load_patch`, 
 | `validate_patch_text` | `text`, `strict?` (true) | `{ok, errors[], warnings[], nodes}`; the canvas is untouched |
 | `undo` / `redo` | | `{}` |
 | `fit_view` / `fit_view_node` | `index` for the latter | `{}` |
-| `render_frame` | `path`, `output?` | `{file, width, height, output, frame_stats, warning?}`: the Output's current image |
+| `render_frame` | `path`, `output?`, `maxSize?` | `{file, width, height, output, frame_stats, previewWidth?, previewHeight?, warning?}`: the Output's current image; with `maxSize` the file is a preview no larger than that on its long side (stats stay full-frame) |
 | `screenshot_node` | `index`, `path`, `padding?` | `{width, height}`: PNG of the node as drawn |

@@ -1,5 +1,6 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
 #include "app/frame/FrameCtx.h"
+#include "core/McpBridge.h"
 
 namespace app
 {
@@ -162,6 +163,12 @@ int InitApp(FrameCtx& fc, int argc, char** argv)
    auto& sFirstFrameEndMs = fc.sFirstFrameEndMs;
    auto& frameId = fc.frameId;
    auto& splashEnabled = fc.splashEnabled;
+
+   // MCP server for an assistant driving an already-running instance (see
+   // McpBridge.h). Pure stdio + loopback socket, so it returns before any
+   // window, GL, audio or node registry exists.
+   if (argc >= 2 && std::strcmp(argv[1], "--mcp") == 0)
+      return McpBridge::Run();
 
    // Where the Drum Sequencer finds its bundled kit (Resources/drumkits/
    // infinite-basic); empty when the folder is absent, which the node treats as
