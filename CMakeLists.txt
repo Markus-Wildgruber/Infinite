@@ -851,6 +851,15 @@ target_include_directories(field-preset-check PRIVATE src src/core)
 
 add_executable(Infinite ${COMMON_SOURCES})
 
+# Parallel compile inside the one big Infinite project: MSBuild's -m only runs
+# projects side by side, so without /MP its ~300 files compile one at a time.
+# 8, not every core: these TUs are heavy (AppShared.h) and 16 at once can run a
+# 16 GB machine out of memory. Local builds only - CI (GitHub sets CI) keeps its
+# known-good serial build, which has hit CL.exe internal errors before.
+if(MSVC AND NOT DEFINED ENV{CI})
+    target_compile_options(Infinite PRIVATE /MP8)
+endif()
+
 # Exposes INFINITE_VERSION to C++ as a string literal (UpdateCheck.cpp,
 # User-Agent header, etc.).
 target_compile_definitions(Infinite PRIVATE INFINITE_VERSION_STRING="${INFINITE_VERSION}")
