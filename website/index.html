@@ -61,7 +61,7 @@
 
   <link rel="stylesheet" href="brand.css?v=2">
 
-  <link rel="stylesheet" href="style.css?v=61">
+  <link rel="stylesheet" href="style.css?v=62">
   <link rel="stylesheet" href="glass.css?v=12">
 
   <!-- Google tag (gtag.js) -->
@@ -190,10 +190,10 @@
         </div>
 
         <div class="stage reveal">
-          <model-viewer class="stage-model" src="assets/brand3d/node_audio_filter_wide.glb?v=2" alt="The Audio Filter node as a 3D instrument panel"
-            orientation="45deg 90deg 45deg" touch-action="pan-y" autoplay animation-name="" loading="lazy" reveal="auto"
-            camera-orbit="0deg 90deg 1.35m" camera-target="0m 0m 0m" field-of-view="30deg" min-camera-orbit="-45deg 60deg 0.8m" max-camera-orbit="45deg 120deg 2m"
-            interaction-prompt="none" shadow-intensity="1" shadow-softness="0.8" exposure="1" disable-zoom></model-viewer>
+          <model-viewer class="stage-model" id="stage-model" src="assets/brand3d/node_chain_wide.glb?v=1" alt="Two Audio Filter nodes patched in a row, drawn as 3D instrument panels: drag sideways to tilt them"
+            orientation="45deg 90deg 45deg" camera-controls touch-action="pan-y" autoplay animation-name="" loading="lazy" reveal="auto" disable-zoom disable-pan interaction-prompt="none"
+            camera-orbit="0deg 90deg 1.55m" camera-target="0m 0m 0m" field-of-view="30deg" min-camera-orbit="-28deg 70deg 1.55m" max-camera-orbit="28deg 105deg 1.55m"
+            shadow-intensity="1" shadow-softness="0.8" exposure="1"></model-viewer>
         </div>
       </div>
     </section>
@@ -562,6 +562,8 @@
   </footer>
 
   <script>
+    // the stage model eases back to square when let go
+    (function(){var m=document.getElementById('stage-model');if(!m)return;var back=function(){m.cameraOrbit='0deg 90deg 1.55m';};['pointerup','pointercancel','pointerleave'].forEach(function(e){m.addEventListener(e,back);});})();
     // model-viewer (about 300 KB) loads only when a 3D model is about to scroll into view
     (function () {
       var els = document.querySelectorAll('.stage-model, .download-tile'), done = false;

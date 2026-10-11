@@ -357,7 +357,7 @@ strong { font-weight: 600; color: var(--ink); }
    Instruments: the 3D kit (cutouts with contact shadow, tilt on pointer)
    -------------------------------------------------------------------------- */
 .stage { width: 100vw; margin-left: calc(50% - 50vw); overflow: hidden; }
-.stage-model { display: block; width: 100%; height: clamp(260px, 30vw, 440px); background: transparent; --poster-color: transparent; pointer-events: none; }
+.stage-model { display: block; width: 100%; height: clamp(260px, 30vw, 440px); background: transparent; --poster-color: transparent; cursor: grab; touch-action: pan-y; }
 @keyframes breathe { 50% { transform: translateY(-6px); } }
 
 /* --------------------------------------------------------------------------
