@@ -53,7 +53,7 @@ body:has(.lib-hero) { overflow-x: clip; }
 .ctl { --ctl: 32px; height: var(--ctl); min-height: var(--ctl); display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; line-height: 1; border-radius: var(--r-pill); }
 .lib-price { padding: 0 12px; color: var(--app-text); box-shadow: 0 0 0 1px var(--app-border); }
 .lib-dl, .lib-copy { padding: 0 14px; cursor: pointer; }
-.lib-dl { background: var(--accent); color: #fff; }
+.lib-dl { background: var(--accent); color: var(--on-accent); }
 .lib-copy svg { width: 15px; height: 15px; }
 .lib-copy.done { color: var(--accent-ink); }
 .lib-dl svg { width: 15px; height: 15px; }

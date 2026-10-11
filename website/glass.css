@@ -2,10 +2,12 @@
    Glass only sits behind short labels (header, nav, chips, pills) at 72 to 78% opacity, never behind body text.
    Cards are solid surfaces: depth comes from the surface step and the stacked shadows, never an outline. */
 :root {
-  --glass: rgba(255, 255, 255, 0.76);
   --glass-blur: blur(20px) saturate(1.6);
-  --glass-hi: inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  --glass-shadow: 0 1px 2px rgba(26, 31, 54, 0.05), 0 10px 28px rgba(26, 31, 54, 0.08);
+  --glass-hi: inset 0 1px 0 color-mix(in srgb, var(--surface-2) 95%, transparent);
+  --solid: linear-gradient(180deg, color-mix(in srgb, var(--ink) 84%, var(--surface-1)), var(--ink));
+  --solid-hover: var(--ink);
+  --solid-hi: inset 0 1px 0 color-mix(in srgb, var(--ground) 28%, transparent);
+  --glass-shadow: 0 1px 2px color-mix(in srgb, var(--shadow) 5%, transparent), 0 10px 28px color-mix(in srgb, var(--shadow) 8%, transparent);
 }
 
 /* cards, panels, frames: solid surface-1 */
@@ -20,50 +22,50 @@
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-hi), var(--glass-shadow);
 }
-.btn-ghost:hover { box-shadow: var(--glass-hi), 0 14px 32px rgba(26, 31, 54, 0.12); }
+.btn-ghost:hover { box-shadow: var(--glass-hi), 0 14px 32px color-mix(in srgb, var(--shadow) 12%, transparent); }
 
 /* header: nav labels over glass at 78% */
 .site-header {
-  background: rgba(251, 250, 246, 0.78);
+  background: color-mix(in srgb, var(--ground) 78%, transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.7); backdrop-filter: blur(24px) saturate(1.7);
 }
-.site-header.scrolled { box-shadow: 0 8px 24px rgba(26, 31, 54, 0.06); }
+.site-header.scrolled { box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow) 6%, transparent); }
 .nav-links > a:hover, .nav-links > a[aria-current] { background: var(--glass); box-shadow: var(--glass-hi); }
 .nav-links > a[aria-current] { color: var(--ink); }
 .icon-btn:hover { background: var(--glass); box-shadow: var(--glass-hi); }
 
 /* primary: Midnight with a lit top edge */
 .btn-primary {
-  background: linear-gradient(180deg, #2A3052, #151930);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), var(--glass-shadow);
+  background: var(--solid);
+  box-shadow: var(--solid-hi), var(--glass-shadow);
 }
-.btn-primary:hover { background: linear-gradient(180deg, #343B5E, #20263F); }
+.btn-primary:hover { background: var(--solid-hover); }
 
 /* node cards: solid white surface; the mock keeps its own light inks */
-.node, .pnode { --app-panel: #FFFFFF; --app-text: #12152A; --app-dim: #404660; --app-border: rgba(26, 31, 54, 0.10); }
+.node, .pnode { --app-panel: var(--surface-2); --app-text: var(--ink); --app-dim: var(--ink-2); --app-border: var(--line); }
 .node { background: var(--surface-1); box-shadow: var(--shadow-2); }
 
 /* pressed chips and toggles: Midnight */
 .lib-chip[aria-pressed="true"], .lib-view button[aria-pressed="true"] {
-  background: linear-gradient(180deg, #2A3052, #151930); color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  background: var(--solid); color: var(--ground);
+  box-shadow: var(--solid-hi);
 }
 .lib-view button { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.lib-dl { background: linear-gradient(180deg, #2A3052, #151930); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 4px 12px rgba(21, 25, 48, 0.25); }
-.lib-dl:hover { background: linear-gradient(180deg, #343B5E, #20263F); }
+.lib-dl { background: var(--solid); color: var(--ground); box-shadow: var(--solid-hi), 0 4px 12px color-mix(in srgb, var(--shadow) 25%, transparent); }
+.lib-dl:hover { background: var(--solid-hover); }
 .lib-price { background: var(--deep); box-shadow: none; }
 .lib-copy { background: var(--deep); color: var(--ink); }
-.lib-copy:hover { background: #E4E2EF; }
+.lib-copy:hover { background: var(--surface-3); }
 .step { box-shadow: none; }
 
 .site-footer { background: var(--surface-1); border-top: 0; }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root { --glass: rgba(255, 255, 255, 0.94); }
-  .site-header { background: rgba(251, 250, 246, 0.95); }
+  :root { --glass: color-mix(in srgb, var(--surface-1) 94%, transparent); }
+  .site-header { background: color-mix(in srgb, var(--ground) 95%, transparent); }
 }
 @media (prefers-reduced-transparency: reduce) {
-  :root { --glass: #FFFFFF; }
-  .site-header { background: #FBFAF6; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :root { --glass: var(--surface-1); }
+  .site-header { background: var(--ground); -webkit-backdrop-filter: none; backdrop-filter: none; }
   .btn-ghost, .ticker-pill, .tab-pill, .lib-chip, .lib-view, .platform-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }

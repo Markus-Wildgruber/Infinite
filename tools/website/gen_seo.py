@@ -51,11 +51,13 @@ def page(i):
           "author": {"@type": "Person", "name": i["author"] or "n1m21n", "url": "https://github.com/" + (i["author"] or "n1m21n"), "sameAs": ["https://github.com/n1m21n"] if not i["author"] or i["author"] == "n1m21n" else []}}
     by = f' by {e(i["author"])}' if i["author"] else ""
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-mode="midnight">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#FBFAF6">
+  <meta name="theme-color" content="#151930">
+  <script src="../theme.js?v=1"></script>
+  <link rel="stylesheet" href="../brand.css?v=3">
   <title>{e(t)}</title>
   <meta name="description" content="{e(d)} Free to download for Infinite, the open-source audiovisual workstation.">
   <link rel="canonical" href="{url}">
@@ -68,8 +70,7 @@ def page(i):
   <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&display=swap">
   <style>
-    :root{{--bg:#FBFAF6;--ink:#1a1a17;--mute:#6b6a63;--line:#e4e1d6;--acc:#1a1a17}}
-    @media (prefers-color-scheme:dark){{:root{{--bg:#12120f;--ink:#f2f0e8;--mute:#9a988e;--line:#2a2924;--acc:#f2f0e8}}}}
+    :root{{--bg:var(--ground);--mute:var(--ink-3);--acc:var(--ink)}}
     body{{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Geist,system-ui,sans-serif}}
     main{{max-width:720px;margin:0 auto;padding:32px 16px 64px}}
     nav a{{color:var(--mute);text-decoration:none;font-size:14px}}
