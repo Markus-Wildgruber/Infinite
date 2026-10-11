@@ -9,6 +9,7 @@
 
 #include "audio/AudioNode.h"
 #include "audio/DspMath.h"
+#include "audio/dsp/FluxOnsetDetector.h"
 
 namespace
 {
@@ -68,13 +69,11 @@ namespace
    constexpr int kRefineRingMargin = 4096;  // decimated samples that may arrive while refining
 
    // --- Onsets ------------------------------------------------------------
-   constexpr float kOnsetRiseDb = 8.0f;      // rise over kOnsetRiseBins that counts as an onset
-   constexpr int kOnsetRiseBins = 10;
-   constexpr float kOnsetMinDb = -55.0f;     // quieter than this never triggers
-   constexpr int kOnsetRefractoryBins = 60;
+   // Onsets themselves come from FluxOnsetDetector (spectral flux, shared
+   // with the offline measurement); these only size the bookkeeping.
    constexpr int kOnsetRing = 64;
-   constexpr int kOnsetDbHist = 16;          // power of two, > kOnsetRiseBins
-   constexpr int kOnsetTolBins = 30;         // "coincide" = within +-30 ms
+   constexpr int kOnsetDbHist = 16;          // power of two
+   constexpr int kOnsetTolBins = 50;         // "coincide" = within +-50 ms (= AudioAnalysis::Compare)
    constexpr int kOnsetWindowBins = 3000;    // onsets older than ~3 s drop out
 
    // --- Cost --------------------------------------------------------------
@@ -87,7 +86,9 @@ namespace
    const char* const kOutputNames[AudioCompareNode::kOutputCount] = {
       "similarity", "level diff", "correlation",
       "band 1", "band 2", "band 3", "band 4", "band 5", "band 6", "band 7", "band 8",
-      "pitch diff", "onset match", "timing"
+      "pitch diff", "onset match", "timing",
+      "band 1 diff", "band 2 diff", "band 3 diff", "band 4 diff",
+      "band 5 diff", "band 6 diff", "band 7 diff", "band 8 diff"
    };
 
    float BandCentre(int band)
@@ -166,7 +167,7 @@ public:
       for (int i = 0; i < AudioCompareNode::kOutputCount; i++)
       {
          const bool centred = i == AudioCompareNode::kLevelDiff || i == AudioCompareNode::kPitchDiff ||
-                              i == AudioCompareNode::kTiming;
+                              i == AudioCompareNode::kTiming || i >= AudioCompareNode::kBandDiff0;
          mOut[i].store(centred ? 0.5f : 1.0f, std::memory_order_relaxed);
       }
       for (int in = 0; in < kInputs; in++)
@@ -195,7 +196,10 @@ public:
       while (size <= maxLagSamples)
          size <<= 1;
       for (int in = 0; in < kInputs; in++)
+      {
          mDelay[in].assign((size_t)size, 0.0f);
+         mOnsetDet[in].Prepare(mSampleRate);
+      }
       mDelayMask = size - 1;
       ResetState();
       mCoeffForMs = -1.0f; // recompute the follower coefficient at the new rate
@@ -420,6 +424,7 @@ private:
          mOnsetHead[in] = 0;
          mOnsetFill[in] = 0;
          mLastOnset[in] = INT64_MIN / 2;
+         mOnsetDet[in].Reset();
          mDelaySamples[in] = 0;
          mPitchLoud[in] = false;
       }
@@ -456,6 +461,18 @@ private:
       const float x[kInputs] = { x0, x1 };
       for (int in = 0; in < kInputs; in++)
          mEnvMs[in] = FlushTiny(mEnvMs[in] + mEnvG * ((double)x[in] * x[in] - mEnvMs[in]));
+      // Onsets: the spectral-flux detector the offline measurement uses too
+      // (audio/dsp/FluxOnsetDetector.h), so "onset match" agrees with it.
+      // Times come back in samples since the reset; stored in envelope bins.
+      for (int in = 0; in < kInputs; in++)
+      {
+         mOnsetDet[in].Push(x[in], [this, in](double sample)
+         {
+            mOnsets[in][mOnsetHead[in]] = (int64_t)(sample / (double)mBinLen);
+            mOnsetHead[in] = (mOnsetHead[in] + 1) % kOnsetRing;
+            mOnsetFill[in] = std::min(mOnsetFill[in] + 1, kOnsetRing);
+         });
+      }
       if (++mBinPhase >= mBinLen)
       {
          mBinPhase = 0;
@@ -494,16 +511,7 @@ private:
          const double ms = mEnvMs[in] > 0.0 ? mEnvMs[in] : 0.0;
          mEnvRing[in][slot] = (float)std::sqrt(ms);
          const float db = ms > 1.0e-10 ? (float)(10.0 * std::log10(ms)) : -100.0f;
-         const float prev = mEnvDb[in][Wrap(mBinCount - kOnsetRiseBins, kOnsetDbHist)];
          mEnvDb[in][Wrap(mBinCount, kOnsetDbHist)] = db;
-         if (mBinCount >= kOnsetRiseBins && db > kOnsetMinDb && db - prev > kOnsetRiseDb &&
-             mBinCount - mLastOnset[in] >= kOnsetRefractoryBins)
-         {
-            mOnsets[in][mOnsetHead[in]] = mBinCount;
-            mOnsetHead[in] = (mOnsetHead[in] + 1) % kOnsetRing;
-            mOnsetFill[in] = std::min(mOnsetFill[in] + 1, kOnsetRing);
-            mLastOnset[in] = mBinCount;
-         }
       }
       mBinCount++;
    }
@@ -844,7 +852,10 @@ private:
       const double lagBins = align ? mLagMs * 0.001 * mEnvRate : 0.0;
       const double now = (double)mBinCount;
       const double lo = now - (double)kOnsetWindowBins;
-      const double hi = now - (double)kOnsetTolBins - std::fabs(lagBins) - 2.0;
+      // The detector decides an onset ~85 ms after it happened; wait that
+      // long too, or the partner of a fresh onset is not in the ring yet.
+      const double latencyBins = (double)mOnsetDet[0].LatencySamples() / (double)mBinLen;
+      const double hi = now - (double)kOnsetTolBins - std::fabs(lagBins) - latencyBins - 2.0;
       int total = 0, matched = 0;
       for (int side = 0; side < kInputs; side++)
       {
@@ -921,6 +932,7 @@ private:
          mBandDb[1][b].store(db, std::memory_order_relaxed);
          const float s = Clamp01(1.0f - std::fabs(db - da) / rangeDb);
          mOut[AudioCompareNode::kBand0 + b].store(s, std::memory_order_relaxed);
+         mOut[AudioCompareNode::kBandDiff0 + b].store(Clamp01(0.5f + (db - da) / (2.0f * rangeDb)), std::memory_order_relaxed);
          const double w = (double)(std::max(da, db) - kFloorDb);
          weighted += w * (double)s;
          weightSum += w;
@@ -971,6 +983,7 @@ private:
    float mEnvRing[kInputs][kEnvRing] = {};
    float mEnvDb[kInputs][kOnsetDbHist] = {};
    int64_t mOnsets[kInputs][kOnsetRing] = {};
+   FluxOnsetDetector mOnsetDet[kInputs];
    int mOnsetHead[kInputs] = {};
    int mOnsetFill[kInputs] = {};
    int64_t mLastOnset[kInputs] = {};
@@ -1375,6 +1388,7 @@ bool AudioCompareNode::RunSelfTest()
    check(n->Output(kSimilarity) == 1.0f && n->Output(kLevelDiff) == 0.5f, "unpatched: not identical silence");
    check(n->Output(kPitchDiff) == 0.5f && n->Output(kTiming) == 0.5f && n->Output(kOnsetMatch) == 1.0f,
          "unpatched: pitch/timing/onset not at their 'same' values");
+   check(n->Output(kBandDiff0) == 0.5f && n->Output(kBandDiff0 + 7) == 0.5f, "unpatched: band diffs not at 0.5");
 
    printf("AUDIOCOMPARETEST %s\n", ok ? "OK" : "FAIL");
    fflush(stdout);

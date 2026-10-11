@@ -61,7 +61,7 @@ request. `get_bindings {index}` lists a node's parameters with their numbers, ke
 | Method | Params | Result |
 |---|---|---|
 | `list_node_types` | | `{<category>: [type, ...]}` |
-| `describe` | `type?` | without `type`: `{types}`. With it: `{type, category, params[{key, kind, default}], inputs[{slot, name, kind, label}], outputs[{label, kind, modulator}], canBypass, hardwareDriven}` |
+| `describe` | `type?` | without `type`: `{types}`. With it: `{type, category, params[{key, kind, default}], inputs[{slot, name, kind, label}], outputs[{label, kind, modulator}], canBypass, hardwareDriven, help}`. `help` is the node's reference text, with units and what each output's value means |
 | `get_graph` | | the patch as JSON (nodes with `label` when renamed, cables, `modulation`, `expressions`, `globals`) plus `links[{id, srcIndex, srcOutput, dstIndex, dstSlot \| dstParamPin \| dstColorPin}]` |
 | `get_params` | `index` | `{"<kind> <key>": "<value>", ...}`, every saved value of the node. Kinds: `f` float, `i` int, `b` bool (`"1"`/`"0"`), `c` colour (`"r g b"`), `s` text - returned literally (a Windows path has single backslashes), not in the patch file's escaped form. Numbered keys count from 0 (`mute0` is the Mixer channel labelled 1). Dropdowns also appear in `_options` (`{"i band1Type": ["low shelf", "peak", ...]}`, index order) once the node has drawn; `_label` is the node's custom name |
 | `get_notes` | `index`, `from?`, `to?`, `low?`, `high?` (MIDI), `limit?` (200) | `{unit, count, range[lo, hi], pitchClasses{}, notes[{t, dur, note, midi, level, channel?}], durationSeconds?, truncated?, warning?}`: Audio to MIDI's transcription (seconds) or a MIDI File's notes (beats) |
@@ -106,7 +106,7 @@ never block the UI thread, so measuring is start-then-poll; the MCP bridge's `an
 | Method | Params | Result |
 |---|---|---|
 | `capture_audio` | `node` or `nodes` (1-4 indices), `seconds?` (3, 0.2-30), `frameSeconds?` (0.1), `offline?`, `start?` (seconds, with `offline`) | `{id, seconds, offline?}`. Taps each node's audio output from the same block on, so several nodes are compared over exactly the same span. An Audio Out is measured through the node feeding it. Live, it fails when the engine is off or a node has no audio output. `offline: true` pauses the device and renders the graph itself from `start` (default: the current position) as an offline render does, so the result is sample-accurate and identical every run; the device and transport are restored afterwards. One capture at a time |
-| `analyze_file` | `path` or `node` (a node with a `path`), `notes?` (false), `sound?` (false), `start?`, `length?`, `f0?`, `partials?` | `{id, seconds}`. Decodes the file and analyses it whole, with tempo and key; `notes: true` adds a Basic Pitch transcription summary (Windows/Linux); `sound: true` adds a `sound` profile of the region (f0, inharmonicity, partials with level and T60, ADSR, spectral envelope) |
+| `analyze_file` | `path` or `node` (a node with a `path`), `notes?` (false), `sound?` (false), `start?`, `length?`, `f0?`, `partials?` | `{id, seconds}`. Decodes the file and analyses it whole, with tempo and key; `notes: true` adds a Basic Pitch transcription summary (Windows/Linux); `sound: true` adds a `sound` profile (f0, inharmonicity, partials with level and T60, ADSR, spectral envelope, `transient`, `air`): of the region `start`/`length` by default, or with `soundMode: "notes"` merged over the file's isolated transcribed notes in `low`..`high` (MIDI) with `multiNote.keyTracking` (level and harmonic tilt per octave) |
 | `get_sound_profile` | `index` (a Sound Analyze node) | its last profile (as `sound` above, plus `file`), or `{status}` |
 | `analysis_result` | `id` | `{status: "capturing" \| "analyzing", progress}` while running; `{status: "done", result, note?}`; `{status: "error", error}` |
 
@@ -115,7 +115,9 @@ bands[{hz[lo, hi], db}], onsetCount, onsetsPerSecond, onsets[], pitch{pitchedRat
 median?, range?, melody[{t, note, dur}]?}, timeline{t[], rmsDb[], peakDb[], centroidHz[], pitchHz[],
 bandsDb[][]}, warning?}], compare?[{a, b, levelDiffDb, bandDiffDb[], spectralSimilarity,
 spectralShapeSimilarity, correlation, bestLagMs, correlationAtBestLag, medianPitchDiffCents?,
-pitchAgreement?, onsetMatch?, onsetOffsetMs?, envelopeCorrelation?}]}`. Levels are dBFS RMS (a
+pitchAgreement?, onsetMatch?, onsetRecall?, onsetOffsetMs?, envelopeCorrelation?}]}`. `onsetMatch` is the share of
+all onsets on both sides with a partner on the other side within 50 ms - the same spectral-flux detector and
+definition as Audio Compare's onset match output; `onsetRecall` is the share of A's onsets B has. Levels are dBFS RMS (a
 full-scale sine reads -3 dB); differences are A minus B, and a positive `bestLagMs` means B lags A.
 A file `result` has the same per-node fields plus `file`, `channels`, `tempo{bpm, confidence}`,
 `key{name, confidence, chroma[12]}` and, with `notes`, `notes{count, perSecond, averagePolyphony,

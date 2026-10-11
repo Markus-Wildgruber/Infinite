@@ -331,7 +331,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | Type | Inputs | Outputs | p | Notes |
 |---|---|---|---|---|
 | `Audio Analyze` | audio:audio | level:modulator, low:modulator, mid:modulator, high:modulator, onset:modulator, b1:modulator, b2:modulator, b3:modulator, b4:modulator, b5:modulator, b6:modulator, b7:modulator, b8:modulator | 4 | bypass |
-| `Audio Compare` | a:audio, b:audio | similarity:modulator, level diff:modulator, correlation:modulator, band 1:modulator, band 2:modulator, band 3:modulator, band 4:modulator, band 5:modulator, band 6:modulator, band 7:modulator, band 8:modulator, pitch diff:modulator, onset match:modulator, timing:modulator | 5 |  |
+| `Audio Compare` | a:audio, b:audio | similarity:modulator, level diff:modulator, correlation:modulator, band 1:modulator, band 2:modulator, band 3:modulator, band 4:modulator, band 5:modulator, band 6:modulator, band 7:modulator, band 8:modulator, pitch diff:modulator, onset match:modulator, timing:modulator, band 1 diff:modulator, band 2 diff:modulator, band 3 diff:modulator, band 4 diff:modulator, band 5 diff:modulator, band 6 diff:modulator, band 7 diff:modulator, band 8 diff:modulator | 5 |  |
 | `Audio File` | none | out:audio | 10 | bypass |
 | `Audio to CV` | audio:audio | out:modulator | 6 | bypass |
 | `CV Recorder` | in:modulator | out:modulator | 6 | bypass |
@@ -356,7 +356,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Random` | none | out:modulator | 5 | bypass |
 | `Range to Range` | in:modulator | out:modulator | 6 | bypass |
 | `Smoothing` | in:modulator | out:modulator | 2 | bypass |
-| `Sound Analyze` | none | f0:modulator, attack:modulator, decay:modulator, sustain:modulator, release:modulator, bright:modulator, noise:modulator, p1:modulator, p2:modulator, p3:modulator, p4:modulator, p5:modulator, p6:modulator, p7:modulator, p8:modulator | 5 | bypass |
+| `Sound Analyze` | none | f0:modulator, attack:modulator, decay:modulator, sustain:modulator, release:modulator, bright:modulator, noise:modulator, p1:modulator, p2:modulator, p3:modulator, p4:modulator, p5:modulator, p6:modulator, p7:modulator, p8:modulator, transient:modulator, transientDecay:modulator, air:modulator, keyLevel:modulator, keyTilt:modulator | 8 | bypass |
 | `Velocity to CV` | notes:note | out:modulator | 2 | bypass |
 | `Vibrato` | none | out:modulator | 1 | bypass |
 
@@ -446,7 +446,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 |---|---|---|---|---|
 | `Analog` | notes:note | out:audio | 33 | bypass |
 | `Drum Sequencer` | none | out:audio, 1:audio, 2:audio, 3:audio, 4:audio, 5:audio, 6:audio, 7:audio, 8:audio | 371 | bypass |
-| `Equation Synth` | notes:note | out:audio | 30 | bypass |
+| `Equation Synth` | notes:note | out:audio | 36 | bypass |
 | `Field Synth` | notes:note, in:audio | out:audio | 13 | bypass |
 | `Grain Molder` | notes:note, record_in:audio | out:audio | 14 | bypass |
 | `Granular` | record_in:audio | out:audio | 21 | bypass |

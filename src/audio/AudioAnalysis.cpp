@@ -1,4 +1,5 @@
 #include "AudioAnalysis.h"
+#include "dsp/FluxOnsetDetector.h"
 
 #include <algorithm>
 #include <cmath>
@@ -362,31 +363,14 @@ namespace AudioAnalysis
       if (fluxMax > 0.0f)
       {
          for (float& v : flux)
-            v /= fluxMax;
-         const int half = 8;
-         double lastOnset = -1.0;
-         for (size_t i = 1; i + 1 < flux.size(); i++)
-         {
-            double mean = 0.0;
-            int n = 0;
-            for (long long j = (long long)i - half; j <= (long long)i + half; j++)
-               if (j >= 0 && j < (long long)flux.size())
-               {
-                  mean += flux[(size_t)j];
-                  n++;
-               }
-            mean /= std::max(1, n);
-            bool isPeak = flux[i] > mean + 0.08;
-            for (long long j = (long long)i - 3; isPeak && j <= (long long)i + 3; j++)
-               if (j >= 0 && j < (long long)flux.size() && j != (long long)i && flux[(size_t)j] > flux[i])
-                  isPeak = false;
-            const double t = (double)i / fluxRate;
-            if (isPeak && (lastOnset < 0.0 || t - lastOnset >= 0.05))
-            {
-               r.onsets.push_back((float)t);
-               lastOnset = t;
-            }
-         }
+            v /= fluxMax; // the tempo estimate below reads the normalised flux
+         // Onsets come from the same streaming detector the live Audio Compare
+         // node runs, so a measurement and the node count the same onsets.
+         FluxOnsetDetector det;
+         det.Prepare(sr);
+         auto onOnset = [&](double sample) { r.onsets.push_back((float)(sample / sr)); };
+         det.Push(mono.data(), (int)std::min<size_t>(mono.size(), (size_t)2147483647), onOnset);
+         det.Flush(onOnset);
       }
 
       if (!opt.rhythmAndKey)
@@ -642,26 +626,41 @@ namespace AudioAnalysis
       if (both > 0)
          out["pitchAgreement"] = R3((double)agree / both);
 
-      // Onsets: how many of A's have a partner in B within 100 ms, and by how much B is late on average.
-      if (!a.onsets.empty())
+      // Onsets, defined exactly like Audio Compare's "onset match" output:
+      // the share of all onsets, on both sides, with a partner on the other
+      // side within 50 ms (kOnsetToleranceSeconds). onsetRecall is the share
+      // of A's onsets that B has; onsetOffsetMs how late B's partners are on
+      // average. Times are compared as captured: a latency between the two
+      // shows up in bestLagMs and onsetOffsetMs.
+      if (!a.onsets.empty() || !b.onsets.empty())
       {
-         int matched = 0;
-         double offsetSum = 0.0;
-         for (float ta : a.onsets)
+         constexpr float kOnsetToleranceSeconds = 0.05f;
+         auto partnered = [&](const std::vector<float>& from, const std::vector<float>& to, double* offsetSum)
          {
-            float bestD = 1e9f;
-            for (float tb : b.onsets)
-               if (std::fabs(tb - ta) < std::fabs(bestD))
-                  bestD = tb - ta;
-            if (std::fabs(bestD) <= 0.1f)
+            int matched = 0;
+            for (float t : from)
             {
-               matched++;
-               offsetSum += bestD;
+               float bestD = 1e9f;
+               for (float u : to)
+                  if (std::fabs(u - t) < std::fabs(bestD))
+                     bestD = u - t;
+               if (std::fabs(bestD) <= kOnsetToleranceSeconds)
+               {
+                  matched++;
+                  if (offsetSum)
+                     *offsetSum += bestD;
+               }
             }
-         }
-         out["onsetMatch"] = R3((double)matched / a.onsets.size());
-         if (matched > 0)
-            out["onsetOffsetMs"] = R1(1000.0 * offsetSum / matched);
+            return matched;
+         };
+         double offsetSum = 0.0;
+         const int matchedA = partnered(a.onsets, b.onsets, &offsetSum);
+         const int matchedB = partnered(b.onsets, a.onsets, nullptr);
+         out["onsetMatch"] = R3((double)(matchedA + matchedB) / (double)(a.onsets.size() + b.onsets.size()));
+         if (!a.onsets.empty())
+            out["onsetRecall"] = R3((double)matchedA / a.onsets.size());
+         if (matchedA > 0)
+            out["onsetOffsetMs"] = R1(1000.0 * offsetSum / matchedA);
       }
 
       // Loudness contour agreement.

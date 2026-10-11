@@ -161,13 +161,15 @@ namespace app
                      r = EnvMs(p.releaseMs);
          char adsr[96];
          snprintf(adsr, sizeof(adsr), "ADSR %.0f/%.0f ms/%.2f/%.0f ms", a, d, s, r);
-         char buf[320];
+         char buf[512];
          const std::string name = NodeTitleWithInstance(target);
 
          if (auto* n = dynamic_cast<EquationNode*>(target.node.get()))
          {
             // The measured spectrum, exactly, as a single-cycle formula; the
-            // filter is switched off so nothing colours it.
+            // filter is switched off so nothing colours it. In mode notes the
+            // profile's partials are already the spectrum at MIDI 60 with the
+            // key tilt taken out, which keyTilt below puts back per note.
             n->formula = SoundAnalysis::AdditiveFormula(p, 16, -48.0f);
             n->domainMode = EquationDsp::kDomainZeroToOne;
             n->CompileEquation();
@@ -179,8 +181,39 @@ namespace app
             n->ampRelease = r;
             n->filterType = SynthModes::kFilterOff;
             n->filterAmount = 0.0f;
-            snprintf(buf, sizeof(buf), "%s: additive formula from %d partials, %s, filter off", name.c_str(),
-                     std::min(16, PresentPartials(p)), adsr);
+
+            // Noise layer. Its levels are relative to the wave's peak (unit-RMS
+            // white noise at 1.0) and its RMS is taken before its 12 dB/oct
+            // highpass at noiseTone; the analysis measures against the harmonic
+            // RMS and the noise above that corner. The burst also goes through
+            // the highpass, so the burst measured through the same filter is
+            // used when there is one.
+            const float rmsOverPeak = SoundAnalysis::AdditiveRmsOverPeak(p, 16, -48.0f);
+            if (p.airMeasured)
+               n->noiseTone = std::clamp(p.noiseToneHz, 200.0f, 16000.0f);
+            // White-noise power left above a 2-pole Butterworth highpass at fc
+            // (noise bandwidth 1.11 fc below it), at a nominal 48 kHz.
+            const float pass = std::clamp(1.0f - 1.11f * n->noiseTone / 24000.0f, 0.1f, 1.0f);
+            const float passAmp = std::sqrt(pass);
+            const bool highBurst = p.transientHigh > 0.0f && p.airMeasured;
+            const float burst = highBurst ? p.transientHigh / passAmp : p.transient;
+            n->transient = std::clamp(burst * rmsOverPeak, 0.0f, 1.0f);
+            const float burstMs = highBurst ? p.transientHighDecayMs : p.transientDecayMs;
+            if (burstMs > 0.0f)
+               n->transientDecay = std::clamp(burstMs, 1.0f, 200.0f);
+            n->noiseLevel = p.airMeasured ? std::clamp(p.noiseLevel * rmsOverPeak / passAmp, 0.0f, 1.0f) : 0.0f;
+
+            // Key tracking, measured only in mode notes; region mode leaves it alone.
+            char keys[96] = "key tracking unchanged";
+            if (const SoundAnalysis::MultiNoteResult* m = src.MultiNote())
+            {
+               n->keyLevel = m->keyLevel.valid ? std::clamp(m->keyLevel.dbPerOct, -12.0f, 12.0f) : 0.0f;
+               n->keyTilt = m->keyTilt.valid ? std::clamp(m->keyTilt.dbPerOct, -12.0f, 12.0f) : 0.0f;
+               snprintf(keys, sizeof(keys), "key level %+.1f / tilt %+.1f dB/oct", n->keyLevel, n->keyTilt);
+            }
+            snprintf(buf, sizeof(buf), "%s: additive formula from %d partials, %s, filter off, transient %.2f/%.0f ms, air %.3f @ %.0f Hz, %s",
+                     name.c_str(), std::min(16, PresentPartials(p)), adsr, n->transient, n->transientDecay, n->noiseLevel,
+                     n->noiseTone, keys);
             return buf;
          }
          if (auto* n = dynamic_cast<WavetableNode*>(target.node.get()))
@@ -226,7 +259,9 @@ namespace app
             static const int kAnalogWave[4] = { kAWaveSine, kAWaveTriangle, kAWaveSaw, kAWaveSquare };
             n->wave1 = kAnalogWave[shape];
             n->oscMix = 0.0f; // osc 1 only
-            n->noise = std::clamp(p.noisiness, 0.0f, 1.0f);
+            // One sustained noise level, no burst: the measured air (noise re
+            // the harmonic level) when there is a pitch, else the noise share.
+            n->noise = std::clamp(p.pitched && p.airMeasured ? p.noiseLevel : p.noisiness, 0.0f, 1.0f);
             n->cutoff = CutoffFromProfile(p);
             n->attack = a;
             n->decay = d;
@@ -259,20 +294,36 @@ namespace app
                snprintf(buf, sizeof(buf), "%s: could not load the file", name.c_str());
                return buf;
             }
+            // Mode notes: the used note nearest C4 stands in for the region.
+            double regionStart = p.startSeconds, regionSeconds = p.seconds;
+            float f0 = p.pitched ? p.f0Hz : 0.0f;
+            if (const SoundAnalysis::MultiNoteResult* m = src.MultiNote())
+            {
+               const SoundAnalysis::NoteRow* best = nullptr;
+               for (const SoundAnalysis::NoteRow& row : m->rows)
+                  if (best == nullptr || std::abs(row.midi - m->refMidi) < std::abs(best->midi - m->refMidi))
+                     best = &row;
+               if (best != nullptr)
+               {
+                  regionStart = best->regionStart;
+                  regionSeconds = best->regionSeconds;
+                  f0 = best->f0Hz;
+               }
+            }
             const double dur = std::max(1e-6, src.DurationSeconds());
-            n->start = (float)std::clamp(p.startSeconds / dur, 0.0, 1.0);
-            n->end = (float)std::clamp((p.startSeconds + p.seconds) / dur, 0.0, 1.0);
+            n->start = (float)std::clamp(regionStart / dur, 0.0, 1.0);
+            n->end = (float)std::clamp((regionStart + regionSeconds) / dur, 0.0, 1.0);
             n->position = n->start;
             n->decay = std::clamp(r * 0.001f, 0.05f, 10.0f);
-            if (p.pitched)
+            if (f0 > 0.0f)
             {
-               const double semis = 60.0 - (69.0 + 12.0 * std::log2(p.f0Hz / 440.0));
+               const double semis = 60.0 - (69.0 + 12.0 * std::log2(f0 / 440.0));
                const double whole = std::clamp(std::round(semis), -24.0, 24.0);
                n->pitch = (float)whole;
                n->finetune = (float)std::clamp((semis - whole) * 100.0, -50.0, 50.0);
             }
-            snprintf(buf, sizeof(buf), "%s: region %.2f..%.2f s%s, decay %.2f s", name.c_str(), p.startSeconds,
-                     p.startSeconds + p.seconds, p.pitched ? ", tuned to C4" : "", n->decay);
+            snprintf(buf, sizeof(buf), "%s: region %.2f..%.2f s%s, decay %.2f s", name.c_str(), regionStart,
+                     regionStart + regionSeconds, f0 > 0.0f ? ", tuned to C4" : "", n->decay);
             return buf;
          }
          return name + ": not a synth this can configure";
@@ -313,11 +364,18 @@ namespace app
       const bool have = n->HasProfile();
       const SoundProfile& p = n->Profile();
 
+      const bool notesMode = n->mode == SoundAnalyzeNode::kModeNotes;
+      const SoundAnalysis::MultiNoteResult* multi = n->MultiNote();
       char stat[128];
-      if (state == State::Analyzing && !have)
+      if (n->IsTranscribing())
+         snprintf(stat, sizeof(stat), "transcribing notes... %d%%", (int)(std::clamp(n->Progress(), 0.0f, 1.0f) * 100.0f));
+      else if (state == State::Analyzing && !have)
          snprintf(stat, sizeof(stat), "analyzing...");
       else if (state == State::Failed)
          snprintf(stat, sizeof(stat), "%s", n->Status().c_str());
+      else if (have && multi != nullptr)
+         snprintf(stat, sizeof(stat), "%d notes merged (of %d found)%s", multi->notesUsed, n->TranscribedNotes(),
+                  state == State::Analyzing ? " - updating" : "");
       else if (have && p.pitched)
          snprintf(stat, sizeof(stat), "%s - %.1f Hz - %d partials%s", AudioAnalysis::NoteName(p.f0Hz).c_str(), p.f0Hz,
                   PresentPartials(p), state == State::Analyzing ? " - updating" : "");
@@ -384,16 +442,31 @@ namespace app
                   const float x = o.x + colW * ((float)c + 0.5f);
                   dl->AddLine(ImVec2(x, cy - mx[c] * h * 0.45f), ImVec2(x, cy - mn[c] * h * 0.45f + 1.0f), dim);
                }
-               const double r0 = have ? p.startSeconds : std::max(0.0f, n->startSec);
-               const double r1 = have ? p.startSeconds + p.seconds
-                                      : (n->lengthSec > 0.0f ? r0 + n->lengthSec : dur);
-               const float x0 = o.x + w * (float)std::clamp(r0 / dur, 0.0, 1.0);
-               const float x1 = o.x + w * (float)std::clamp(r1 / dur, 0.0, 1.0);
-               dl->AddRectFilled(ImVec2(x0, o.y), ImVec2(std::max(x0 + 2.0f, x1), br.y), tintDim, 2.0f);
-               dl->AddLine(ImVec2(x0, o.y), ImVec2(x0, br.y), tint, 1.5f);
+               if (notesMode)
+               {
+                  // Mode notes: a tick per merged note's analysed stretch.
+                  if (multi != nullptr)
+                     for (const SoundAnalysis::NoteRow& row : multi->rows)
+                     {
+                        const float x0 = o.x + w * (float)std::clamp(row.regionStart / dur, 0.0, 1.0);
+                        const float x1 = o.x + w * (float)std::clamp((row.regionStart + row.regionSeconds) / dur, 0.0, 1.0);
+                        dl->AddRectFilled(ImVec2(x0, o.y), ImVec2(std::max(x0 + 1.0f, x1), br.y), tintDim, 1.0f);
+                        dl->AddLine(ImVec2(x0, o.y), ImVec2(x0, br.y), tint, 1.0f);
+                     }
+               }
+               else
+               {
+                  const double r0 = have ? p.startSeconds : std::max(0.0f, n->startSec);
+                  const double r1 = have ? p.startSeconds + p.seconds
+                                         : (n->lengthSec > 0.0f ? r0 + n->lengthSec : dur);
+                  const float x0 = o.x + w * (float)std::clamp(r0 / dur, 0.0, 1.0);
+                  const float x1 = o.x + w * (float)std::clamp(r1 / dur, 0.0, 1.0);
+                  dl->AddRectFilled(ImVec2(x0, o.y), ImVec2(std::max(x0 + 2.0f, x1), br.y), tintDim, 2.0f);
+                  dl->AddLine(ImVec2(x0, o.y), ImVec2(x0, br.y), tint, 1.5f);
+               }
             }
             ImGui::InvisibleButton("##saOverview", ImVec2(w, h));
-            if (ImGui::IsItemClicked() && dur > 0.0)
+            if (ImGui::IsItemClicked() && dur > 0.0 && !notesMode)
             {
                const float frac = std::clamp((ImGui::GetIO().MousePos.x - o.x) / w, 0.0f, 1.0f);
                PushUndoCheckpoint();
@@ -402,10 +475,13 @@ namespace app
             }
             if (ImGui::IsItemHovered() && dur > 0.0)
             {
-               char v[64];
-               snprintf(v, sizeof(v), "%.2f s of %.2f s - click to start here",
-                        std::clamp((ImGui::GetIO().MousePos.x - o.x) / w, 0.0f, 1.0f) * dur, dur);
-               SetAudioReadout("region", v);
+               char v[96];
+               const float at = std::clamp((ImGui::GetIO().MousePos.x - o.x) / w, 0.0f, 1.0f) * (float)dur;
+               if (notesMode)
+                  snprintf(v, sizeof(v), "%.2f s of %.2f s - marks: the notes merged", at, dur);
+               else
+                  snprintf(v, sizeof(v), "%.2f s of %.2f s - click to start here", at, dur);
+               SetAudioReadout(notesMode ? "notes" : "region", v);
             }
          }
          ImGui::Dummy(ImVec2(0.0f, 3.0f));
@@ -470,13 +546,20 @@ namespace app
             }
             if (!have)
             {
-               const char* msg = state == State::Analyzing ? "Analyzing..." : (state == State::Failed ? n->Status().c_str() : "Load a single note to analyse");
+               char tmsg[64];
+               snprintf(tmsg, sizeof(tmsg), "Transcribing notes... %d%%", (int)(std::clamp(n->Progress(), 0.0f, 1.0f) * 100.0f));
+               const char* msg = n->IsTranscribing() ? tmsg
+                                 : state == State::Analyzing ? "Analyzing..."
+                                 : state == State::Failed ? n->Status().c_str()
+                                 : notesMode ? "Load a recording to analyse its notes"
+                                             : "Load a single note to analyse";
                const ImVec2 ts = ImGui::CalcTextSize(msg);
                dl->AddText(ImVec2(o.x + std::max(pad, (w - ts.x) * 0.5f), barsTop + (barsH - ts.y) * 0.5f), dim, msg);
             }
             else
             {
-               const char* legend = "partials - bright: left after 0.5 s";
+               const char* legend = multi != nullptr ? "partials at C4 (median) - bright: left after 0.5 s"
+                                                     : "partials - bright: left after 0.5 s";
                const ImVec2 ts = ImGui::CalcTextSize(legend);
                dl->AddText(ImVec2(br.x - pad - ts.x, barsTop), dim, legend);
             }
@@ -579,15 +662,162 @@ namespace app
             }
             ImGui::Dummy(ImVec2(w, h));
          }
+         ImGui::Dummy(ImVec2(0.0f, 3.0f));
+
+         // --- key tracking (h2 - h1 vs pitch, mode notes) | transient and air ---
+         {
+            const float lineH = ImGui::GetTextLineHeight();
+            const float h = std::max(74.0f, 6.0f + 5.0f * lineH); // heading + four lines, same in both modes
+            const float gap = 6.0f;
+            const float halfW = (w - gap) * 0.5f;
+            const ImVec2 o = ImGui::GetCursorScreenPos();
+
+            // Scatter: one dot per merged note, the fitted line through them.
+            {
+               const ImVec2 br(o.x + halfW, o.y + h);
+               dl->AddRectFilled(o, br, bg, 4.0f);
+               const float x0 = o.x + pad, x1 = br.x - pad, y0 = o.y + pad + ImGui::GetFontSize(), y1 = br.y - pad;
+               dl->AddText(ImVec2(x0, o.y + 2.0f), dim, "h2 - h1 vs pitch");
+               std::vector<const SoundAnalysis::NoteRow*> pts;
+               if (multi != nullptr)
+                  for (const SoundAnalysis::NoteRow& row : multi->rows)
+                     if (row.hasH2)
+                        pts.push_back(&row);
+               if (pts.empty())
+               {
+                  const char* msg = notesMode ? (have ? "no note showed a 2nd harmonic" : "needs the notes")
+                                              : "mode notes measures key tracking";
+                  const ImVec2 ts = ImGui::CalcTextSize(msg);
+                  dl->AddText(ImVec2(o.x + std::max(pad, (halfW - ts.x) * 0.5f), y0 + (y1 - y0 - ts.y) * 0.5f), dim, msg);
+               }
+               else
+               {
+                  int lo = 127, hi = 0;
+                  float dLo = 1e9f, dHi = -1e9f;
+                  for (const SoundAnalysis::NoteRow* r : pts)
+                  {
+                     lo = std::min(lo, r->midi);
+                     hi = std::max(hi, r->midi);
+                     dLo = std::min(dLo, r->h2h1Db);
+                     dHi = std::max(dHi, r->h2h1Db);
+                  }
+                  lo -= 2;
+                  hi += 2;
+                  const float mid = 0.5f * (dLo + dHi);
+                  const float halfSpan = std::max(6.0f, 0.5f * (dHi - dLo) + 2.0f);
+                  dLo = mid - halfSpan;
+                  dHi = mid + halfSpan;
+                  auto X = [&](double m) { return x0 + (x1 - x0) * (float)std::clamp((m - lo) / (double)(hi - lo), 0.0, 1.0); };
+                  auto Y = [&](double db) { return y1 - (y1 - y0) * (float)std::clamp((db - dLo) / (double)(dHi - dLo), 0.0, 1.0); };
+                  // C markers on the pitch axis.
+                  for (int c = ((lo + 11) / 12) * 12; c <= hi; c += 12)
+                     dl->AddLine(ImVec2(X(c), y0), ImVec2(X(c), y1), grid);
+                  const SoundAnalysis::KeyFit& kt = multi->keyTilt;
+                  if (kt.valid)
+                  {
+                     auto line = [&](double m) { return kt.atRefDb + kt.dbPerOct * (m - multi->refMidi) / 12.0; };
+                     dl->AddLine(ImVec2(X(lo), Y(line(lo))), ImVec2(X(hi), Y(line(hi))), bright, 1.5f);
+                  }
+                  for (const SoundAnalysis::NoteRow* r : pts)
+                     dl->AddCircleFilled(ImVec2(X(r->midi), Y(r->h2h1Db)), 2.5f, tint);
+                  if (ImGui::IsMouseHoveringRect(o, br))
+                  {
+                     char v[128];
+                     snprintf(v, sizeof(v), "tilt %+.1f dB/oct (r2 %.2f, %d notes), %+.1f dB at C4", kt.dbPerOct, kt.r2,
+                              kt.notes, kt.atRefDb);
+                     SetAudioReadout("key tilt", v);
+                  }
+               }
+            }
+
+            // Numbers: transient, air, key tracking.
+            {
+               const ImVec2 so(o.x + halfW + gap, o.y);
+               const ImVec2 br(so.x + halfW, so.y + h);
+               dl->AddRectFilled(so, br, bg, 4.0f);
+               const float tx = so.x + pad, tw = halfW - 2.0f * pad;
+               float ty = so.y + 2.0f;
+               auto textLine = [&](const char* s, ImU32 col)
+               {
+                  dl->PushClipRect(ImVec2(tx, ty), ImVec2(tx + tw, ty + lineH), true);
+                  dl->AddText(ImVec2(tx, ty), col, s);
+                  dl->PopClipRect();
+                  ty += lineH;
+               };
+               char l[128];
+               textLine("transient / air / key", dim);
+               if (have && p.transientMeasured)
+                  snprintf(l, sizeof(l), "burst %.2f, %.0f ms, crest %.1f dB", p.transient, p.transientDecayMs, p.attackCrestDb);
+               else
+                  snprintf(l, sizeof(l), "burst -");
+               textLine(l, have ? bright : dim);
+               if (have && p.airMeasured)
+                  snprintf(l, sizeof(l), "air %.3f (%.0f dB) above %.1f kHz", p.noiseLevel,
+                           20.0f * std::log10(std::max(1e-4f, p.noiseLevel)), p.noiseToneHz / 1000.0f);
+               else
+                  snprintf(l, sizeof(l), "air -");
+               textLine(l, have ? bright : dim);
+               if (multi != nullptr && multi->keyLevel.valid)
+                  snprintf(l, sizeof(l), "level %+.1f dB/oct (r2 %.2f)", multi->keyLevel.dbPerOct, multi->keyLevel.r2);
+               else if (multi != nullptr)
+                  snprintf(l, sizeof(l), "level - (needs 3 notes over 2+ semitones)");
+               else
+                  snprintf(l, sizeof(l), "key level / tilt: mode notes");
+               textLine(l, multi != nullptr ? bright : dim);
+               if (multi != nullptr)
+               {
+                  if (multi->keyTilt.valid)
+                     snprintf(l, sizeof(l), "tilt %+.1f dB/oct (r2 %.2f), %d notes", multi->keyTilt.dbPerOct, multi->keyTilt.r2,
+                              multi->notesUsed);
+                  else
+                     snprintf(l, sizeof(l), "tilt -, %d notes", multi->notesUsed);
+                  textLine(l, bright);
+               }
+               if (have && ImGui::IsMouseHoveringRect(so, br))
+               {
+                  char v[160];
+                  snprintf(v, sizeof(v), "burst through the %.1f kHz highpass %.2f / %.0f ms", p.noiseToneHz / 1000.0f,
+                           p.transientHigh, p.transientHighDecayMs);
+                  SetAudioReadout("noise", v);
+               }
+            }
+            ImGui::Dummy(ImVec2(w, h));
+         }
          ImGui::Dummy(ImVec2(0.0f, 4.0f));
       }
 
+      // Greyed, not hidden, when the mode does not use them (the rows never reflow).
+      const bool greyRegion = notesMode && !gParamRegisterOnly;
+      const bool greyNotes = !notesMode && !gParamRegisterOnly;
       {
          AudioKnobRow row(4);
+         if (greyRegion)
+            ImGui::BeginDisabled();
          row.Knob("start", &n->startSec, 0.0f, (float)std::max(1.0, n->DurationSeconds()), "%.2f s", kKnobSmall);
          row.Knob("length", &n->lengthSec, 0.0f, (float)SoundAnalysis::kMaxSeconds, "%.2f s", kKnobSmall);
          row.Knob("f0 hint", &n->f0Hint, 0.0f, 2000.0f, "%.0f Hz", kKnobSmall);
+         if (greyRegion)
+            ImGui::EndDisabled();
          row.KnobInt("partials", &n->partials, 1, SoundAnalysis::kMaxPartials);
+         row.End();
+      }
+      {
+         static const std::vector<std::string> kModes = { "region", "notes" };
+         AudioKnobRow row(4);
+         row.Dropdown("mode", kModes, std::clamp(n->mode, 0, 1), [n](int i)
+                      {
+                         PushUndoCheckpoint();
+                         n->mode = i;
+                         n->applyMessage.clear();
+                         gPatchDirty = true;
+                      });
+         if (greyNotes)
+            ImGui::BeginDisabled();
+         row.KnobInt("low note", &n->lowNote, 21, 108);
+         row.KnobInt("high note", &n->highNote, 21, 108);
+         if (greyNotes)
+            ImGui::EndDisabled();
+         row.Skip(); // far edge: nothing else belongs to the note range
          row.End();
       }
 

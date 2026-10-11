@@ -63,8 +63,10 @@ namespace McpBridge
          { "list_node_types", "All node types by category. Use describe for one type's details.",
            R"({"type":"object","properties":{}})" },
          { "describe",
-           "One node type's schema: params (saved keys, kinds, defaults), inputs (slot number, slot name, kind) and "
-           "outputs (label, kind, whether it is a modulator). Call before creating or wiring a type.",
+           "One node type's schema: params (saved keys, kinds, defaults), inputs (slot number, slot name, kind), "
+           "outputs (label, kind, whether it is a modulator) and help - the node's reference text, which documents "
+           "units, ranges and what each output's value means (e.g. Audio Compare's scaling and direction). Call before "
+           "creating, wiring or interpreting a type.",
            R"({"type":"object","properties":{"type":{"type":"string","description":"Node type name, e.g. Shape"}},"required":["type"]})" },
          { "get_graph",
            "The current patch, compact: nodes (index, type, category, bypassed), cables (image/geometry/audio/notes), "
@@ -175,9 +177,13 @@ namespace McpBridge
            "levels, average spectrum, onset rate, tempo (bpm + confidence), key (+ chroma), pitch summary and a "
            "timeline. notes:true also transcribes it (note count, density, polyphony, range, first notes) - slower. "
            "sound:true adds what a synth needs to recreate it: f0, inharmonicity, partials (frequency, level, T60 "
-           "decay), ADSR, spectral envelope, brightness, noisiness - pick one note with start/length (seconds), "
-           "f0 (Hz hint) and partials (1-32). A Sound Analyze node can apply such a profile to a synth.",
-           R"({"type":"object","properties":{"path":{"type":"string"},"node":{"type":"integer"},"notes":{"type":"boolean"},"sound":{"type":"boolean"},"start":{"type":"number"},"length":{"type":"number"},"f0":{"type":"number"},"partials":{"type":"integer"}}})" },
+           "decay), ADSR, spectral envelope, brightness, noisiness, the strike's attack noise (transient level, decay, "
+           "crest) and the air above the harmonics (noiseLevel, noiseToneHz). soundMode \"region\" (default) analyses "
+           "one note picked with start/length (seconds), f0 (Hz hint); soundMode \"notes\" transcribes the file, "
+           "keeps the isolated strikes within low..high (MIDI), merges them (spectrum given at C4) and fits key "
+           "tracking: keyLevel and keyTilt in dB per octave, as Equation Synth's keyLevel/keyTilt take them. "
+           "partials 1-32. A Sound Analyze node can apply such a profile to a synth.",
+           R"({"type":"object","properties":{"path":{"type":"string"},"node":{"type":"integer"},"notes":{"type":"boolean"},"sound":{"type":"boolean"},"soundMode":{"type":"string","enum":["region","notes"]},"start":{"type":"number"},"length":{"type":"number"},"f0":{"type":"number"},"partials":{"type":"integer"},"low":{"type":"integer"},"high":{"type":"integer"}}})" },
          { "get_sound_profile",
            "A Sound Analyze node's last result as numbers: f0, partials (frequency, level dB, T60), ADSR, spectral "
            "envelope, brightness, noisiness. Set its path/start/length with set_param first; its body's Apply button "

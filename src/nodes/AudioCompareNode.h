@@ -75,7 +75,11 @@ public:
       kPitchDiff = kBand0 + 8,
       kOnsetMatch,
       kTiming,
-      kOutputCount
+      // Signed per-band difference: 0.5 + (B dB - A dB) / (2 x range), so
+      // 0.5 = equal, above = B louder in that band (like level diff). The
+      // band 1-8 outputs above are match values (1 = equal) with no sign.
+      kBandDiff0,
+      kOutputCount = kBandDiff0 + 8
    };
    static constexpr int kBands = 8;
 

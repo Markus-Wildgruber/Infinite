@@ -244,8 +244,15 @@ namespace app
          return out;
       }
 
-      json AnalyzeFile(std::shared_ptr<Platform::SampleBuffer> buf, std::string path, bool withNotes, bool withSound,
-                       SoundAnalysis::Options soundOptions)
+      struct SoundRequest
+      {
+         bool enabled = false;
+         bool overNotes = false; // average over the transcribed, isolated notes (Sound Analyze's notes mode)
+         SoundAnalysis::Options options;
+         int lowMidi = 21, highMidi = 108;
+      };
+
+      json AnalyzeFile(std::shared_ptr<Platform::SampleBuffer> buf, std::string path, bool withNotes, SoundRequest sound)
       {
          std::vector<float> mono((size_t)buf->numFrames, 0.0f);
          const float g = 1.0f / (float)std::max(1, buf->channels);
@@ -262,12 +269,47 @@ namespace app
          out["file"] = path;
          out["channels"] = buf->channels;
 
-         if (withSound)
+         if (sound.enabled && !sound.overNotes)
          {
             // What a synth needs to recreate the sound: partials (level, decay),
             // envelope, spectral envelope - the Sound Analyze node's analysis.
-            const SoundAnalysis::SoundProfile profile = SoundAnalysis::AnalyzeSound(mono.data(), mono.size(), buf->sampleRate, soundOptions);
+            const SoundAnalysis::SoundProfile profile = SoundAnalysis::AnalyzeSound(mono.data(), mono.size(), buf->sampleRate, sound.options);
             out["sound"] = SoundAnalysis::ToJson(profile);
+         }
+         if (sound.enabled && sound.overNotes)
+         {
+            // Over many notes: transcribe, keep the isolated strikes, merge them
+            // and fit key tracking (level and harmonic balance per octave).
+            std::vector<float> input;
+            BasicPitch::Activations act;
+            std::string err;
+            if (BasicPitch::ToModelInput(mono.data(), 1, (int)mono.size(), buf->sampleRate, input, nullptr) &&
+                BasicPitch::RunModel(input, act, err, nullptr, nullptr))
+            {
+               std::vector<SoundAnalysis::NoteEvent> events;
+               for (const BasicPitch::Note& n : BasicPitch::NotesFromActivations(act, BasicPitch::Settings()))
+               {
+                  SoundAnalysis::NoteEvent e;
+                  e.start = n.start;
+                  e.end = n.end;
+                  e.midi = n.pitch;
+                  e.amplitude = n.amplitude;
+                  events.push_back(e);
+               }
+               SoundAnalysis::MultiNoteOptions mo;
+               mo.partials = sound.options.partials;
+               mo.lowMidi = sound.lowMidi;
+               mo.highMidi = sound.highMidi;
+               const SoundAnalysis::MultiNoteResult mr = SoundAnalysis::AnalyzeNotes(mono.data(), mono.size(), buf->sampleRate, events, mo);
+               json s = mr.valid ? SoundAnalysis::ToJson(mr.profile) : json::object();
+               s["mode"] = "notes";
+               s["multiNote"] = SoundAnalysis::ToJson(mr);
+               if (!mr.valid)
+                  s["error"] = mr.error.empty() ? std::string("no isolated notes to analyse") : mr.error;
+               out["sound"] = s;
+            }
+            else
+               out["sound"] = { { "error", err.empty() ? "transcription unavailable" : err } };
          }
 
          if (withNotes)
@@ -441,13 +483,16 @@ namespace app
          job.started = Now();
          job.seconds = (double)buf->numFrames / buf->sampleRate;
          const bool withNotes = params.value("notes", false);
-         const bool withSound = params.value("sound", false);
-         SoundAnalysis::Options soundOptions;
-         soundOptions.startSeconds = std::max(0.0, params.value("start", 0.0));
-         soundOptions.lengthSeconds = std::max(0.0, params.value("length", 0.0));
-         soundOptions.f0HintHz = std::max(0.0, params.value("f0", 0.0));
-         soundOptions.partials = std::clamp(params.value("partials", 16), 1, 32);
-         job.analysis = std::async(std::launch::async, AnalyzeFile, buf, path, withNotes, withSound, soundOptions);
+         SoundRequest sound;
+         sound.enabled = params.value("sound", false);
+         sound.overNotes = params.value("soundMode", std::string("region")) == "notes";
+         sound.options.startSeconds = std::max(0.0, params.value("start", 0.0));
+         sound.options.lengthSeconds = std::max(0.0, params.value("length", 0.0));
+         sound.options.f0HintHz = std::max(0.0, params.value("f0", 0.0));
+         sound.options.partials = std::clamp(params.value("partials", 16), 1, 32);
+         sound.lowMidi = std::clamp(params.value("low", 21), 0, 127);
+         sound.highMidi = std::clamp(params.value("high", 108), sound.lowMidi, 127);
+         job.analysis = std::async(std::launch::async, AnalyzeFile, buf, path, withNotes, sound);
          const int id = gNextJobId++;
          Jobs()[id] = std::move(job);
          TrimJobs();

@@ -2452,6 +2452,48 @@ namespace app
                         IM_COL32(50, 220, 255, 240));
       ImGui::PopID();
 
+      // Section 4: Noise layer + key tracking. Drawn last on purpose: a
+      // knob's modulation binding is saved by its draw-order index, so new
+      // knobs appended after every existing one keep old patches' bindings
+      // pointing at the same params. Captions stay short; nameOverride gives
+      // the modulation matrix an unambiguous name ("decay" alone would read
+      // as the amp envelope's).
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
+      BeginAudioSection("noise & key");
+      {
+         AudioKnobRow row(6);
+         // The burst fires on note-on only (free-running has none); its
+         // decay and the noise highpass only shape noise that exists -
+         // greyed (never hidden) exactly when the DSP skips them.
+         const bool noBurst = !noteDriven || n->transient <= 0.0f;
+         const bool noNoise = noBurst && n->noiseLevel <= 0.0f;
+         if (!noteDriven)
+            ImGui::BeginDisabled();
+         row.Knob("transient", &n->transient, 0.0f, 1.0f, "%.2f");
+         if (!noteDriven)
+            ImGui::EndDisabled();
+         if (noBurst)
+            ImGui::BeginDisabled();
+         row.Knob("decay", &n->transientDecay, 1.0f, 200.0f, "%.0f ms", kKnobSmall, false, false,
+                  AudioWidgetStyle::Knob, nullptr, nullptr, -1, "transient decay");
+         if (noBurst)
+            ImGui::EndDisabled();
+         row.Knob("air", &n->noiseLevel, 0.0f, 1.0f, "%.2f", kKnobSmall, false, false,
+                  AudioWidgetStyle::Knob, nullptr, nullptr, -1, "noise air");
+         if (noNoise)
+            ImGui::BeginDisabled();
+         row.Knob("tone", &n->noiseTone, 200.0f, 16000.0f, "%.0f Hz", kKnobSmall, false, true,
+                  AudioWidgetStyle::Knob, nullptr, nullptr, -1, "noise tone");
+         if (noNoise)
+            ImGui::EndDisabled();
+         row.Knob("key lvl", &n->keyLevel, -12.0f, 12.0f, "%+.1f dB/oct", kKnobSmall, false, false,
+                  AudioWidgetStyle::Knob, nullptr, nullptr, -1, "key level");
+         row.Knob("key tilt", &n->keyTilt, -12.0f, 12.0f, "%+.1f dB/oct", kKnobSmall, false, false,
+                  AudioWidgetStyle::Knob, nullptr, nullptr, -1, "key tilt");
+         row.End();
+      }
+      EndAudioSection();
+
       EndAudioBody();
    }
 

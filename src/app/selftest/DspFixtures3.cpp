@@ -2422,6 +2422,204 @@ static bool RunEquationFixture()
       all &= voiceCountOk;
    }
 
+   // 4. Noise layer (transient burst, sustained air) and key tracking
+   //    (keyLevel gain, keyTilt harmonic balance), rendered headlessly
+   //    through the real node -> AudioNode chain, one note per render.
+   {
+      struct EqSetup
+      {
+         const char* formula = "sin(2*pi*x)";
+         int note = 60;
+         int filterType = SynthModes::kFilterOff;
+         float cutoff = 12000.0f;
+         float transient = 0.0f;
+         float noiseLevel = 0.0f;
+         float keyLevel = 0.0f;
+         float keyTilt = 0.0f;
+      };
+      auto renderNote = [&](const EqSetup& s, int frames) -> std::vector<float>
+      {
+         EquationNode eq;
+         eq.formula = s.formula;
+         eq.domainMode = EquationDsp::kDomainZeroToOne;
+         eq.unison = 1;
+         eq.filterType = s.filterType;
+         eq.cutoff = s.cutoff;
+         eq.ampAttack = 5.0f;
+         eq.ampSustain = 1.0f;
+         eq.transient = s.transient;
+         eq.noiseLevel = s.noiseLevel;
+         eq.keyLevel = s.keyLevel;
+         eq.keyTilt = s.keyTilt;
+         AudioNode* audio = eq.GetAudioNode();
+         audio->PrepareToPlay(sr, bs);
+         eq.CookIfNeeded(1);
+         NoteEventQueue inbox;
+         audio->SetNoteInbox(&inbox, inbox.RegisterConsumer());
+
+         std::vector<float> bl(bs), br(bs);
+         float* chans[2] = { bl.data(), br.data() };
+         AudioBuffer buf;
+         buf.channels = chans;
+         buf.numChannels = 2;
+         buf.numFrames = bs;
+         // Let every param smoother (5 ms one-pole, starting from 0) settle
+         // before the note, so the note sees the configured values.
+         for (int b = 0; b < 10; b++)
+            audio->ProcessBlock(nullptr, 0, buf);
+
+         NoteEvent on;
+         on.note = s.note;
+         on.voiceId = 1;
+         on.velocity = 0.8f;
+         on.isNoteOn = true;
+         on.frameOffset = 0;
+         inbox.Push(on);
+
+         std::vector<float> out;
+         out.reserve(frames + bs);
+         while ((int)out.size() < frames)
+         {
+            audio->ProcessBlock(nullptr, 0, buf);
+            out.insert(out.end(), bl.begin(), bl.end());
+         }
+         out.resize(frames);
+         return out;
+      };
+      auto rmsOf = [](const std::vector<float>& x, int from, int to) -> double
+      {
+         double e = 0.0;
+         for (int i = from; i < to; i++)
+            e += (double)x[i] * x[i];
+         return std::sqrt(e / std::max(1, to - from));
+      };
+      auto toDb = [](double v) { return 20.0 * std::log10(std::max(v, 1e-12)); };
+      // Hann-windowed single-bin DFT magnitude at an exact frequency.
+      auto binMag = [&](const std::vector<float>& x, int from, int n, double hz) -> double
+      {
+         double re = 0.0, im = 0.0;
+         for (int i = 0; i < n; i++)
+         {
+            const double w = 0.5 - 0.5 * std::cos(2.0 * M_PI * (double)i / (double)(n - 1));
+            const double ph = 2.0 * M_PI * hz * (double)i / sr;
+            re += w * x[from + i] * std::cos(ph);
+            im -= w * x[from + i] * std::sin(ph);
+         }
+         return std::sqrt(re * re + im * im);
+      };
+      auto noteHz = [](int note) { return 440.0 * std::pow(2.0, (note - 69) / 12.0); };
+
+      // 4a. transient=1 raises the crest factor of the note's first 30 ms.
+      {
+         const int n30 = (int)(0.030 * sr);
+         EqSetup s;
+         const std::vector<float> dry = renderNote(s, n30);
+         s.transient = 1.0f;
+         const std::vector<float> hit = renderNote(s, n30);
+         auto crestDb = [&](const std::vector<float>& x)
+         {
+            double peak = 0.0;
+            for (float v : x)
+               peak = std::max(peak, (double)std::fabs(v));
+            return toDb(peak) - toDb(rmsOf(x, 0, (int)x.size()));
+         };
+         const double c0 = crestDb(dry), c1 = crestDb(hit);
+         const bool ok = (c1 - c0) > 2.0;
+         printf("DSPTEST equation transient crest (first 30 ms): off=%.2f dB on=%.2f dB (+%.2f, need > 2) %s\n",
+                c0, c1, c1 - c0, ok ? "OK" : "FAIL");
+         all &= ok;
+      }
+
+      // 4b. noiseLevel adds energy above noiseTone (default 3500 Hz) - also
+      //     with a 500 Hz lowpass on the tone, since the noise joins after
+      //     the voice filter.
+      {
+         const int frames = (int)(0.25 * sr);
+         auto energyAboveDb = [&](const std::vector<float>& x)
+         {
+            DspMath::TptSvf hp[2];
+            for (auto& f : hp)
+            {
+               f.SetSampleRate(sr);
+               f.SetCutoff(5000.0f, 0.7071f);
+            }
+            double e = 0.0;
+            const int from = (int)(0.05 * sr);
+            for (int i = 0; i < (int)x.size(); i++)
+            {
+               const float y = hp[1].Process(hp[0].Process(x[i]).high).high;
+               if (i >= from)
+                  e += (double)y * y;
+            }
+            return 10.0 * std::log10(std::max(e, 1e-24));
+         };
+         EqSetup s;
+         const double quiet = energyAboveDb(renderNote(s, frames));
+         s.noiseLevel = 0.1f;
+         const double airy = energyAboveDb(renderNote(s, frames));
+         s.filterType = SynthModes::kFilterLP24;
+         s.cutoff = 500.0f;
+         const double airyLp = energyAboveDb(renderNote(s, frames));
+         const bool ok = (airy - quiet) > 20.0 && (airyLp - quiet) > 20.0;
+         printf("DSPTEST equation noise air above 5 kHz: off=%.1f dB on=%.1f dB on+lp500=%.1f dB (need +20) %s\n",
+                quiet, airy, airyLp, ok ? "OK" : "FAIL");
+         all &= ok;
+      }
+
+      // 4c. keyLevel=-6 dB/oct: note 72 sits 6 dB below note 60 (+-1.5),
+      //     against the same pair rendered at keyLevel 0.
+      {
+         const int frames = (int)(0.2 * sr);
+         const int from = (int)(0.1 * sr);
+         auto levelDb = [&](int note, float keyLevel)
+         {
+            EqSetup s;
+            s.note = note;
+            s.keyLevel = keyLevel;
+            return toDb(rmsOf(renderNote(s, frames), from, frames));
+         };
+         const double flat = levelDb(72, 0.0f) - levelDb(60, 0.0f);
+         const double tracked = levelDb(72, -6.0f) - levelDb(60, -6.0f);
+         const double delta = tracked - flat;
+         const bool ok = std::fabs(delta + 6.0) <= 1.5;
+         printf("DSPTEST equation keyLevel -6 dB/oct: note72-note60 = %.2f dB (flat %.2f, expect -6 +-1.5) %s\n",
+                delta, flat, ok ? "OK" : "FAIL");
+         all &= ok;
+      }
+
+      // 4d. keyTilt=+6 dB/oct: the 2nd-harmonic-to-fundamental ratio of
+      //     note 72 rises ~6 dB (+-2) against note 60, measured with a DFT
+      //     at the exact harmonic frequencies; the fundamental stays put.
+      {
+         const int n = 9600;
+         const int from = (int)(0.1 * sr);
+         const int frames = from + n;
+         struct Harm { double h1, h2; };
+         auto harmonics = [&](int note, float tilt) -> Harm
+         {
+            EqSetup s;
+            s.formula = "sin(2*pi*x) + 0.5*sin(4*pi*x)";
+            s.note = note;
+            s.keyTilt = tilt;
+            const std::vector<float> x = renderNote(s, frames);
+            const double f0 = noteHz(note);
+            return { binMag(x, from, n, f0), binMag(x, from, n, 2.0 * f0) };
+         };
+         const Harm a60 = harmonics(60, 0.0f), a72 = harmonics(72, 0.0f);
+         const Harm t60 = harmonics(60, 6.0f), t72 = harmonics(72, 6.0f);
+         auto ratioDb = [&](const Harm& h) { return toDb(h.h2) - toDb(h.h1); };
+         const double flat = ratioDb(a72) - ratioDb(a60);
+         const double tilted = ratioDb(t72) - ratioDb(t60);
+         const double delta = tilted - flat;
+         const double fundShift = toDb(t72.h1) - toDb(a72.h1);
+         const bool ok = std::fabs(delta - 6.0) <= 2.0 && std::fabs(fundShift) <= 1.0;
+         printf("DSPTEST equation keyTilt +6 dB/oct: H2/H1 note72 vs note60 = %+.2f dB (expect +6 +-2), "
+                "fundamental shift %+.2f dB %s\n",
+                delta, fundShift, ok ? "OK" : "FAIL");
+         all &= ok;
+      }
+   }
+
    return all;
 }
 

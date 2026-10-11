@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "audio/dsp/BasicPitch.h"
 #include "audio/dsp/EquationDsp.h"
 #include "core/AudioDecodeCache.h"
 #include "platform/PlatformAudio.h"
@@ -14,8 +15,15 @@ namespace
 {
    const char* const kOutputLabels[SoundAnalyzeNode::kOutputCount] = {
       "f0", "attack", "decay", "sustain", "release", "bright", "noise",
-      "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"
+      "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8",
+      "transient", "transientDecay", "air", "keyLevel", "keyTilt"
    };
+
+   template <typename T>
+   bool IsReady(const std::future<T>& f)
+   {
+      return f.valid() && f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+   }
 }
 
 SoundAnalyzeNode::SoundAnalyzeNode()
@@ -29,8 +37,12 @@ SoundAnalyzeNode::SoundAnalyzeNode()
 
 SoundAnalyzeNode::~SoundAnalyzeNode()
 {
-   // The worker only holds its own copies (mono buffer, options), but a
-   // std::async future blocks in its destructor anyway - say so explicitly.
+   // The transcription worker writes mProgress: stop and join it first. The
+   // analysis worker only holds its own copies (mono buffer, notes, options),
+   // but a std::async future blocks in its destructor anyway - say so explicitly.
+   StopTranscription();
+   if (mJobCancel)
+      mJobCancel->store(true); // a notes run stops between notes
    if (mJob.valid())
       mJob.wait();
 }
@@ -55,11 +67,36 @@ SoundAnalysis::Options SoundAnalyzeNode::CurrentOptions() const
    return o;
 }
 
+SoundAnalysis::MultiNoteOptions SoundAnalyzeNode::CurrentMultiOptions() const
+{
+   SoundAnalysis::MultiNoteOptions o;
+   o.partials = std::clamp(partials, 1, SoundAnalysis::kMaxPartials);
+   o.lowMidi = std::clamp(lowNote, BasicPitch::kLowestMidi, BasicPitch::kLowestMidi + BasicPitch::kKeys - 1);
+   o.highMidi = std::clamp(highNote, o.lowMidi, BasicPitch::kLowestMidi + BasicPitch::kKeys - 1);
+   return o;
+}
+
+SoundAnalyzeNode::Request SoundAnalyzeNode::CurrentRequest() const
+{
+   Request r;
+   r.mode = mode == kModeNotes ? kModeNotes : kModeRegion;
+   r.single = CurrentOptions();
+   const SoundAnalysis::MultiNoteOptions m = CurrentMultiOptions();
+   r.lowNote = m.lowMidi;
+   r.highNote = m.highMidi;
+   return r;
+}
+
 float SoundAnalyzeNode::Value(int index) const
 {
    if (!mHaveProfile || index < 0 || index >= kOutputCount)
       return 0.0f;
    const SoundAnalysis::SoundProfile& p = mProfile;
+   auto keyOut = [](const SoundAnalysis::KeyFit* f)
+   {
+      const float db = (f != nullptr && f->valid) ? f->dbPerOct : 0.0f;
+      return std::clamp((db + kKeyRangeDbPerOct) / (2.0f * kKeyRangeDbPerOct), 0.0f, 1.0f);
+   };
    switch (index)
    {
    case kF0:
@@ -81,31 +118,65 @@ float SoundAnalyzeNode::Value(int index) const
       return std::clamp(p.brightness, 0.0f, 1.0f);
    case kNoisiness:
       return std::clamp(p.noisiness, 0.0f, 1.0f);
+   case kTransient:
+      return std::clamp(p.transient, 0.0f, 1.0f);
+   case kTransientDecay:
+      return std::clamp(p.transientDecayMs / kTransientDecayRangeMs, 0.0f, 1.0f);
+   case kAir:
+      return std::clamp(p.noiseLevel, 0.0f, 1.0f);
+   case kKeyLevel:
+      return keyOut(mMulti ? &mMulti->keyLevel : nullptr);
+   case kKeyTilt:
+      return keyOut(mMulti ? &mMulti->keyTilt : nullptr);
    default:
    {
       const size_t k = (size_t)(index - kPartial0);
-      if (k < p.partials.size() && p.partials[k].present)
+      if (index >= kPartial0 && index < kPartial0 + kPartialOutputs && k < p.partials.size() && p.partials[k].present)
          return std::clamp(p.partials[k].amp, 0.0f, 1.0f);
       return 0.0f;
    }
    }
 }
 
-void SoundAnalyzeNode::SetProfile(SoundAnalysis::SoundProfile profile)
+void SoundAnalyzeNode::SetProfile(SoundAnalysis::SoundProfile profile,
+                                  std::shared_ptr<const SoundAnalysis::MultiNoteResult> multi)
 {
    mProfile = std::move(profile);
+   mMulti = std::move(multi);
    mJson = SoundAnalysis::ToJson(mProfile);
    mJson["file"] = path;
+   if (mMulti)
+   {
+      mJson["mode"] = "notes";
+      mJson["multiNote"] = SoundAnalysis::ToJson(*mMulti);
+   }
+   else
+      mJson["mode"] = "region";
    mHaveProfile = mProfile.valid;
+}
+
+void SoundAnalyzeNode::StopTranscription()
+{
+   if (mCancel)
+      mCancel->store(true);
+   if (mTranscribe.valid())
+      mTranscribe.wait(); // a cancelled run stops within one model window
+   mTranscribe = std::future<TranscribeResult>();
+   mCancel.reset();
 }
 
 void SoundAnalyzeNode::LoadFile()
 {
-   // A run on the previous file must not land on this one. Analysis takes a
-   // fraction of a second, so waiting here is cheaper than a cancel path.
+   // A run on the previous file must not land on this one: the model run and
+   // a notes analysis are cancelled (a region analysis takes a fraction of a
+   // second and is simply waited for).
+   StopTranscription();
+   if (mJobCancel)
+      mJobCancel->store(true);
    if (mJob.valid())
       mJob.wait();
-   mJob = std::future<SoundAnalysis::SoundProfile>();
+   mJob = std::future<JobResult>();
+   mJobCancel.reset();
    mLoadedPath = path;
    mMono.reset();
    mOverviewMin.clear();
@@ -115,7 +186,12 @@ void SoundAnalyzeNode::LoadFile()
    mHaveResultForOptions = false;
    mHaveProfile = false;
    mProfile = SoundAnalysis::SoundProfile();
+   mMulti.reset();
    mJson = nlohmann::json();
+   mNotes.reset();
+   mTranscribeFailed = false;
+   mTranscribeError.clear();
+   mProgress.store(0.0f);
 
    if (path.empty())
    {
@@ -171,16 +247,80 @@ void SoundAnalyzeNode::LoadFile()
    mStatus = "analyzing...";
 }
 
+void SoundAnalyzeNode::StartTranscription()
+{
+   // The model reads the mono mix (what the analysis sees too), resampled to
+   // its 22.05 kHz; default settings - the note range is applied afterwards
+   // by AnalyzeNotes, so moving lowNote/highNote never re-runs the model.
+   mProgress.store(0.0f);
+   mCancel = std::make_shared<std::atomic<bool>>(false);
+   std::shared_ptr<std::atomic<bool>> cancel = mCancel;
+   std::shared_ptr<const std::vector<float>> mono = mMono;
+   const double sr = mSampleRate;
+   std::atomic<float>* progress = &mProgress;
+   mTranscribe = std::async(std::launch::async, [mono, sr, cancel, progress]() -> TranscribeResult
+   {
+      TranscribeResult r;
+      std::vector<float> input;
+      if (!BasicPitch::ToModelInput(mono->data(), 1, (int)mono->size(), sr, input, cancel.get()))
+      {
+         r.error = cancel->load() ? "cancelled" : "could not prepare the audio for the note model";
+         return r;
+      }
+      BasicPitch::Activations act;
+      if (!BasicPitch::RunModel(input, act, r.error, progress, cancel.get()))
+      {
+         if (r.error.empty())
+            r.error = "the note model failed";
+         return r;
+      }
+      const std::vector<BasicPitch::Note> found = BasicPitch::NotesFromActivations(act, BasicPitch::Settings());
+      auto notes = std::make_shared<std::vector<SoundAnalysis::NoteEvent>>();
+      notes->reserve(found.size());
+      for (const BasicPitch::Note& n : found)
+      {
+         SoundAnalysis::NoteEvent e;
+         e.start = n.start;
+         e.end = n.end;
+         e.midi = n.pitch;
+         e.amplitude = n.amplitude;
+         notes->push_back(e);
+      }
+      r.notes = std::move(notes);
+      return r;
+   });
+}
+
+void SoundAnalyzeNode::PollTranscription()
+{
+   if (!IsReady(mTranscribe))
+      return;
+   TranscribeResult r = mTranscribe.get();
+   mCancel.reset();
+   if (r.notes)
+   {
+      mNotes = std::move(r.notes);
+      mProgress.store(1.0f);
+   }
+   else
+   {
+      // Not retried for this file (Reload() or a new file clears it): on a
+      // build without the model it would only fail again.
+      mTranscribeFailed = true;
+      mTranscribeError = "notes mode: " + (r.error.empty() ? std::string("transcription failed") : r.error);
+   }
+}
+
 void SoundAnalyzeNode::PollAnalysis()
 {
-   if (!mJob.valid() || mJob.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+   if (!IsReady(mJob))
       return;
-   SoundAnalysis::SoundProfile r = mJob.get();
-   mProfileOptions = mJobOptions;
+   JobResult r = mJob.get();
+   mProfileRequest = mJobRequest;
    mHaveResultForOptions = true;
-   if (r.valid)
+   if (r.profile.valid)
    {
-      SetProfile(std::move(r));
+      SetProfile(std::move(r.profile), std::move(r.multi));
       mState = State::Ready;
       mStatus.clear();
    }
@@ -188,8 +328,12 @@ void SoundAnalyzeNode::PollAnalysis()
    {
       // Outputs must not keep reporting a region that no longer analyses.
       mHaveProfile = false;
+      mMulti.reset();
       mState = State::Failed;
-      mStatus = r.error.empty() ? "analysis failed" : r.error;
+      if (r.multi && !r.multi->error.empty())
+         mStatus = r.multi->error;
+      else
+         mStatus = r.profile.error.empty() ? "analysis failed" : r.profile.error;
    }
 }
 
@@ -197,15 +341,64 @@ void SoundAnalyzeNode::StartAnalysisIfStale()
 {
    if (!mMono || mJob.valid())
       return;
-   const SoundAnalysis::Options want = CurrentOptions();
-   if (mHaveResultForOptions && want == mProfileOptions)
+   const Request want = CurrentRequest();
+   if (mHaveResultForOptions && want == mProfileRequest)
       return;
-   // One run at a time; a knob that kept moving is picked up by the next one.
-   mJobOptions = want;
+
    std::shared_ptr<const std::vector<float>> mono = mMono;
    const double sr = mSampleRate;
-   mJob = std::async(std::launch::async, [mono, sr, want]()
-                     { return SoundAnalysis::AnalyzeSound(mono->data(), mono->size(), sr, want); });
+   if (want.mode == kModeNotes)
+   {
+      if (!mNotes)
+      {
+         if (mTranscribeFailed)
+         {
+            mProfileRequest = want;
+            mHaveResultForOptions = true;
+            mHaveProfile = false;
+            mMulti.reset();
+            mState = State::Failed;
+            mStatus = mTranscribeError;
+            return;
+         }
+         if (!mTranscribe.valid())
+            StartTranscription();
+         mState = State::Analyzing;
+         mStatus = "transcribing notes...";
+         return;
+      }
+      // One run at a time; a knob that kept moving is picked up by the next one.
+      mJobRequest = want;
+      std::shared_ptr<const std::vector<SoundAnalysis::NoteEvent>> notes = mNotes;
+      const SoundAnalysis::MultiNoteOptions mopt = CurrentMultiOptions();
+      mJobCancel = std::make_shared<std::atomic<bool>>(false);
+      std::shared_ptr<std::atomic<bool>> cancel = mJobCancel;
+      mJob = std::async(std::launch::async, [mono, sr, notes, mopt, cancel]() -> JobResult
+      {
+         JobResult r;
+         auto multi = std::make_shared<SoundAnalysis::MultiNoteResult>(
+            SoundAnalysis::AnalyzeNotes(mono->data(), mono->size(), sr, *notes, mopt, cancel.get()));
+         r.profile = multi->profile;
+         if (!multi->valid)
+         {
+            r.profile.valid = false;
+            r.profile.error = multi->error;
+         }
+         r.multi = std::move(multi);
+         return r;
+      });
+   }
+   else
+   {
+      mJobRequest = want;
+      const SoundAnalysis::Options opt = want.single;
+      mJob = std::async(std::launch::async, [mono, sr, opt]() -> JobResult
+      {
+         JobResult r;
+         r.profile = SoundAnalysis::AnalyzeSound(mono->data(), mono->size(), sr, opt);
+         return r;
+      });
+   }
    mState = State::Analyzing;
    mStatus = "analyzing...";
 }
@@ -218,6 +411,7 @@ void SoundAnalyzeNode::CookIfNeeded(int frameId)
    // A path set by a patch load, the file picker or a drop is read here, once per change.
    if (path != mLoadedPath)
       LoadFile();
+   PollTranscription();
    PollAnalysis();
    StartAnalysisIfStale();
 }
@@ -229,6 +423,9 @@ void SoundAnalyzeNode::VisitParams(ParamVisitor& v)
    v.Float("length", lengthSec);
    v.Float("f0Hint", f0Hint);
    v.Int("partials", partials);
+   v.Int("mode", mode);
+   v.Int("lowNote", lowNote);
+   v.Int("highNote", highNote);
 }
 
 // ---------------------------------------------------------------- self-test
@@ -398,7 +595,188 @@ bool SoundAnalyzeNode::RunSelfTest()
       check(!SoundAnalysis::ToJson(p1)["partials"].empty(), "ToJson lists the partials");
    }
 
-   // 6. Outputs: the documented 0..1 mappings, read from a node holding p1.
+   // 6. Attack transient: the struck 220 Hz tone with a 1 ms attack at 50 ms,
+   // plus a white-noise burst whose RMS at the onset is half the tone's and
+   // that decays to -60 dB in 20 ms; and the same tone clean.
+   auto struckTone = [&](bool burst)
+   {
+      std::vector<float> s((size_t)(1.5 * sr), 0.0f);
+      const double onset = 0.05;
+      const double toneRms = 0.5 * std::sqrt((1.0 + 0.25 + 1.0 / 9.0) / 2.0);
+      for (size_t i = 0; i < s.size(); i++)
+      {
+         const double t = (double)i / sr - onset;
+         double v = 0.0;
+         if (t >= 0.0)
+         {
+            for (int h = 0; h < 3; h++)
+               v += amps1[h] * std::pow(10.0, -3.0 * t / t60s[h]) * std::sin(2.0 * kPi * 220.0 * (h + 1) * t);
+            v *= 0.5 * std::min(1.0, t / 0.001);
+            if (burst) // noise() is uniform in +-0.5: RMS 1/sqrt(12)
+               v += 0.5 * toneRms * std::pow(10.0, -3.0 * t / 0.02) * noise() * std::sqrt(12.0);
+         }
+         s[i] = (float)(v + 1e-4 * noise());
+      }
+      return s;
+   };
+   SoundAnalysis::SoundProfile pClean;
+   {
+      const std::vector<float> hit = struckTone(true);
+      const SoundAnalysis::SoundProfile p = SoundAnalysis::AnalyzeSound(hit.data(), hit.size(), sr, SoundAnalysis::Options());
+      printf("SOUNDANALYSISTEST burst: onset %.4f s transient %.3f decay %.1f ms (high %.3f / %.1f ms) crest %.1f dB\n",
+             p.onsetTime, p.transient, p.transientDecayMs, p.transientHigh, p.transientHighDecayMs, p.attackCrestDb);
+      check(p.valid && p.transientMeasured, "burst: transient measured");
+      check(within(p.onsetTime, 0.05, 0.002), "burst: onset at 50 ms +-2");
+      check(p.transient > 0.2f, "burst: transient > 0.2 (0.5 synthesised)");
+      check(within(p.transientDecayMs, 20.0, 10.0), "burst: decay 20 ms +-50%");
+      const std::vector<float> clean = struckTone(false);
+      pClean = SoundAnalysis::AnalyzeSound(clean.data(), clean.size(), sr, SoundAnalysis::Options());
+      printf("SOUNDANALYSISTEST clean: transient %.4f decay %.1f ms crest %.1f dB air %.4f @ %.0f Hz\n", pClean.transient,
+             pClean.transientDecayMs, pClean.attackCrestDb, pClean.noiseLevel, pClean.noiseToneHz);
+      check(pClean.valid && pClean.transientMeasured && pClean.transient < 0.05f, "clean tone: transient < 0.05");
+      check(p.attackCrestDb > pClean.attackCrestDb, "burst: crest above the clean tone's");
+      check(pClean.airMeasured && pClean.noiseLevel < 0.02f, "clean tone: no air");
+      const nlohmann::json j = SoundAnalysis::ToJson(p);
+      check(j.contains("transient") && j["transient"].contains("decayMs") && j.contains("air"), "ToJson has transient and air");
+   }
+
+   // 7. Air: a held 220 Hz tone (8 harmonics at 1/k) plus white noise through
+   // a 4th-order Butterworth highpass at 4 kHz, at 1/10 of the tone's RMS.
+   {
+      const size_t n = (size_t)(2.0 * sr);
+      std::vector<double> hiss(n);
+      for (size_t i = 0; i < n; i++)
+         hiss[i] = noise();
+      // Two RBJ highpass biquads, Q of the 4th-order Butterworth pair.
+      const double qs[2] = { 0.54119610, 1.30656296 };
+      for (double q : qs)
+      {
+         const double w0 = 2.0 * kPi * 4000.0 / sr, al = std::sin(w0) / (2.0 * q), c = std::cos(w0), a0 = 1.0 + al;
+         const double b0 = (1.0 + c) * 0.5 / a0, b1 = -(1.0 + c) / a0, b2 = b0, a1 = -2.0 * c / a0, a2 = (1.0 - al) / a0;
+         double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+         for (double& v : hiss)
+         {
+            const double y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1;
+            x1 = v;
+            y2 = y1;
+            y1 = y;
+            v = y;
+         }
+      }
+      double ss = 0.0;
+      for (size_t i = n / 4; i < n; i++)
+         ss += hiss[i] * hiss[i];
+      double toneSs = 0.0;
+      for (int k = 1; k <= 8; k++)
+         toneSs += 0.5 / (double)(k * k);
+      const double gain = 0.1 * 0.3 * std::sqrt(toneSs) / std::sqrt(ss / (double)(n - n / 4));
+      std::vector<float> tone(n);
+      for (size_t i = 0; i < n; i++)
+      {
+         const double t = (double)i / sr;
+         double s = 0.0;
+         for (int k = 1; k <= 8; k++)
+            s += (1.0 / k) * std::sin(2.0 * kPi * 220.0 * k * t);
+         tone[i] = (float)(std::min(1.0, t / 0.05) * (0.3 * s + gain * hiss[i]) + 1e-4 * noise());
+      }
+      SoundAnalysis::Options o;
+      o.partials = 12;
+      const SoundAnalysis::SoundProfile p = SoundAnalysis::AnalyzeSound(tone.data(), tone.size(), sr, o);
+      printf("SOUNDANALYSISTEST air: noise level %.3f (%.1f dB) corner %.0f Hz, noisiness %.3f\n", p.noiseLevel,
+             20.0 * std::log10(std::max(1e-4f, p.noiseLevel)), p.noiseToneHz, p.noisiness);
+      check(p.valid && p.pitched && p.airMeasured, "air: measured");
+      check(p.noiseLevel > 0.05f && p.noiseLevel < 0.2f, "air: level ~0.1 (-20 dB)");
+      check(p.noiseToneHz >= 2000.0f && p.noiseToneHz <= 6000.0f, "air: corner 2..6 kHz");
+   }
+
+   // 8. Multi-note: 11 struck notes across two octaves, 1 s apart, whose
+   // fundamental falls 3 dB/oct and whose 2nd harmonic rises 6 dB/oct
+   // against it (-12 dB at C4); the 3rd stays at -18 dB. The note list is
+   // given exactly, plus a transcriber's octave ghost on the C4 (must not cost
+   // it its isolation) and a phantom note 50 ms after the D4 (takes the D4 out).
+   std::shared_ptr<SoundAnalysis::MultiNoteResult> multi;
+   {
+      const int midis[11] = { 48, 50, 53, 55, 57, 60, 62, 65, 67, 69, 72 };
+      const double t60n[4] = { 1.2, 0.9, 0.7, 0.5 };
+      const double spacing = 1.0, first = 0.1;
+      std::vector<float> song((size_t)((first + 11 * spacing + 0.3) * sr), 0.0f);
+      std::vector<SoundAnalysis::NoteEvent> notes;
+      for (int i = 0; i < 11; i++)
+      {
+         const double oct = (midis[i] - 60) / 12.0;
+         const double f0 = 440.0 * std::pow(2.0, (midis[i] - 69) / 12.0);
+         const double rel[4] = { 1.0, std::pow(10.0, (-12.0 + 6.0 * oct) / 20.0), std::pow(10.0, -18.0 / 20.0),
+                                 std::pow(10.0, -24.0 / 20.0) };
+         const double a1 = 0.25 * std::pow(10.0, -3.0 * oct / 20.0);
+         const double t0 = first + i * spacing;
+         const size_t s0 = (size_t)std::lround(t0 * sr);
+         for (size_t j = 0; j < (size_t)(0.95 * sr) && s0 + j < song.size(); j++)
+         {
+            const double t = (double)j / sr;
+            double env = std::min(1.0, t / 0.002);
+            if (t > 0.9)
+               env *= 0.5 + 0.5 * std::cos(kPi * (t - 0.9) / 0.05); // fade out by 0.95 s
+            double v = 0.0;
+            for (int k = 0; k < 4; k++)
+               v += rel[k] * std::pow(10.0, -3.0 * t / t60n[k]) * std::sin(2.0 * kPi * f0 * (k + 1) * t);
+            song[s0 + j] += (float)(a1 * env * v);
+         }
+         SoundAnalysis::NoteEvent e;
+         e.start = t0;
+         e.end = t0 + 0.9;
+         e.midi = midis[i];
+         e.amplitude = 0.8f;
+         notes.push_back(e);
+         if (midis[i] == 60)
+         {
+            SoundAnalysis::NoteEvent ghost = e;
+            ghost.start += 0.005;
+            ghost.midi = 72;
+            ghost.amplitude = 0.5f;
+            notes.push_back(ghost);
+         }
+         if (midis[i] == 62)
+         {
+            SoundAnalysis::NoteEvent phantom = e;
+            phantom.start += 0.05;
+            phantom.midi = 64;
+            notes.push_back(phantom);
+         }
+      }
+      for (float& v : song)
+         v += (float)(1e-4 * noise());
+      SoundAnalysis::MultiNoteOptions mo;
+      mo.partials = 8;
+      const auto t0 = std::chrono::steady_clock::now();
+      multi = std::make_shared<SoundAnalysis::MultiNoteResult>(SoundAnalysis::AnalyzeNotes(song.data(), song.size(), sr, notes, mo));
+      const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      const SoundAnalysis::MultiNoteResult& r = *multi;
+      printf("SOUNDANALYSISTEST notes: %d given, %d isolated, %d used in %.0f ms; level %.2f dB/oct (r2 %.2f, %s), tilt %.2f dB/oct (r2 %.2f), tilt3 %.2f\n",
+             r.notesGiven, r.notesIsolated, r.notesUsed, ms, r.keyLevel.dbPerOct, r.keyLevel.r2,
+             r.keyLevelFromFundamental ? "fundamental" : "all partials", r.keyTilt.dbPerOct, r.keyTilt.r2, r.keyTilt3.dbPerOct);
+      if (!r.valid)
+         printf("SOUNDANALYSISTEST notes error: %s\n", r.error.c_str());
+      for (const SoundAnalysis::NoteRow& row : r.rows)
+         printf("   t=%.2f midi %d f0 %.1f h1 %.1f dB h2-h1 %.1f dB\n", row.start, row.midi, row.f0Hz, row.h1Db, row.h2h1Db);
+      check(r.valid, "notes: valid");
+      check(r.notesIsolated == 10 && r.notesUsed == 10, "notes: 10 isolated and used (ghost ignored, D4 + phantom dropped)");
+      check(r.keyTilt.valid && within(r.keyTilt.dbPerOct, 6.0, 1.5), "notes: key tilt +6 dB/oct +-1.5");
+      check(r.keyLevel.valid && r.keyLevelFromFundamental && within(r.keyLevel.dbPerOct, -3.0, 1.0),
+            "notes: key level -3 dB/oct +-1");
+      check(r.keyTilt3.valid && within(r.keyTilt3.dbPerOct, 0.0, 1.5), "notes: 3rd harmonic flat");
+      check(r.profile.valid && r.profile.partials.size() >= 3 && r.profile.partials[1].present &&
+               within(r.profile.partials[1].ampDb, -12.0, 1.5),
+            "notes: merged partial 2 at C4 = -12 dB (key tilt removed)");
+      check(within(r.profile.f0Hz, 261.63, 0.1), "notes: merged profile placed at MIDI 60");
+      const nlohmann::json j = SoundAnalysis::ToJson(r);
+      check(j.contains("keyTracking") && j["notes"].size() == r.rows.size(), "notes: ToJson has key tracking and rows");
+      // Chords are never isolated.
+      std::vector<SoundAnalysis::NoteEvent> chord = { { 0.1, 0.7, 60, 0.8f }, { 0.1, 0.7, 64, 0.8f } };
+      check(!SoundAnalysis::AnalyzeNotes(song.data(), song.size(), sr, chord, mo).valid, "notes: a chord is not isolated");
+   }
+
+   // 9. Outputs: the documented 0..1 mappings, read from a node holding p1.
    {
       SoundAnalyzeNode node;
       node.path = "selftest";
@@ -410,9 +788,23 @@ bool SoundAnalyzeNode::RunSelfTest()
       check(within(node.Value(kPartial0 + 1), 0.5, 0.1), "p2 output ~ 0.5");
       check(node.Value(kPartial0 + 3) < 0.02f, "p4 output ~ 0 (absent)");
       check(node.Value(kPartial0) == node.Value(kPartial0), "outputs are a pure read");
+      check(within(node.Value(kTransient), std::clamp(p1.transient, 0.0f, 1.0f), 1e-6), "transient output = level");
+      check(within(node.Value(kTransientDecay), std::clamp(p1.transientDecayMs / 200.0f, 0.0f, 1.0f), 1e-6),
+            "transientDecay output = ms / 200");
+      check(within(node.Value(kAir), std::clamp(p1.noiseLevel, 0.0f, 1.0f), 1e-6), "air output = noise level");
+      check(node.Value(kKeyLevel) == 0.5f && node.Value(kKeyTilt) == 0.5f, "region mode: key outputs 0.5 (0 dB/oct)");
       check(node.ProfileJson() != nullptr && (*node.ProfileJson())["file"] == "selftest", "ProfileJson carries the file");
+      if (multi && multi->valid)
+      {
+         node.SetProfile(multi->profile, multi);
+         check(within(node.Value(kKeyTilt), (multi->keyTilt.dbPerOct + 12.0) / 24.0, 1e-5), "keyTilt output = (dB/oct + 12) / 24");
+         check(within(node.Value(kKeyLevel), (multi->keyLevel.dbPerOct + 12.0) / 24.0, 1e-5), "keyLevel output = (dB/oct + 12) / 24");
+         check(node.MultiNote() != nullptr && (*node.ProfileJson())["multiNote"].contains("keyTracking"),
+               "mode notes: ProfileJson has multiNote");
+      }
       SoundAnalyzeNode empty;
-      check(empty.ProfileJson() == nullptr && empty.Value(kF0) == 0.0f, "no profile: null json, zero outputs");
+      check(empty.ProfileJson() == nullptr && empty.Value(kF0) == 0.0f && empty.Value(kKeyTilt) == 0.0f,
+            "no profile: null json, zero outputs");
    }
 
    printf("SOUNDANALYSISTEST %s\n", ok ? "OK" : "FAIL");

@@ -1051,6 +1051,10 @@ namespace app
             out.push_back({ {"label", oi.label}, {"kind", oi.kind}, {"modulator", oi.modulator} });
          outResult = { {"type", ts->name}, {"category", ts->category}, {"params", pj}, {"inputs", in}, {"outputs", out},
                        {"canBypass", ts->canBypass}, {"hardwareDriven", ts->hardwareDriven} };
+         // The node's reference text (English, as in the Help window): what it
+         // does, its controls' units and what each output's 0..1 means.
+         if (const char* help = NodeHelpTextFor(ts->name, ts->category))
+            outResult["help"] = help;
          return true;
       }
       else if (method == "batch")

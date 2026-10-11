@@ -57,6 +57,8 @@ namespace
       kParamResonance,
       kParamDrive,
       kParamFine,
+      kParamTransient,
+      kParamNoiseLevel,
       kNumSmoothedParams
    };
 
@@ -68,6 +70,76 @@ namespace
    inline float MidiNoteToHz(int midiNote, float fineCents = 0.0f)
    {
       return 440.0f * powf(2.0f, (float)(midiNote - 69 + fineCents * 0.01f) / 12.0f);
+   }
+
+   // ---------------------------------------------------------------- noise & key
+   // Unit-RMS white noise: xorshift32's uniform [-1, 1) has RMS 1/sqrt(3).
+   constexpr float kNoiseUnitRms = 1.7320508f;
+   // The tone leaves RenderVoice through a centred equal-power pan (unison 1),
+   // so the mono noise gets the same per-channel factor to stay "relative to
+   // the voice" in each channel.
+   constexpr float kCentrePan = 0.70710678f;
+   // A burst below this envelope value is inaudible (-100 dB) and is ended.
+   constexpr float kBurstFloor = 1e-5f;
+   // ln(1000): an exponential that falls 60 dB over T has coefficient
+   // exp(-ln(1000) / (T * sampleRate)) per sample.
+   constexpr double kLn1000 = 6.907755278982137;
+   // Key-tracked gain and tilt limits (beyond ~15 dB a single shelf between
+   // the fundamental and the 2nd harmonic can no longer separate them).
+   constexpr float kKeyLevelMaxDb = 24.0f;
+   constexpr float kKeyTiltMaxDb = 15.0f;
+   constexpr double kKeyTiltShelfMaxDb = 24.0;
+   // Shelf corner as a multiple of the voice fundamental, and the RBJ shelf
+   // Q: 1.2 keeps harmonics 2..8 within ~1 dB of each other (a flat "tilt of
+   // everything above the fundamental") for tilts up to ~12 dB.
+   constexpr double kKeyTiltCornerRatio = 1.5;
+   constexpr double kKeyTiltQ = 1.2;
+
+   // |H(e^jw)|^2 of a biquad, from cos(w) and cos(2w).
+   inline double BiquadMagSq(const DspMath::Biquad& bq, double cw, double c2w)
+   {
+      const double b0 = bq.b0, b1 = bq.b1, b2 = bq.b2, a1 = bq.a1, a2 = bq.a2;
+      const double num = b0 * b0 + b1 * b1 + b2 * b2 + 2.0 * (b0 * b1 + b1 * b2) * cw + 2.0 * b0 * b2 * c2w;
+      const double den = 1.0 + a1 * a1 + a2 * a2 + 2.0 * (a1 + a1 * a2) * cw + 2.0 * a2 * c2w;
+      return den > 1e-30 ? std::max(num, 1e-30) / den : 1.0;
+   }
+
+   // Pitch-tracked harmonic tilt: an RBJ high shelf with its corner at
+   // 1.5 x f0 (between the fundamental and the 2nd harmonic), whose gain is
+   // corrected (a few multiplicative steps on the measured response) until
+   // the 2nd harmonic sits exactly tiltDb above/below the fundamental, then
+   // normalized so the fundamental itself stays at 0 dB - keyTilt moves the
+   // harmonic balance only, keyLevel owns loudness. Writes coefficients only
+   // (no filter state) into `out`, plus the fundamental-normalizing gain.
+   // Called per note-on and when tilt or pitch moved since the last design
+   // (once per block at most), never per sample.
+   inline void DesignKeyTiltShelf(DspMath::Biquad& out, float& norm, double f0, double tiltDb, double sampleRate)
+   {
+      const double twoPiOverSr = 2.0 * M_PI / sampleRate;
+      const double fc = std::min(kKeyTiltCornerRatio * f0, 0.45 * sampleRate);
+      const double cw1 = cos(twoPiOverSr * f0);
+      const double c2w1 = cos(2.0 * twoPiOverSr * f0);
+      double g = tiltDb;
+      if (2.0 * f0 < 0.49 * sampleRate)
+      {
+         const double cw2 = cos(twoPiOverSr * 2.0 * f0);
+         const double c2w2 = cos(2.0 * twoPiOverSr * 2.0 * f0);
+         for (int it = 0; it < 4; it++)
+         {
+            out.SetHighShelf(fc, kKeyTiltQ, g, sampleRate);
+            const double d = 10.0 * log10(BiquadMagSq(out, cw2, c2w2) / BiquadMagSq(out, cw1, c2w1));
+            if (d * tiltDb <= 0.0 || std::fabs(d - tiltDb) < 1e-3)
+               break;
+            g = std::clamp(g * tiltDb / d, -kKeyTiltShelfMaxDb, kKeyTiltShelfMaxDb);
+         }
+      }
+      out.SetHighShelf(fc, kKeyTiltQ, g, sampleRate);
+      norm = (float)(1.0 / sqrt(BiquadMagSq(out, cw1, c2w1)));
+   }
+
+   inline float KeyNoteForHz(float hz)
+   {
+      return 69.0f + 12.0f * log2f(std::max(hz, 8.0f) / 440.0f);
    }
 }
 
@@ -103,7 +175,7 @@ public:
       mBankSlot.SwapIn();
 
       for (int v = 0; v < kMaxVoices; v++)
-         mVoices[v].Reset(44100.0);
+         mVoices[v].Reset(44100.0, v);
    }
 
    ~AudioEquationNode() override = default;
@@ -119,7 +191,7 @@ public:
       mSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
       mMailbox.PrepareToPlay(mSampleRate);
       for (int v = 0; v < kMaxVoices; v++)
-         mVoices[v].Reset(mSampleRate);
+         mVoices[v].Reset(mSampleRate, v);
       mLastNoteHz = 0.0f;
       mHasLastNote = false;
 
@@ -155,6 +227,11 @@ public:
       mFilterAdsr[2].store(n.filterSustain, std::memory_order_relaxed);
       mFilterAdsr[3].store(n.filterRelease, std::memory_order_relaxed);
 
+      mTransientDecayMs.store(n.transientDecay, std::memory_order_relaxed);
+      mNoiseToneHz.store(n.noiseTone, std::memory_order_relaxed);
+      mKeyLevel.store(n.keyLevel, std::memory_order_relaxed);
+      mKeyTilt.store(n.keyTilt, std::memory_order_relaxed);
+
       const float values[kNumSmoothedParams] = {
          n.frequency,
          n.volume,
@@ -165,7 +242,9 @@ public:
          n.cutoff,
          n.resonance,
          n.drive,
-         n.fine
+         n.fine,
+         n.transient,
+         n.noiseLevel
       };
 
       for (int i = 0; i < kNumSmoothedParams; i++)
@@ -262,6 +341,20 @@ public:
                }
                mLastNoteHz = baseHz;
                mHasLastNote = true;
+
+               // Key tracking reads the transposed note; a fresh note snaps
+               // its key gain and redesigns its tilt shelf for the new pitch
+               // (a stolen voice keeps its shelf state for continuity, a
+               // silent one starts it from zero).
+               v.keyNote = (float)(event.note + octave * 12 + semi);
+               v.keyFresh = wasInactive; // a stolen, still-sounding voice ramps instead
+               v.shelfHz = 0.0f;
+               if (wasInactive)
+               {
+                  v.shelfActive = false;
+                  v.noiseHp.Reset();
+               }
+               v.burstEnv = 1.0f;
             }
             else if (!event.isNoteOn && !event.bendUpdate)
             {
@@ -283,6 +376,34 @@ public:
       if (mMonoScope.size() < (size_t)numFrames)
          mMonoScope.resize(numFrames, 0.0f);
 
+      // ---- Noise & key: per-block setup (coefficients, gain ramps, shelves).
+      const float transientDecayMs = std::clamp(mTransientDecayMs.load(std::memory_order_relaxed), 1.0f, 200.0f);
+      const float burstCoef = (float)exp(-kLn1000 / ((double)transientDecayMs * 0.001 * mSampleRate));
+      const float noiseToneHz = std::min(std::clamp(mNoiseToneHz.load(std::memory_order_relaxed), 200.0f, 16000.0f),
+                                         (float)(mSampleRate * 0.45));
+      const float keyLevel = std::clamp(mKeyLevel.load(std::memory_order_relaxed), -12.0f, 12.0f);
+      const float keyTilt = std::clamp(mKeyTilt.load(std::memory_order_relaxed), -12.0f, 12.0f);
+      DspMath::TptSvf noiseHpProto;
+      noiseHpProto.SetSampleRate(mSampleRate);
+      noiseHpProto.SetCutoff(noiseToneHz, 0.70710678f);
+      const float invFrames = 1.0f / (float)numFrames;
+      float keyGainTarget[kMaxVoices];
+      float keyGainInc[kMaxVoices];
+      for (int vIdx = 0; vIdx < kMaxVoices; vIdx++)
+      {
+         Voice& v = mVoices[vIdx];
+         v.noiseHp.g = noiseHpProto.g;
+         v.noiseHp.k = noiseHpProto.k;
+         keyGainTarget[vIdx] = v.keyGain;
+         keyGainInc[vIdx] = 0.0f;
+         const bool renders = isNoteDriven ? v.active : (vIdx == 0);
+         if (!renders)
+            continue;
+         if (!isNoteDriven)
+            v.keyNote = KeyNoteForHz(v.currentFreq);
+         PrepareKeyTracking(v, keyLevel, keyTilt, invFrames, keyGainTarget[vIdx], keyGainInc[vIdx]);
+      }
+
       for (int i = 0; i < numFrames; i++)
       {
          const float baseFreq = mMailbox.SmoothedValue(kParamFrequency);
@@ -295,6 +416,8 @@ public:
          const float resonance = mMailbox.SmoothedValue(kParamResonance);
          const float drive = mMailbox.SmoothedValue(kParamDrive);
          const float fine = mMailbox.SmoothedValue(kParamFine);
+         const float transient = std::clamp(mMailbox.SmoothedValue(kParamTransient), 0.0f, 1.0f);
+         const float noiseLevel = std::clamp(mMailbox.SmoothedValue(kParamNoiseLevel), 0.0f, 1.0f);
 
          float frameSumL = 0.0f;
          float frameSumR = 0.0f;
@@ -314,8 +437,13 @@ public:
 
             float vOutL = 0.0f, vOutR = 0.0f;
             RenderVoice(v, bank, v.currentFreq, unison, detune, stereoWidth, filterType, cutoff, resonance, 0.0f, filterAmount, vOutL, vOutR);
-            frameSumL += vOutL;
-            frameSumR += vOutR;
+            ApplyKeyTilt(v, vOutL, vOutR);
+            v.keyGain += keyGainInc[0];
+            // Free-running: no envelope, no velocity - the noise follows the
+            // constant voice level (and a burst left over from note mode).
+            const float noiseOut = RenderNoise(v, noiseLevel + transient * v.burstEnv, burstCoef) * v.keyGain;
+            frameSumL += vOutL * v.keyGain + noiseOut;
+            frameSumR += vOutR * v.keyGain + noiseOut;
          }
          else
          {
@@ -346,10 +474,18 @@ public:
                const float voiceHz = v.currentFreq * powf(2.0f, fine * 0.01f / 12.0f);
                float vOutL = 0.0f, vOutR = 0.0f;
                RenderVoice(v, bank, voiceHz, unison, detune, stereoWidth, filterType, cutoff, resonance, filtEnv, filterAmount, vOutL, vOutR);
+               ApplyKeyTilt(v, vOutL, vOutR);
 
-               const float gain = ampEnv * v.velocity;
-               frameSumL += vOutL * gain;
-               frameSumR += vOutR * gain;
+               // Noise sits after the voice filter (a lowpassed tone keeps
+               // its air) and before drive/volume/pan. The burst ignores the
+               // amp envelope (a strike is instant even under a slow attack);
+               // the sustained layer follows it.
+               v.keyGain += keyGainInc[vIdx];
+               const float voiceGain = v.velocity * v.keyGain;
+               const float gain = ampEnv * voiceGain;
+               const float noiseOut = RenderNoise(v, noiseLevel * ampEnv + transient * v.burstEnv, burstCoef) * voiceGain;
+               frameSumL += vOutL * gain + noiseOut;
+               frameSumR += vOutR * gain + noiseOut;
             }
          }
 
@@ -368,6 +504,10 @@ public:
       }
 
       mScopeRing.Write(mMonoScope.data(), numFrames);
+
+      // Land every ramped key gain exactly on its target (no float drift).
+      for (int vIdx = 0; vIdx < kMaxVoices; vIdx++)
+         mVoices[vIdx].keyGain = keyGainTarget[vIdx];
 
       if (isNoteDriven)
       {
@@ -404,8 +544,45 @@ private:
       DspMath::TptSvf filter[2][SynthModes::kMaxFilterStages];
       DspMath::CombFilter comb[2];
 
-      void Reset(double sampleRate)
+      // Key tracking: the note the key params are measured from, the
+      // current (block-ramped) key gain, and whether this voice still needs
+      // its gain snapped (a fresh note-on) instead of ramped.
+      float keyNote = 60.0f;
+      float keyGain = 1.0f;
+      bool keyFresh = true;
+      // Key tilt shelf (one per channel, shared coefficients). shelfDb/shelfHz
+      // are what the current coefficients were designed for.
+      DspMath::Biquad shelf[2];
+      float shelfNorm = 1.0f;
+      float shelfDb = 0.0f;
+      float shelfHz = 0.0f;
+      bool shelfActive = false;
+      // Noise layer: per-voice generator (seeded per voice index, so voices
+      // are decorrelated and renders are deterministic), its highpass, and
+      // the note-on burst envelope (1 at note-on, exponential decay).
+      DspMath::WhiteNoise noise;
+      DspMath::TptSvf noiseHp;
+      float burstEnv = 0.0f;
+
+      void Reset(double sampleRate, int index)
       {
+         keyNote = 60.0f;
+         keyGain = 1.0f;
+         keyFresh = true;
+         shelf[0].Reset();
+         shelf[1].Reset();
+         shelfNorm = 1.0f;
+         shelfDb = 0.0f;
+         shelfHz = 0.0f;
+         shelfActive = false;
+         noise.state = 0x9E3779B9u ^ ((uint32_t)(index + 1) * 0x85EBCA6Bu);
+         if (noise.state == 0u)
+            noise.state = 0x2545F491u;
+         noiseHp.SetSampleRate(sampleRate);
+         noiseHp.SetCutoff(3500.0f, 0.70710678f);
+         noiseHp.Reset();
+         burstEnv = 0.0f;
+
          active = false;
          held = false;
          note = -1;
@@ -520,6 +697,87 @@ private:
       }
    }
 
+   // Key tracking for one voice, once per block: the key gain's target for
+   // this block (ramped linearly from the current gain, or snapped on a
+   // fresh voice) and, when keyTilt * octaves is non-zero, a tilt shelf
+   // designed for the voice's current pitch - redesigned only when the tilt
+   // or the pitch (glide) moved since the last design.
+   void PrepareKeyTracking(Voice& v, float keyLevel, float keyTilt, float invFrames, float& target, float& inc)
+   {
+      const float octavesFromC4 = (v.keyNote - 60.0f) / 12.0f;
+      const float levelDb = std::clamp(keyLevel * octavesFromC4, -kKeyLevelMaxDb, kKeyLevelMaxDb);
+      target = (levelDb == 0.0f) ? 1.0f : powf(10.0f, levelDb / 20.0f);
+      if (v.keyFresh)
+      {
+         v.keyGain = target;
+         v.keyFresh = false;
+         inc = 0.0f;
+      }
+      else
+      {
+         inc = (target - v.keyGain) * invFrames;
+      }
+
+      const float tiltDb = std::clamp(keyTilt * octavesFromC4, -kKeyTiltMaxDb, kKeyTiltMaxDb);
+      if (std::fabs(tiltDb) < 0.01f)
+      {
+         v.shelfActive = false;
+         return;
+      }
+      const float f0 = std::max(v.currentFreq, 8.0f);
+      const bool stale = !v.shelfActive || std::fabs(tiltDb - v.shelfDb) > 0.01f ||
+                         std::fabs(f0 - v.shelfHz) > 0.002f * f0;
+      if (!stale)
+         return;
+      DspMath::Biquad proto;
+      float norm = 1.0f;
+      DesignKeyTiltShelf(proto, norm, (double)f0, (double)tiltDb, mSampleRate);
+      if (!v.shelfActive)
+      {
+         v.shelf[0].Reset();
+         v.shelf[1].Reset();
+      }
+      for (DspMath::Biquad& s : v.shelf)
+      {
+         s.b0 = proto.b0;
+         s.b1 = proto.b1;
+         s.b2 = proto.b2;
+         s.a1 = proto.a1;
+         s.a2 = proto.a2;
+      }
+      v.shelfNorm = norm;
+      v.shelfDb = tiltDb;
+      v.shelfHz = f0;
+      v.shelfActive = true;
+   }
+
+   static void ApplyKeyTilt(Voice& v, float& l, float& r)
+   {
+      if (!v.shelfActive)
+         return;
+      l = v.shelf[0].Process(l) * v.shelfNorm;
+      r = v.shelf[1].Process(r) * v.shelfNorm;
+   }
+
+   // One sample of the voice's noise layer at `amount` (already the sum of
+   // the sustained and burst levels), per channel, before the voice gain.
+   // Nothing is generated at amount 0, so the default (both layers off)
+   // leaves the tone bit-identical. The burst envelope always advances, so a
+   // burst fired while transient was 0 cannot linger and pop out later.
+   static float RenderNoise(Voice& v, float amount, float burstCoef)
+   {
+      float out = 0.0f;
+      if (amount > 0.0f)
+         out = v.noiseHp.Process(v.noise.Next() * kNoiseUnitRms).high * amount * kCentrePan;
+      if (v.burstEnv > 0.0f)
+      {
+         v.burstEnv *= burstCoef;
+         if (v.burstEnv < kBurstFloor)
+            v.burstEnv = 0.0f;
+      }
+      return out;
+   }
+
    double mSampleRate = 44100.0;
    NoteEventQueue* mNoteInbox = nullptr;
    int mNoteCursor = 0;
@@ -537,6 +795,15 @@ private:
 
    std::atomic<float> mAmpAdsr[4]{ 5.0f, 250.0f, 0.75f, 200.0f };
    std::atomic<float> mFilterAdsr[4]{ 5.0f, 300.0f, 0.4f, 250.0f };
+
+   // Per-block (not smoothed) noise/key params: each is consumed once per
+   // block (a decay coefficient, a filter corner, a gain target ramped
+   // across the block, a shelf design), so a per-sample smoother would buy
+   // nothing and ParamMailbox's one-call-per-sample contract would not hold.
+   std::atomic<float> mTransientDecayMs{ 15.0f };
+   std::atomic<float> mNoiseToneHz{ 3500.0f };
+   std::atomic<float> mKeyLevel{ 0.0f };
+   std::atomic<float> mKeyTilt{ 0.0f };
 
    Voice mVoices[kMaxVoices];
    uint64_t mAgeCounter = 0;
@@ -707,4 +974,11 @@ void EquationNode::VisitParams(ParamVisitor& v)
    v.Float("filterRelease", filterRelease);
 
    v.Float("drive", drive);
+
+   v.Float("transient", transient);
+   v.Float("transientDecay", transientDecay);
+   v.Float("noiseLevel", noiseLevel);
+   v.Float("noiseTone", noiseTone);
+   v.Float("keyLevel", keyLevel);
+   v.Float("keyTilt", keyTilt);
 }

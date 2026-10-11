@@ -62,6 +62,12 @@ public:
       if (paramName == "filterAttack" || paramName == "filterDecay" ||
           paramName == "filterSustain" || paramName == "filterRelease")
          return { { "filterAmount", 2.0f } };
+      // The burst decay only exists while a burst is sounding; the noise
+      // highpass only filters something when either noise layer is up.
+      if (paramName == "transientDecay")
+         return { { "transient", 1.0f } };
+      if (paramName == "noiseTone")
+         return { { "noiseLevel", 0.5f } };
       return {};
    }
 
@@ -116,6 +122,22 @@ public:
 
    // Saturation / Drive
    float drive = 0.0f;
+
+   // Noise layer (strike transient + sustained "air"). Added per voice after
+   // the voice filter, before drive/volume/pan, through a per-voice 12 dB/oct
+   // highpass at noiseTone. The noise source is white noise scaled to unit
+   // RMS, so a level of 1 puts the noise's RMS (before the highpass) at the
+   // tone's peak. All defaults are neutral: old patches render unchanged.
+   float transient = 0.0f;        // 0..1, note-on burst level x velocity, relative to the voice's peak
+   float transientDecay = 15.0f;  // 1..200 ms, burst time to -60 dB (T60), exponential
+   float noiseLevel = 0.0f;       // 0..1, sustained noise following the amp envelope, relative to the voice level
+   float noiseTone = 3500.0f;     // 200..16000 Hz, highpass corner of both noise layers
+
+   // Key tracking, reference note 60 (C4). Note = incoming MIDI note plus the
+   // octave/semi transposition; free-running mode uses the frequency's
+   // equivalent note (69 + 12*log2(Hz/440)).
+   float keyLevel = 0.0f;         // -12..+12 dB/oct, voice gain = keyLevel*(note-60)/12 dB (clamped +-24 dB)
+   float keyTilt = 0.0f;          // -12..+12 dB/oct, 2nd-harmonic vs fundamental = keyTilt*(note-60)/12 dB (clamped +-15 dB)
 
    // UI oscilloscope cache
    float scopeCache[kScopeCapacity] = {};
