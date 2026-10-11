@@ -34,12 +34,77 @@ def library_block(its):
                                                                  "encodingFormat": os.path.splitext(i["file"])[1].lstrip("."), "contentUrl": i["file"],
                                                                  **({"author": {"@type": "Person", "name": i["author"]}} if i["author"] else {})}}
               for n, i in enumerate(its)]}}
-    lis = "\n".join(f'      <li><a href="{html.escape(i["file"])}" download>{html.escape(i["name"])}</a> ({html.escape(i["category"])}): {html.escape(i["description"])}</li>' for i in its)
+    lis = "\n".join(f'      <li><a href="library/{i["id"]}.html">{html.escape(i["name"])}</a> ({html.escape(i["category"])}): {html.escape(i["description"])}</li>' for i in its)
     return ('<!-- seo:start -->\n  <script type="application/ld+json">\n' + json.dumps(ld, indent=1, ensure_ascii=False) +
             '\n  </script>\n  <noscript>\n    <h2>All library items</h2>\n    <ul>\n' + lis + '\n    </ul>\n  </noscript>\n  <!-- seo:end -->')
 
+def page(i):
+    """One standalone, crawlable page for a library item: /library/<id>.html"""
+    url = f'{BASE}library/{i["id"]}.html'
+    ext = os.path.splitext(i["file"])[1].lstrip(".")
+    t = f'{i["name"]}: free {i["category"] or "library"} for Infinite'
+    d = i["description"] or f'{i["name"]}, a free {i["category"]} for Infinite.'
+    e = html.escape
+    ld = {"@context": "https://schema.org", "@type": "CreativeWork", "name": i["name"], "description": d, "genre": i["category"],
+          "image": i["preview"], "url": url, "isAccessibleForFree": True, "encodingFormat": ext, "contentUrl": i["file"],
+          "isPartOf": {"@type": "CollectionPage", "name": "Infinite Library", "url": BASE + "library.html"},
+          "author": {"@type": "Person", "name": i["author"] or "n1m21n"}}
+    by = f' by {e(i["author"])}' if i["author"] else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#FBFAF6">
+  <title>{e(t)}</title>
+  <meta name="description" content="{e(d)} Free to download for Infinite, the open-source audiovisual workstation.">
+  <link rel="canonical" href="{url}">
+  <meta property="og:title" content="{e(t)}">
+  <meta property="og:description" content="{e(d)}">
+  <meta property="og:image" content="{e(i["preview"])}">
+  <meta property="og:url" content="{url}">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&display=swap">
+  <style>
+    :root{{--bg:#FBFAF6;--ink:#1a1a17;--mute:#6b6a63;--line:#e4e1d6;--acc:#1a1a17}}
+    @media (prefers-color-scheme:dark){{:root{{--bg:#12120f;--ink:#f2f0e8;--mute:#9a988e;--line:#2a2924;--acc:#f2f0e8}}}}
+    body{{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Geist,system-ui,sans-serif}}
+    main{{max-width:720px;margin:0 auto;padding:32px 16px 64px}}
+    nav a{{color:var(--mute);text-decoration:none;font-size:14px}}
+    img{{width:100%;height:auto;border-radius:12px;border:1px solid var(--line);margin:20px 0}}
+    h1{{font-size:32px;line-height:1.15;margin:8px 0}}
+    .meta{{color:var(--mute);font-size:14px}}
+    .btn{{display:inline-block;background:var(--acc);color:var(--bg);padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600;margin:8px 8px 0 0}}
+    .btn.alt{{background:none;color:var(--ink);border:1px solid var(--line)}}
+  </style>
+  <script type="application/ld+json">{json.dumps(ld, ensure_ascii=False)}</script>
+</head>
+<body>
+<main>
+  <nav><a href="../index.html">Infinite</a> / <a href="../library.html">Library</a> / {e(i["name"])}</nav>
+  <h1>{e(i["name"])}</h1>
+  <p class="meta">{e(i["category"] or "Library")} · {e(i["type"])}{by} · free</p>
+  <img src="{e(i["preview"])}" alt="Preview of {e(i["name"])}" loading="eager" width="1200" height="675">
+  <p>{e(d)}</p>
+  <p>Download the file, then open it in Infinite (File, Open for patches; import it into a Field or Sketch node for devices). Infinite is free, open source and runs on macOS, Windows and Linux.</p>
+  <a class="btn" href="{e(i["file"])}" download>Download .{e(ext)}</a>
+  <a class="btn alt" href="../library.html">Back to the Library</a>
+  <a class="btn alt" href="https://github.com/n1m21n/Infinite/releases/latest">Get Infinite</a>
+</main>
+</body>
+</html>
+"""
+
 def main():
     its = items()
+    os.makedirs(os.path.join(W, "library"), exist_ok=True)
+    for f in os.listdir(os.path.join(W, "library")):
+        os.remove(os.path.join(W, "library", f))
+    for i in its:
+        open(os.path.join(W, "library", i["id"] + ".html"), "w").write(page(i))
+        i["page"] = f'{BASE}library/{i["id"]}.html'
     json.dump({"name": "Infinite Library", "url": BASE + "library.html", "count": len(its), "items": its},
               open(os.path.join(W, "assets/library/catalog.json"), "w"), indent=1, ensure_ascii=False)
     p = os.path.join(W, "library.html"); s = open(p).read()
@@ -52,7 +117,7 @@ def main():
     today = datetime.date.today().isoformat()
     pages = [("", 1.0), ("library.html", 0.8), ("artworks.html", 0.6), ("assets/library/catalog.json", 0.3)]
     open(os.path.join(W, "sitemap.xml"), "w").write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-        "".join(f"  <url><loc>{BASE}{u}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for u, pr in pages) + "</urlset>\n")
+        "".join(f"  <url><loc>{BASE}{u}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for u, pr in pages + [(f"library/{i['id']}.html", 0.5) for i in its]) + "</urlset>\n")
     open(os.path.join(W, "robots.txt"), "w").write(
         "# Everyone is welcome, search engines and AI agents included.\nUser-agent: *\nAllow: /\n\n" +
         "".join(f"User-agent: {b}\nAllow: /\n\n" for b in ("GPTBot", "ChatGPT-User", "OAI-SearchBot", "ClaudeBot", "Claude-User", "Claude-SearchBot", "PerplexityBot", "Google-Extended", "Applebot-Extended")) +
@@ -74,7 +139,7 @@ def main():
          "- `.inf` and `.infinite`: a patch. A line-based text file listing nodes and cables. Open it with File, Open in Infinite.",
          "- `.field`: a Field device (a small program for a Field node). Import it into a Field Pixel node, or copy its code.", ""]
     for c, v in byc.items():
-        L += [f"## Library: {c}", ""] + [f"- [{i['name']}]({i['file']}): {i['description']}" for i in v] + [""]
+        L += [f"## Library: {c}", ""] + [f"- [{i['name']}]({i['page']}): {i['description']} (file: {i['file']})" for i in v] + [""]
     open(os.path.join(W, "llms.txt"), "w").write("\n".join(L))
     print(len(its), "items; sitemap, robots, llms.txt, catalog.json, library.html seo block written")
 main()

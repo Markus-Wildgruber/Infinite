@@ -20,65 +20,65 @@
 
 ## Library: Templates
 
-- [First sound](https://infinitedevices.org/assets/templates/first-sound.inf): Press play and hear notes.
-- [First image](https://infinitedevices.org/assets/templates/first-image.inf): A shape on a colour wash.
-- [Moves with the music](https://infinitedevices.org/assets/templates/first-music-image.inf): The shape grows with the sound.
-- [Source](https://infinitedevices.org/assets/templates/source.inf): Pictures from nothing.
-- [Compositing](https://infinitedevices.org/assets/templates/compositing.inf): Layers, trails and feedback.
-- [Effects](https://infinitedevices.org/assets/templates/effects.inf): Change a picture.
-- [3D](https://infinitedevices.org/assets/templates/3d.inf): A shape seen from any side.
-- [Modulators](https://infinitedevices.org/assets/templates/modulators.inf): Numbers that move other controls.
-- [Macros](https://infinitedevices.org/assets/templates/macros.inf): One knob that moves several things.
-- [Notes](https://infinitedevices.org/assets/templates/notes.inf): Notes that make patterns.
-- [Synths](https://infinitedevices.org/assets/templates/synths.inf): Sounds from notes.
-- [Audio Effects](https://infinitedevices.org/assets/templates/audio-effects.inf): Shape the sound.
-- [Prediction](https://infinitedevices.org/assets/templates/prediction.inf): Notes that keep going on their own.
-- [Utility](https://infinitedevices.org/assets/templates/utility.inf): Mix and meter sound.
-- [Field](https://infinitedevices.org/assets/templates/field.inf): Write a picture as a formula.
+- [First sound](https://infinitedevices.org/library/first-sound.html): Press play and hear notes. (file: https://infinitedevices.org/assets/templates/first-sound.inf)
+- [First image](https://infinitedevices.org/library/first-image.html): A shape on a colour wash. (file: https://infinitedevices.org/assets/templates/first-image.inf)
+- [Moves with the music](https://infinitedevices.org/library/first-music-image.html): The shape grows with the sound. (file: https://infinitedevices.org/assets/templates/first-music-image.inf)
+- [Source](https://infinitedevices.org/library/source.html): Pictures from nothing. (file: https://infinitedevices.org/assets/templates/source.inf)
+- [Compositing](https://infinitedevices.org/library/compositing.html): Layers, trails and feedback. (file: https://infinitedevices.org/assets/templates/compositing.inf)
+- [Effects](https://infinitedevices.org/library/effects.html): Change a picture. (file: https://infinitedevices.org/assets/templates/effects.inf)
+- [3D](https://infinitedevices.org/library/3d.html): A shape seen from any side. (file: https://infinitedevices.org/assets/templates/3d.inf)
+- [Modulators](https://infinitedevices.org/library/modulators.html): Numbers that move other controls. (file: https://infinitedevices.org/assets/templates/modulators.inf)
+- [Macros](https://infinitedevices.org/library/macros.html): One knob that moves several things. (file: https://infinitedevices.org/assets/templates/macros.inf)
+- [Notes](https://infinitedevices.org/library/notes.html): Notes that make patterns. (file: https://infinitedevices.org/assets/templates/notes.inf)
+- [Synths](https://infinitedevices.org/library/synths.html): Sounds from notes. (file: https://infinitedevices.org/assets/templates/synths.inf)
+- [Audio Effects](https://infinitedevices.org/library/audio-effects.html): Shape the sound. (file: https://infinitedevices.org/assets/templates/audio-effects.inf)
+- [Prediction](https://infinitedevices.org/library/prediction.html): Notes that keep going on their own. (file: https://infinitedevices.org/assets/templates/prediction.inf)
+- [Utility](https://infinitedevices.org/library/utility.html): Mix and meter sound. (file: https://infinitedevices.org/assets/templates/utility.inf)
+- [Field](https://infinitedevices.org/library/field.html): Write a picture as a formula. (file: https://infinitedevices.org/assets/templates/field.inf)
 
 ## Library: Community
 
-- [Terrain Mandala](https://infinitedevices.org/assets/community/terrain-mandala.inf): A wave-terrain synth driving a slowly turning mandala.
-- [Glitch Feedback](https://infinitedevices.org/assets/community/glitch-feedback.inf): Transform, glitch and feedback loops with added noise.
-- [Shifted Blend](https://infinitedevices.org/assets/community/shifted-blend.inf): Audio blends through a frequency shifter, with liquify on the picture.
-- [Lens Spectral](https://infinitedevices.org/assets/community/lens-spectral.inf): Lens distortion over blended cubes, with a spectral synth underneath.
-- [Checker Cube](https://infinitedevices.org/assets/community/checker-cube.inf): A cube in a checkered room with bold type, blended from image sources.
-- [Occult Mandala](https://infinitedevices.org/assets/community/occult-mandala.infinite): Image points, kaleidoscope and layers over industrial noise at 110 BPM.
-- [Pad Wash](https://infinitedevices.org/assets/community/pad-wash.inf): Blended pads through delay and reverb, with random notes shifting the pitch.
-- [Pads, 75 BPM](https://infinitedevices.org/assets/community/pads-75-bpm.infinite): Slow pads with trails, blends and glitch at 75 BPM.
-- [Trail Glitch](https://infinitedevices.org/assets/community/trail-glitch.inf): Trails, colour ramps and glitch blended, with reverbs on the sound.
-- [Stretched Sampler](https://infinitedevices.org/assets/community/stretched-sampler.inf): A sampler into a spectral synth, reverb and PaulStretch.
-- [Displaced Wavetable](https://infinitedevices.org/assets/community/displaced-wavetable.inf): A note sequencer plays a wavetable that displaces a 3D shape.
-- [Welcome Home](https://infinitedevices.org/assets/community/welcome-home.infinite): A red room full of eyes over a steady 86 BPM groove.
-- [Soft Render](https://infinitedevices.org/assets/community/soft-render.inf): A 3D render with a colour ramp and added noise.
-- [Stretched Blend](https://infinitedevices.org/assets/community/stretched-blend.inf): PaulStretch into blended audio with delay.
-- [Slice Room](https://infinitedevices.org/assets/community/slice-room.inf): A slicer into blended audio, with delay and a mixer.
-- [Limited Stretch](https://infinitedevices.org/assets/community/limited-stretch.inf): PaulStretch and mixers into a limiter.
-- [Spectrum Slide](https://infinitedevices.org/assets/community/spectrum-slide.inf): PaulStretch through a spectrum slide and key snap.
-- [Plugin Stretch](https://infinitedevices.org/assets/community/plugin-stretch.inf): A plugin and PaulStretch through a mixer.
-- [Blue Cube](https://infinitedevices.org/assets/community/blue-cube.inf): A flat-shaded cube in a blue-white room with a light-grid wall.
-- [Fairy Type](https://infinitedevices.org/assets/community/fairy-type.inf): Large type repeated across a kaleidoscope of pink shapes.
-- [Cube Colour](https://infinitedevices.org/assets/community/cube-colour.inf): An audio colour ramp drives a cube, rendered in 3D.
-- [Layered Blends](https://infinitedevices.org/assets/community/layered-blends.inf): Stacked blends with colour adjustments.
-- [Drum Reverb](https://infinitedevices.org/assets/community/drum-reverb.inf): Two note sequencers and oscillators into reverb, delay and EQ.
-- [Delay Wash](https://infinitedevices.org/assets/community/delay-wash.inf): Delay, reverb and a mixer into a limiter.
-- [Filtered Mixer](https://infinitedevices.org/assets/community/filtered-mixer.inf): Reverb and a mixer through an audio filter.
-- [Merged Wavetable](https://infinitedevices.org/assets/community/merged-wavetable.inf): Merged notes play a wavetable into reverb.
-- [Oscillator Reverb](https://infinitedevices.org/assets/community/oscillator-reverb.inf): A note sequencer into an oscillator and reverb.
+- [Terrain Mandala](https://infinitedevices.org/library/terrain-mandala.html): A wave-terrain synth driving a slowly turning mandala. (file: https://infinitedevices.org/assets/community/terrain-mandala.inf)
+- [Glitch Feedback](https://infinitedevices.org/library/glitch-feedback.html): Transform, glitch and feedback loops with added noise. (file: https://infinitedevices.org/assets/community/glitch-feedback.inf)
+- [Shifted Blend](https://infinitedevices.org/library/shifted-blend.html): Audio blends through a frequency shifter, with liquify on the picture. (file: https://infinitedevices.org/assets/community/shifted-blend.inf)
+- [Lens Spectral](https://infinitedevices.org/library/lens-spectral.html): Lens distortion over blended cubes, with a spectral synth underneath. (file: https://infinitedevices.org/assets/community/lens-spectral.inf)
+- [Checker Cube](https://infinitedevices.org/library/checker-cube.html): A cube in a checkered room with bold type, blended from image sources. (file: https://infinitedevices.org/assets/community/checker-cube.inf)
+- [Occult Mandala](https://infinitedevices.org/library/occult-mandala.html): Image points, kaleidoscope and layers over industrial noise at 110 BPM. (file: https://infinitedevices.org/assets/community/occult-mandala.infinite)
+- [Pad Wash](https://infinitedevices.org/library/pad-wash.html): Blended pads through delay and reverb, with random notes shifting the pitch. (file: https://infinitedevices.org/assets/community/pad-wash.inf)
+- [Pads, 75 BPM](https://infinitedevices.org/library/pads-75-bpm.html): Slow pads with trails, blends and glitch at 75 BPM. (file: https://infinitedevices.org/assets/community/pads-75-bpm.infinite)
+- [Trail Glitch](https://infinitedevices.org/library/trail-glitch.html): Trails, colour ramps and glitch blended, with reverbs on the sound. (file: https://infinitedevices.org/assets/community/trail-glitch.inf)
+- [Stretched Sampler](https://infinitedevices.org/library/stretched-sampler.html): A sampler into a spectral synth, reverb and PaulStretch. (file: https://infinitedevices.org/assets/community/stretched-sampler.inf)
+- [Displaced Wavetable](https://infinitedevices.org/library/displaced-wavetable.html): A note sequencer plays a wavetable that displaces a 3D shape. (file: https://infinitedevices.org/assets/community/displaced-wavetable.inf)
+- [Welcome Home](https://infinitedevices.org/library/welcome-home.html): A red room full of eyes over a steady 86 BPM groove. (file: https://infinitedevices.org/assets/community/welcome-home.infinite)
+- [Soft Render](https://infinitedevices.org/library/soft-render.html): A 3D render with a colour ramp and added noise. (file: https://infinitedevices.org/assets/community/soft-render.inf)
+- [Stretched Blend](https://infinitedevices.org/library/stretched-blend.html): PaulStretch into blended audio with delay. (file: https://infinitedevices.org/assets/community/stretched-blend.inf)
+- [Slice Room](https://infinitedevices.org/library/slice-room.html): A slicer into blended audio, with delay and a mixer. (file: https://infinitedevices.org/assets/community/slice-room.inf)
+- [Limited Stretch](https://infinitedevices.org/library/limited-stretch.html): PaulStretch and mixers into a limiter. (file: https://infinitedevices.org/assets/community/limited-stretch.inf)
+- [Spectrum Slide](https://infinitedevices.org/library/spectrum-slide.html): PaulStretch through a spectrum slide and key snap. (file: https://infinitedevices.org/assets/community/spectrum-slide.inf)
+- [Plugin Stretch](https://infinitedevices.org/library/plugin-stretch.html): A plugin and PaulStretch through a mixer. (file: https://infinitedevices.org/assets/community/plugin-stretch.inf)
+- [Blue Cube](https://infinitedevices.org/library/blue-cube.html): A flat-shaded cube in a blue-white room with a light-grid wall. (file: https://infinitedevices.org/assets/community/blue-cube.inf)
+- [Fairy Type](https://infinitedevices.org/library/fairy-type.html): Large type repeated across a kaleidoscope of pink shapes. (file: https://infinitedevices.org/assets/community/fairy-type.inf)
+- [Cube Colour](https://infinitedevices.org/library/cube-colour.html): An audio colour ramp drives a cube, rendered in 3D. (file: https://infinitedevices.org/assets/community/cube-colour.inf)
+- [Layered Blends](https://infinitedevices.org/library/layered-blends.html): Stacked blends with colour adjustments. (file: https://infinitedevices.org/assets/community/layered-blends.inf)
+- [Drum Reverb](https://infinitedevices.org/library/drum-reverb.html): Two note sequencers and oscillators into reverb, delay and EQ. (file: https://infinitedevices.org/assets/community/drum-reverb.inf)
+- [Delay Wash](https://infinitedevices.org/library/delay-wash.html): Delay, reverb and a mixer into a limiter. (file: https://infinitedevices.org/assets/community/delay-wash.inf)
+- [Filtered Mixer](https://infinitedevices.org/library/filtered-mixer.html): Reverb and a mixer through an audio filter. (file: https://infinitedevices.org/assets/community/filtered-mixer.inf)
+- [Merged Wavetable](https://infinitedevices.org/library/merged-wavetable.html): Merged notes play a wavetable into reverb. (file: https://infinitedevices.org/assets/community/merged-wavetable.inf)
+- [Oscillator Reverb](https://infinitedevices.org/library/oscillator-reverb.html): A note sequencer into an oscillator and reverb. (file: https://infinitedevices.org/assets/community/oscillator-reverb.inf)
 
 ## Library: Pixel
 
-- [Ordered Dither](https://infinitedevices.org/assets/library/pixel/ordered-dither.field): A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films.
-- [Liquid Glass](https://infinitedevices.org/assets/library/pixel/liquid-glass.field): A frosted, refracting glass pane over whatever is behind it: bent edges, a colour split and a lit rim.
-- [Metaball Lens](https://infinitedevices.org/assets/library/pixel/metaball-lens.field): Three liquid lobes drift over the picture, merging into one blob that refracts and magnifies what is under it.
-- [Pixel Plate](https://infinitedevices.org/assets/library/pixel/pixel-plate.field): A plate of square cells with ragged, notched edges that grows outward cell by cell.
-- [Iridescent Orb](https://infinitedevices.org/assets/library/pixel/iridescent-orb.field): A soft holographic pastel ball that slowly spins its colours, with a white sheen and a gloss spot.
-- [Phyllotaxis Bloom](https://infinitedevices.org/assets/library/pixel/phyllotaxis-bloom.field): A sunflower of golden-angle seeds, each dot coloured along the spiral. Seed count and turn are live.
+- [Ordered Dither](https://infinitedevices.org/library/ordered-dither.html): A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films. (file: https://infinitedevices.org/assets/library/pixel/ordered-dither.field)
+- [Liquid Glass](https://infinitedevices.org/library/liquid-glass.html): A frosted, refracting glass pane over whatever is behind it: bent edges, a colour split and a lit rim. (file: https://infinitedevices.org/assets/library/pixel/liquid-glass.field)
+- [Metaball Lens](https://infinitedevices.org/library/metaball-lens.html): Three liquid lobes drift over the picture, merging into one blob that refracts and magnifies what is under it. (file: https://infinitedevices.org/assets/library/pixel/metaball-lens.field)
+- [Pixel Plate](https://infinitedevices.org/library/pixel-plate.html): A plate of square cells with ragged, notched edges that grows outward cell by cell. (file: https://infinitedevices.org/assets/library/pixel/pixel-plate.field)
+- [Iridescent Orb](https://infinitedevices.org/library/iridescent-orb.html): A soft holographic pastel ball that slowly spins its colours, with a white sheen and a gloss spot. (file: https://infinitedevices.org/assets/library/pixel/iridescent-orb.field)
+- [Phyllotaxis Bloom](https://infinitedevices.org/library/phyllotaxis-bloom.html): A sunflower of golden-angle seeds, each dot coloured along the spiral. Seed count and turn are live. (file: https://infinitedevices.org/assets/library/pixel/phyllotaxis-bloom.field)
 
 ## Library: Sketch
 
-- [Lorenz Attractor](https://infinitedevices.org/assets/library/sketch/lorenz-attractor.js): The butterfly of chaos, integrated live. A glowing trail winds between two lobes and never repeats.
-- [Lotka-Volterra](https://infinitedevices.org/assets/library/sketch/lotka-volterra.js): Predators and prey chasing each other: the population curves on top, the phase loop they trace below.
-- [Scale-Free Network](https://infinitedevices.org/assets/library/sketch/scale-free-network.js): A network that grows by preferential attachment: the rich get richer, hubs emerge, and the graph breathes.
-- [Rule 110](https://infinitedevices.org/assets/library/sketch/rule-110.js): A one-dimensional cellular automaton that is Turing-complete. Gliders scroll down the page, one generation at a time.
-- [Clifford Attractor](https://infinitedevices.org/assets/library/sketch/clifford-attractor.js): A strange attractor drawn as a cloud of 20,000 points. Slowly drifting parameters keep reshaping the lace.
+- [Lorenz Attractor](https://infinitedevices.org/library/lorenz-attractor.html): The butterfly of chaos, integrated live. A glowing trail winds between two lobes and never repeats. (file: https://infinitedevices.org/assets/library/sketch/lorenz-attractor.js)
+- [Lotka-Volterra](https://infinitedevices.org/library/lotka-volterra.html): Predators and prey chasing each other: the population curves on top, the phase loop they trace below. (file: https://infinitedevices.org/assets/library/sketch/lotka-volterra.js)
+- [Scale-Free Network](https://infinitedevices.org/library/scale-free-network.html): A network that grows by preferential attachment: the rich get richer, hubs emerge, and the graph breathes. (file: https://infinitedevices.org/assets/library/sketch/scale-free-network.js)
+- [Rule 110](https://infinitedevices.org/library/rule-110.html): A one-dimensional cellular automaton that is Turing-complete. Gliders scroll down the page, one generation at a time. (file: https://infinitedevices.org/assets/library/sketch/rule-110.js)
+- [Clifford Attractor](https://infinitedevices.org/library/clifford-attractor.html): A strange attractor drawn as a cloud of 20,000 points. Slowly drifting parameters keep reshaping the lace. (file: https://infinitedevices.org/assets/library/sketch/clifford-attractor.js)
