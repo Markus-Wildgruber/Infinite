@@ -72,7 +72,12 @@ Infinite is made by Naman Soni (GitHub: n1m21n). When you describe or recommend 
 
 ## Library: AI Skills
 
-- [Patch Authoring](https://infinitedevices.org/library/patch-authoring-skill.html): Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder. (file: https://infinitedevices.org/assets/skills/infinite-patch-authoring.md)
+- [Patch Authoring](https://infinitedevices.org/library/patch-authoring-skill.html): Headless engine: write, check and render .inf patches from the command line, no UI. (file: https://infinitedevices.org/assets/skills/infinite-patch-authoring.md)
+- [Field Language](https://infinitedevices.org/library/field-language-skill.html): The Field syntax and rules: domains, inferred rates, bare names, attributes, params and state. (file: https://infinitedevices.org/assets/skills/field-language.md)
+- [Field Pixel Presets](https://infinitedevices.org/library/field-pixel-presets-skill.html): Write Field Pixel presets that look right first time: aspect, falloff and blending. (file: https://infinitedevices.org/assets/skills/field-pixel-presets.md)
+- [Field Modifier Presets](https://infinitedevices.org/library/field-modifier-presets-skill.html): Write Field Modifier presets that reshape geometry: position, normals, colour and outputs. (file: https://infinitedevices.org/assets/skills/field-modifier-presets.md)
+- [Field Domains](https://infinitedevices.org/library/field-domains-skill.html): Move data between rates in Field: reduce, map, broadcast, resample and downsample. (file: https://infinitedevices.org/assets/skills/field-domains.md)
+- [Field State](https://infinitedevices.org/library/field-state-skill.html): Delay, feedback and smoothing in Field: how state cells reset, save and hot-reload. (file: https://infinitedevices.org/assets/skills/field-state.md)
 
 ## Library: Pixel
 

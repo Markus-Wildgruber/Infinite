@@ -7,10 +7,65 @@
    "category": "AI Skills",
    "kind": "Skill",
    "author": "n1m21n",
-   "description": "Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder.",
+   "description": "Headless engine: write, check and render .inf patches from the command line, no UI.",
    "price": 0,
-   "preview": "assets/skills/patch-authoring.webp",
+   "preview": "assets/skills/infinite-patch-authoring.webp",
    "file": "assets/skills/infinite-patch-authoring.md"
+  },
+  {
+   "id": "field-language-skill",
+   "name": "Field Language",
+   "category": "AI Skills",
+   "kind": "Skill",
+   "author": "n1m21n",
+   "description": "The Field syntax and rules: domains, inferred rates, bare names, attributes, params and state.",
+   "price": 0,
+   "preview": "assets/skills/field-language.webp",
+   "file": "assets/skills/field-language.md"
+  },
+  {
+   "id": "field-pixel-presets-skill",
+   "name": "Field Pixel Presets",
+   "category": "AI Skills",
+   "kind": "Skill",
+   "author": "n1m21n",
+   "description": "Write Field Pixel presets that look right first time: aspect, falloff and blending.",
+   "price": 0,
+   "preview": "assets/skills/field-pixel-presets.webp",
+   "file": "assets/skills/field-pixel-presets.md"
+  },
+  {
+   "id": "field-modifier-presets-skill",
+   "name": "Field Modifier Presets",
+   "category": "AI Skills",
+   "kind": "Skill",
+   "author": "n1m21n",
+   "description": "Write Field Modifier presets that reshape geometry: position, normals, colour and outputs.",
+   "price": 0,
+   "preview": "assets/skills/field-modifier-presets.webp",
+   "file": "assets/skills/field-modifier-presets.md"
+  },
+  {
+   "id": "field-domains-skill",
+   "name": "Field Domains",
+   "category": "AI Skills",
+   "kind": "Skill",
+   "author": "n1m21n",
+   "description": "Move data between rates in Field: reduce, map, broadcast, resample and downsample.",
+   "price": 0,
+   "preview": "assets/skills/field-domains.webp",
+   "file": "assets/skills/field-domains.md"
+  },
+  {
+   "id": "field-state-skill",
+   "name": "Field State",
+   "category": "AI Skills",
+   "kind": "Skill",
+   "author": "n1m21n",
+   "description": "Delay, feedback and smoothing in Field: how state cells reset, save and hot-reload.",
+   "price": 0,
+   "preview": "assets/skills/field-state.webp",
+   "file": "assets/skills/field-state.md"
   }
  ]
 }

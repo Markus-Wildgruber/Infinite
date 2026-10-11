@@ -109,7 +109,7 @@
       <div class="container">
         <div class="lib-how">
           <div><p class="recipe-num mono">01</p><h3>Download</h3><p>Pick an item and press Download. You get one plain-text file: <code>.inf</code> for a template, <code>.field</code> for Pixel, <code>.js</code> for Sketch, <code>.md</code> for an AI skill.</p></div>
-          <div><p class="recipe-num mono">02</p><h3>Import</h3><p>Template: choose <b>File, Open</b> and pick the file. Pixel: add a Field Pixel node and press <b>Import</b> in its Devices row. Sketch: open a Sketch node's editor and paste the file. AI skill: save it as <code>SKILL.md</code> in your agent's skills folder, for example <code>.claude/skills/infinite-patch-authoring/</code>.</p></div>
+          <div><p class="recipe-num mono">02</p><h3>Import</h3><p>Template: choose <b>File, Open</b> and pick the file. Pixel: add a Field Pixel node and press <b>Import</b> in its Devices row. Sketch: open a Sketch node's editor and paste the file. AI skill: save it as <code>SKILL.md</code> in your agent's skills folder, for example <code>.claude/skills/field-language/</code>.</p></div>
           <div><p class="recipe-num mono">03</p><h3>Patch</h3><p>Filters read an image you cable in. Generators draw on their own. Every knob can be modulated.</p></div>
         </div>
       </div>
@@ -130,7 +130,7 @@
  },
  "mainEntity": {
   "@type": "ItemList",
-  "numberOfItems": 54,
+  "numberOfItems": 59,
   "itemListElement": [
    {
     "@type": "ListItem",
@@ -834,9 +834,9 @@
     "item": {
      "@type": "CreativeWork",
      "name": "Patch Authoring",
-     "description": "Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder.",
+     "description": "Headless engine: write, check and render .inf patches from the command line, no UI.",
      "genre": "AI Skills",
-     "image": "https://infinitedevices.org/assets/skills/patch-authoring.webp",
+     "image": "https://infinitedevices.org/assets/skills/infinite-patch-authoring.webp",
      "isAccessibleForFree": true,
      "encodingFormat": "md",
      "contentUrl": "https://infinitedevices.org/assets/skills/infinite-patch-authoring.md",
@@ -851,6 +851,96 @@
     "position": 44,
     "item": {
      "@type": "CreativeWork",
+     "name": "Field Language",
+     "description": "The Field syntax and rules: domains, inferred rates, bare names, attributes, params and state.",
+     "genre": "AI Skills",
+     "image": "https://infinitedevices.org/assets/skills/field-language.webp",
+     "isAccessibleForFree": true,
+     "encodingFormat": "md",
+     "contentUrl": "https://infinitedevices.org/assets/skills/field-language.md",
+     "author": {
+      "@type": "Person",
+      "name": "n1m21n"
+     }
+    }
+   },
+   {
+    "@type": "ListItem",
+    "position": 45,
+    "item": {
+     "@type": "CreativeWork",
+     "name": "Field Pixel Presets",
+     "description": "Write Field Pixel presets that look right first time: aspect, falloff and blending.",
+     "genre": "AI Skills",
+     "image": "https://infinitedevices.org/assets/skills/field-pixel-presets.webp",
+     "isAccessibleForFree": true,
+     "encodingFormat": "md",
+     "contentUrl": "https://infinitedevices.org/assets/skills/field-pixel-presets.md",
+     "author": {
+      "@type": "Person",
+      "name": "n1m21n"
+     }
+    }
+   },
+   {
+    "@type": "ListItem",
+    "position": 46,
+    "item": {
+     "@type": "CreativeWork",
+     "name": "Field Modifier Presets",
+     "description": "Write Field Modifier presets that reshape geometry: position, normals, colour and outputs.",
+     "genre": "AI Skills",
+     "image": "https://infinitedevices.org/assets/skills/field-modifier-presets.webp",
+     "isAccessibleForFree": true,
+     "encodingFormat": "md",
+     "contentUrl": "https://infinitedevices.org/assets/skills/field-modifier-presets.md",
+     "author": {
+      "@type": "Person",
+      "name": "n1m21n"
+     }
+    }
+   },
+   {
+    "@type": "ListItem",
+    "position": 47,
+    "item": {
+     "@type": "CreativeWork",
+     "name": "Field Domains",
+     "description": "Move data between rates in Field: reduce, map, broadcast, resample and downsample.",
+     "genre": "AI Skills",
+     "image": "https://infinitedevices.org/assets/skills/field-domains.webp",
+     "isAccessibleForFree": true,
+     "encodingFormat": "md",
+     "contentUrl": "https://infinitedevices.org/assets/skills/field-domains.md",
+     "author": {
+      "@type": "Person",
+      "name": "n1m21n"
+     }
+    }
+   },
+   {
+    "@type": "ListItem",
+    "position": 48,
+    "item": {
+     "@type": "CreativeWork",
+     "name": "Field State",
+     "description": "Delay, feedback and smoothing in Field: how state cells reset, save and hot-reload.",
+     "genre": "AI Skills",
+     "image": "https://infinitedevices.org/assets/skills/field-state.webp",
+     "isAccessibleForFree": true,
+     "encodingFormat": "md",
+     "contentUrl": "https://infinitedevices.org/assets/skills/field-state.md",
+     "author": {
+      "@type": "Person",
+      "name": "n1m21n"
+     }
+    }
+   },
+   {
+    "@type": "ListItem",
+    "position": 49,
+    "item": {
+     "@type": "CreativeWork",
      "name": "Ordered Dither",
      "description": "A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films.",
      "genre": "Pixel",
@@ -862,7 +952,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 45,
+    "position": 50,
     "item": {
      "@type": "CreativeWork",
      "name": "Liquid Glass",
@@ -876,7 +966,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 46,
+    "position": 51,
     "item": {
      "@type": "CreativeWork",
      "name": "Metaball Lens",
@@ -890,7 +980,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 47,
+    "position": 52,
     "item": {
      "@type": "CreativeWork",
      "name": "Pixel Plate",
@@ -904,7 +994,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 48,
+    "position": 53,
     "item": {
      "@type": "CreativeWork",
      "name": "Iridescent Orb",
@@ -918,7 +1008,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 49,
+    "position": 54,
     "item": {
      "@type": "CreativeWork",
      "name": "Phyllotaxis Bloom",
@@ -932,7 +1022,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 50,
+    "position": 55,
     "item": {
      "@type": "CreativeWork",
      "name": "Lorenz Attractor",
@@ -946,7 +1036,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 51,
+    "position": 56,
     "item": {
      "@type": "CreativeWork",
      "name": "Lotka-Volterra",
@@ -960,7 +1050,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 52,
+    "position": 57,
     "item": {
      "@type": "CreativeWork",
      "name": "Scale-Free Network",
@@ -974,7 +1064,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 53,
+    "position": 58,
     "item": {
      "@type": "CreativeWork",
      "name": "Rule 110",
@@ -988,7 +1078,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 54,
+    "position": 59,
     "item": {
      "@type": "CreativeWork",
      "name": "Clifford Attractor",
@@ -1049,7 +1139,12 @@
       <li><a href="library/filtered-mixer.html">Filtered Mixer</a> (Community): Reverb and a mixer through an audio filter.</li>
       <li><a href="library/merged-wavetable.html">Merged Wavetable</a> (Community): Merged notes play a wavetable into reverb.</li>
       <li><a href="library/oscillator-reverb.html">Oscillator Reverb</a> (Community): A note sequencer into an oscillator and reverb.</li>
-      <li><a href="library/patch-authoring-skill.html">Patch Authoring</a> (AI Skills): Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent&#x27;s skills folder.</li>
+      <li><a href="library/patch-authoring-skill.html">Patch Authoring</a> (AI Skills): Headless engine: write, check and render .inf patches from the command line, no UI.</li>
+      <li><a href="library/field-language-skill.html">Field Language</a> (AI Skills): The Field syntax and rules: domains, inferred rates, bare names, attributes, params and state.</li>
+      <li><a href="library/field-pixel-presets-skill.html">Field Pixel Presets</a> (AI Skills): Write Field Pixel presets that look right first time: aspect, falloff and blending.</li>
+      <li><a href="library/field-modifier-presets-skill.html">Field Modifier Presets</a> (AI Skills): Write Field Modifier presets that reshape geometry: position, normals, colour and outputs.</li>
+      <li><a href="library/field-domains-skill.html">Field Domains</a> (AI Skills): Move data between rates in Field: reduce, map, broadcast, resample and downsample.</li>
+      <li><a href="library/field-state-skill.html">Field State</a> (AI Skills): Delay, feedback and smoothing in Field: how state cells reset, save and hot-reload.</li>
       <li><a href="library/ordered-dither.html">Ordered Dither</a> (Pixel): A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films.</li>
       <li><a href="library/liquid-glass.html">Liquid Glass</a> (Pixel): A frosted, refracting glass pane over whatever is behind it: bent edges, a colour split and a lit rim.</li>
       <li><a href="library/metaball-lens.html">Metaball Lens</a> (Pixel): Three liquid lobes drift over the picture, merging into one blob that refracts and magnifies what is under it.</li>
@@ -1066,6 +1161,6 @@
   <!-- seo:end -->
 
   
-  <script src="library.js?v=14"></script>
+  <script src="library.js?v=15"></script>
 </body>
 </html>

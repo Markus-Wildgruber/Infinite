@@ -1,7 +1,7 @@
 {
  "name": "Infinite Library",
  "url": "https://infinitedevices.org/library.html",
- "count": 54,
+ "count": 59,
  "items": [
   {
    "id": "first-sound",
@@ -512,12 +512,72 @@
    "name": "Patch Authoring",
    "category": "AI Skills",
    "type": "Skill",
-   "description": "Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder.",
+   "description": "Headless engine: write, check and render .inf patches from the command line, no UI.",
    "author": "n1m21n",
    "price": 0,
    "file": "https://infinitedevices.org/assets/skills/infinite-patch-authoring.md",
-   "preview": "https://infinitedevices.org/assets/skills/patch-authoring.webp",
+   "preview": "https://infinitedevices.org/assets/skills/infinite-patch-authoring.webp",
    "page": "https://infinitedevices.org/library/patch-authoring-skill.html"
+  },
+  {
+   "id": "field-language-skill",
+   "name": "Field Language",
+   "category": "AI Skills",
+   "type": "Skill",
+   "description": "The Field syntax and rules: domains, inferred rates, bare names, attributes, params and state.",
+   "author": "n1m21n",
+   "price": 0,
+   "file": "https://infinitedevices.org/assets/skills/field-language.md",
+   "preview": "https://infinitedevices.org/assets/skills/field-language.webp",
+   "page": "https://infinitedevices.org/library/field-language-skill.html"
+  },
+  {
+   "id": "field-pixel-presets-skill",
+   "name": "Field Pixel Presets",
+   "category": "AI Skills",
+   "type": "Skill",
+   "description": "Write Field Pixel presets that look right first time: aspect, falloff and blending.",
+   "author": "n1m21n",
+   "price": 0,
+   "file": "https://infinitedevices.org/assets/skills/field-pixel-presets.md",
+   "preview": "https://infinitedevices.org/assets/skills/field-pixel-presets.webp",
+   "page": "https://infinitedevices.org/library/field-pixel-presets-skill.html"
+  },
+  {
+   "id": "field-modifier-presets-skill",
+   "name": "Field Modifier Presets",
+   "category": "AI Skills",
+   "type": "Skill",
+   "description": "Write Field Modifier presets that reshape geometry: position, normals, colour and outputs.",
+   "author": "n1m21n",
+   "price": 0,
+   "file": "https://infinitedevices.org/assets/skills/field-modifier-presets.md",
+   "preview": "https://infinitedevices.org/assets/skills/field-modifier-presets.webp",
+   "page": "https://infinitedevices.org/library/field-modifier-presets-skill.html"
+  },
+  {
+   "id": "field-domains-skill",
+   "name": "Field Domains",
+   "category": "AI Skills",
+   "type": "Skill",
+   "description": "Move data between rates in Field: reduce, map, broadcast, resample and downsample.",
+   "author": "n1m21n",
+   "price": 0,
+   "file": "https://infinitedevices.org/assets/skills/field-domains.md",
+   "preview": "https://infinitedevices.org/assets/skills/field-domains.webp",
+   "page": "https://infinitedevices.org/library/field-domains-skill.html"
+  },
+  {
+   "id": "field-state-skill",
+   "name": "Field State",
+   "category": "AI Skills",
+   "type": "Skill",
+   "description": "Delay, feedback and smoothing in Field: how state cells reset, save and hot-reload.",
+   "author": "n1m21n",
+   "price": 0,
+   "file": "https://infinitedevices.org/assets/skills/field-state.md",
+   "preview": "https://infinitedevices.org/assets/skills/field-state.webp",
+   "page": "https://infinitedevices.org/library/field-state-skill.html"
   },
   {
    "id": "ordered-dither",
