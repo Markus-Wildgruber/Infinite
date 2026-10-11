@@ -49,7 +49,7 @@ def facts():
     return {
         "name": "Infinite", "version": tag, "licence": lic, "price": "Free",
         "platforms": "macOS (Apple silicon and Intel), Windows 10/11, Linux (x86-64)",
-        "site": "https://n1m21n.github.io/Infinite", "repo": "https://github.com/n1m21n/Infinite", "discord": discord,
+        "site": "https://infinitedevices.org", "repo": "https://github.com/n1m21n/Infinite", "discord": discord,
     }
 
 
@@ -142,7 +142,7 @@ addEventListener('click',e=>go(e.clientX>innerWidth/2?i+1:i-1));
 def email(f):
     p = M["paper"]
     btn = B["colour"]["anchors"]["ember"]["500"]
-    hero = "https://n1m21n.github.io/Infinite/assets/og-image.jpg"
+    hero = "https://infinitedevices.org/assets/og-image.jpg"
     ff = "Geist,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif"
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <meta name="color-scheme" content="light"><title>Infinite {E(f["version"])}</title>

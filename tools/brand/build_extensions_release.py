@@ -21,7 +21,7 @@ for platform, entry in pack['files'].items():
     target = site / relative
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, target)
-    entry['url'] = f'https://n1m21n.github.io/Infinite/{relative}'
+    entry['url'] = f'https://infinitedevices.org/{relative}'
     name, detail = labels[platform]
     size = source.stat().st_size / 1_000_000
     buttons.append(f'<a class="btn btn-dl" href="{relative}" download><span><b>{name}</b><small>{detail} · {size:.1f} MB</small></span></a>')
@@ -91,7 +91,7 @@ for filename in ['index.html', 'library.html']:
 sitemap = site / 'sitemap.xml'
 text = sitemap.read_text()
 if 'extensions.html' not in text:
-    text = text.replace('</urlset>', '  <url><loc>https://n1m21n.github.io/Infinite/extensions.html</loc><priority>0.6</priority></url>\n</urlset>')
+    text = text.replace('</urlset>', '  <url><loc>https://infinitedevices.org/extensions.html</loc><priority>0.6</priority></url>\n</urlset>')
     sitemap.write_text(text)
 
 notes = '''## Download Infinite v0.5.0
@@ -104,7 +104,7 @@ Choose one app download for your platform.
 | Windows ARM64 | [Infinite-windows-ARM64.zip](https://github.com/n1m21n/Infinite/releases/download/v0.5.0/Infinite-windows-ARM64.zip) |
 | Linux x86_64 | [Infinite-x86_64.AppImage](https://github.com/n1m21n/Infinite/releases/download/v0.5.0/Infinite-x86_64.AppImage) |
 
-Optional Tracking packs install from **Settings → Extensions** or the [Extensions page](https://n1m21n.github.io/Infinite/extensions.html). The small `extensions.json` asset is used automatically by the app.
+Optional Tracking packs install from **Settings → Extensions** or the [Extensions page](https://infinitedevices.org/extensions.html). The small `extensions.json` asset is used automatically by the app.
 
 ## What's new
 - More consistent controls, previews, menus and editor windows, with improved light-theme contrast and reduced motion.
@@ -120,7 +120,7 @@ Optional Tracking packs install from **Settings → Extensions** or the [Extensi
 
 **Existing patches:** Palette colours may look different. Re-check Ocean and Audio Ribbon orientation. Rename Field variables called `beat` or `noteNum`.
 
-**Manuals:** [Node reference](https://n1m21n.github.io/Infinite/assets/Infinite_Node_Reference_Manual.pdf) · [Field language](https://n1m21n.github.io/Infinite/assets/Field_Language_Manual.pdf) · [Headless guide](https://n1m21n.github.io/Infinite/assets/Infinite_Headless_User_Guide.pdf) · [Node field guide](https://n1m21n.github.io/Infinite/assets/The_Node_Field_Guide.pdf)
+**Manuals:** [Node reference](https://infinitedevices.org/assets/Infinite_Node_Reference_Manual.pdf) · [Field language](https://infinitedevices.org/assets/Field_Language_Manual.pdf) · [Headless guide](https://infinitedevices.org/assets/Infinite_Headless_User_Guide.pdf) · [Node field guide](https://infinitedevices.org/assets/The_Node_Field_Guide.pdf)
 '''
 (repo / 'docs/release-notes-v0.5.0.md').write_text(notes)
 (assets / 'notes-clean.md').write_text(notes)

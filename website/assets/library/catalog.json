@@ -1,6 +1,6 @@
 {
  "name": "Infinite Library",
- "url": "https://n1m21n.github.io/Infinite/library.html",
+ "url": "https://infinitedevices.org/library.html",
  "count": 53,
  "items": [
   {
@@ -11,8 +11,8 @@
    "description": "Press play and hear notes.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/first-sound.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/first-sound.webp"
+   "file": "https://infinitedevices.org/assets/templates/first-sound.inf",
+   "preview": "https://infinitedevices.org/assets/templates/first-sound.webp"
   },
   {
    "id": "first-image",
@@ -22,8 +22,8 @@
    "description": "A shape on a colour wash.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/first-image.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/first-image.webp"
+   "file": "https://infinitedevices.org/assets/templates/first-image.inf",
+   "preview": "https://infinitedevices.org/assets/templates/first-image.webp"
   },
   {
    "id": "first-music-image",
@@ -33,8 +33,8 @@
    "description": "The shape grows with the sound.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/first-music-image.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/first-music-image.webp"
+   "file": "https://infinitedevices.org/assets/templates/first-music-image.inf",
+   "preview": "https://infinitedevices.org/assets/templates/first-music-image.webp"
   },
   {
    "id": "source",
@@ -44,8 +44,8 @@
    "description": "Pictures from nothing.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/source.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/source.webp"
+   "file": "https://infinitedevices.org/assets/templates/source.inf",
+   "preview": "https://infinitedevices.org/assets/templates/source.webp"
   },
   {
    "id": "compositing",
@@ -55,8 +55,8 @@
    "description": "Layers, trails and feedback.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/compositing.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/compositing.webp"
+   "file": "https://infinitedevices.org/assets/templates/compositing.inf",
+   "preview": "https://infinitedevices.org/assets/templates/compositing.webp"
   },
   {
    "id": "effects",
@@ -66,8 +66,8 @@
    "description": "Change a picture.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/effects.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/effects.webp"
+   "file": "https://infinitedevices.org/assets/templates/effects.inf",
+   "preview": "https://infinitedevices.org/assets/templates/effects.webp"
   },
   {
    "id": "3d",
@@ -77,8 +77,8 @@
    "description": "A shape seen from any side.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/3d.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/3d.webp"
+   "file": "https://infinitedevices.org/assets/templates/3d.inf",
+   "preview": "https://infinitedevices.org/assets/templates/3d.webp"
   },
   {
    "id": "modulators",
@@ -88,8 +88,8 @@
    "description": "Numbers that move other controls.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/modulators.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/modulators.webp"
+   "file": "https://infinitedevices.org/assets/templates/modulators.inf",
+   "preview": "https://infinitedevices.org/assets/templates/modulators.webp"
   },
   {
    "id": "macros",
@@ -99,8 +99,8 @@
    "description": "One knob that moves several things.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/macros.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/macros.webp"
+   "file": "https://infinitedevices.org/assets/templates/macros.inf",
+   "preview": "https://infinitedevices.org/assets/templates/macros.webp"
   },
   {
    "id": "notes",
@@ -110,8 +110,8 @@
    "description": "Notes that make patterns.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/notes.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/notes.webp"
+   "file": "https://infinitedevices.org/assets/templates/notes.inf",
+   "preview": "https://infinitedevices.org/assets/templates/notes.webp"
   },
   {
    "id": "synths",
@@ -121,8 +121,8 @@
    "description": "Sounds from notes.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/synths.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/synths.webp"
+   "file": "https://infinitedevices.org/assets/templates/synths.inf",
+   "preview": "https://infinitedevices.org/assets/templates/synths.webp"
   },
   {
    "id": "audio-effects",
@@ -132,8 +132,8 @@
    "description": "Shape the sound.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/audio-effects.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/audio-effects.webp"
+   "file": "https://infinitedevices.org/assets/templates/audio-effects.inf",
+   "preview": "https://infinitedevices.org/assets/templates/audio-effects.webp"
   },
   {
    "id": "prediction",
@@ -143,8 +143,8 @@
    "description": "Notes that keep going on their own.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/prediction.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/prediction.webp"
+   "file": "https://infinitedevices.org/assets/templates/prediction.inf",
+   "preview": "https://infinitedevices.org/assets/templates/prediction.webp"
   },
   {
    "id": "utility",
@@ -154,8 +154,8 @@
    "description": "Mix and meter sound.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/utility.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/utility.webp"
+   "file": "https://infinitedevices.org/assets/templates/utility.inf",
+   "preview": "https://infinitedevices.org/assets/templates/utility.webp"
   },
   {
    "id": "field",
@@ -165,8 +165,8 @@
    "description": "Write a picture as a formula.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/templates/field.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/templates/field.webp"
+   "file": "https://infinitedevices.org/assets/templates/field.inf",
+   "preview": "https://infinitedevices.org/assets/templates/field.webp"
   },
   {
    "id": "terrain-mandala",
@@ -176,8 +176,8 @@
    "description": "A wave-terrain synth driving a slowly turning mandala.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/terrain-mandala.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/terrain-mandala.webp"
+   "file": "https://infinitedevices.org/assets/community/terrain-mandala.inf",
+   "preview": "https://infinitedevices.org/assets/community/terrain-mandala.webp"
   },
   {
    "id": "glitch-feedback",
@@ -187,8 +187,8 @@
    "description": "Transform, glitch and feedback loops with added noise.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/glitch-feedback.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/glitch-feedback.webp"
+   "file": "https://infinitedevices.org/assets/community/glitch-feedback.inf",
+   "preview": "https://infinitedevices.org/assets/community/glitch-feedback.webp"
   },
   {
    "id": "shifted-blend",
@@ -198,8 +198,8 @@
    "description": "Audio blends through a frequency shifter, with liquify on the picture.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/shifted-blend.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/shifted-blend.webp"
+   "file": "https://infinitedevices.org/assets/community/shifted-blend.inf",
+   "preview": "https://infinitedevices.org/assets/community/shifted-blend.webp"
   },
   {
    "id": "lens-spectral",
@@ -209,8 +209,8 @@
    "description": "Lens distortion over blended cubes, with a spectral synth underneath.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/lens-spectral.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/lens-spectral.webp"
+   "file": "https://infinitedevices.org/assets/community/lens-spectral.inf",
+   "preview": "https://infinitedevices.org/assets/community/lens-spectral.webp"
   },
   {
    "id": "checker-cube",
@@ -220,8 +220,8 @@
    "description": "A cube in a checkered room with bold type, blended from image sources.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/checker-cube.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/checker-cube.webp"
+   "file": "https://infinitedevices.org/assets/community/checker-cube.inf",
+   "preview": "https://infinitedevices.org/assets/community/checker-cube.webp"
   },
   {
    "id": "occult-mandala",
@@ -231,8 +231,8 @@
    "description": "Image points, kaleidoscope and layers over industrial noise at 110 BPM.",
    "author": "dm4nd",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/occult-mandala.infinite",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/occult-mandala.webp"
+   "file": "https://infinitedevices.org/assets/community/occult-mandala.infinite",
+   "preview": "https://infinitedevices.org/assets/community/occult-mandala.webp"
   },
   {
    "id": "pad-wash",
@@ -242,8 +242,8 @@
    "description": "Blended pads through delay and reverb, with random notes shifting the pitch.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/pad-wash.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/pad-wash.webp"
+   "file": "https://infinitedevices.org/assets/community/pad-wash.inf",
+   "preview": "https://infinitedevices.org/assets/community/pad-wash.webp"
   },
   {
    "id": "pads-75-bpm",
@@ -253,8 +253,8 @@
    "description": "Slow pads with trails, blends and glitch at 75 BPM.",
    "author": "dm4nd",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/pads-75-bpm.infinite",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/pads-75-bpm.webp"
+   "file": "https://infinitedevices.org/assets/community/pads-75-bpm.infinite",
+   "preview": "https://infinitedevices.org/assets/community/pads-75-bpm.webp"
   },
   {
    "id": "trail-glitch",
@@ -264,8 +264,8 @@
    "description": "Trails, colour ramps and glitch blended, with reverbs on the sound.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/trail-glitch.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/trail-glitch.webp"
+   "file": "https://infinitedevices.org/assets/community/trail-glitch.inf",
+   "preview": "https://infinitedevices.org/assets/community/trail-glitch.webp"
   },
   {
    "id": "stretched-sampler",
@@ -275,8 +275,8 @@
    "description": "A sampler into a spectral synth, reverb and PaulStretch.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/stretched-sampler.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/stretched-sampler.webp"
+   "file": "https://infinitedevices.org/assets/community/stretched-sampler.inf",
+   "preview": "https://infinitedevices.org/assets/community/stretched-sampler.webp"
   },
   {
    "id": "displaced-wavetable",
@@ -286,8 +286,8 @@
    "description": "A note sequencer plays a wavetable that displaces a 3D shape.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/displaced-wavetable.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/displaced-wavetable.webp"
+   "file": "https://infinitedevices.org/assets/community/displaced-wavetable.inf",
+   "preview": "https://infinitedevices.org/assets/community/displaced-wavetable.webp"
   },
   {
    "id": "welcome-home",
@@ -297,8 +297,8 @@
    "description": "A red room full of eyes over a steady 86 BPM groove.",
    "author": "dm4nd",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/welcome-home.infinite",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/welcome-home.webp"
+   "file": "https://infinitedevices.org/assets/community/welcome-home.infinite",
+   "preview": "https://infinitedevices.org/assets/community/welcome-home.webp"
   },
   {
    "id": "soft-render",
@@ -308,8 +308,8 @@
    "description": "A 3D render with a colour ramp and added noise.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/soft-render.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/soft-render.webp"
+   "file": "https://infinitedevices.org/assets/community/soft-render.inf",
+   "preview": "https://infinitedevices.org/assets/community/soft-render.webp"
   },
   {
    "id": "stretched-blend",
@@ -319,8 +319,8 @@
    "description": "PaulStretch into blended audio with delay.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/stretched-blend.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/stretched-blend.webp"
+   "file": "https://infinitedevices.org/assets/community/stretched-blend.inf",
+   "preview": "https://infinitedevices.org/assets/community/stretched-blend.webp"
   },
   {
    "id": "slice-room",
@@ -330,8 +330,8 @@
    "description": "A slicer into blended audio, with delay and a mixer.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/slice-room.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/slice-room.webp"
+   "file": "https://infinitedevices.org/assets/community/slice-room.inf",
+   "preview": "https://infinitedevices.org/assets/community/slice-room.webp"
   },
   {
    "id": "limited-stretch",
@@ -341,8 +341,8 @@
    "description": "PaulStretch and mixers into a limiter.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/limited-stretch.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/limited-stretch.webp"
+   "file": "https://infinitedevices.org/assets/community/limited-stretch.inf",
+   "preview": "https://infinitedevices.org/assets/community/limited-stretch.webp"
   },
   {
    "id": "spectrum-slide",
@@ -352,8 +352,8 @@
    "description": "PaulStretch through a spectrum slide and key snap.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/spectrum-slide.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/spectrum-slide.webp"
+   "file": "https://infinitedevices.org/assets/community/spectrum-slide.inf",
+   "preview": "https://infinitedevices.org/assets/community/spectrum-slide.webp"
   },
   {
    "id": "plugin-stretch",
@@ -363,8 +363,8 @@
    "description": "A plugin and PaulStretch through a mixer.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/plugin-stretch.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/plugin-stretch.webp"
+   "file": "https://infinitedevices.org/assets/community/plugin-stretch.inf",
+   "preview": "https://infinitedevices.org/assets/community/plugin-stretch.webp"
   },
   {
    "id": "blue-cube",
@@ -374,8 +374,8 @@
    "description": "A flat-shaded cube in a blue-white room with a light-grid wall.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/blue-cube.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/blue-cube.webp"
+   "file": "https://infinitedevices.org/assets/community/blue-cube.inf",
+   "preview": "https://infinitedevices.org/assets/community/blue-cube.webp"
   },
   {
    "id": "fairy-type",
@@ -385,8 +385,8 @@
    "description": "Large type repeated across a kaleidoscope of pink shapes.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/fairy-type.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/fairy-type.webp"
+   "file": "https://infinitedevices.org/assets/community/fairy-type.inf",
+   "preview": "https://infinitedevices.org/assets/community/fairy-type.webp"
   },
   {
    "id": "cube-colour",
@@ -396,8 +396,8 @@
    "description": "An audio colour ramp drives a cube, rendered in 3D.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/cube-colour.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/cube-colour.webp"
+   "file": "https://infinitedevices.org/assets/community/cube-colour.inf",
+   "preview": "https://infinitedevices.org/assets/community/cube-colour.webp"
   },
   {
    "id": "layered-blends",
@@ -407,8 +407,8 @@
    "description": "Stacked blends with colour adjustments.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/layered-blends.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/layered-blends.webp"
+   "file": "https://infinitedevices.org/assets/community/layered-blends.inf",
+   "preview": "https://infinitedevices.org/assets/community/layered-blends.webp"
   },
   {
    "id": "drum-reverb",
@@ -418,8 +418,8 @@
    "description": "Two note sequencers and oscillators into reverb, delay and EQ.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/drum-reverb.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/drum-reverb.webp"
+   "file": "https://infinitedevices.org/assets/community/drum-reverb.inf",
+   "preview": "https://infinitedevices.org/assets/community/drum-reverb.webp"
   },
   {
    "id": "delay-wash",
@@ -429,8 +429,8 @@
    "description": "Delay, reverb and a mixer into a limiter.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/delay-wash.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/delay-wash.webp"
+   "file": "https://infinitedevices.org/assets/community/delay-wash.inf",
+   "preview": "https://infinitedevices.org/assets/community/delay-wash.webp"
   },
   {
    "id": "filtered-mixer",
@@ -440,8 +440,8 @@
    "description": "Reverb and a mixer through an audio filter.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/filtered-mixer.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/filtered-mixer.webp"
+   "file": "https://infinitedevices.org/assets/community/filtered-mixer.inf",
+   "preview": "https://infinitedevices.org/assets/community/filtered-mixer.webp"
   },
   {
    "id": "merged-wavetable",
@@ -451,8 +451,8 @@
    "description": "Merged notes play a wavetable into reverb.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/merged-wavetable.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/merged-wavetable.webp"
+   "file": "https://infinitedevices.org/assets/community/merged-wavetable.inf",
+   "preview": "https://infinitedevices.org/assets/community/merged-wavetable.webp"
   },
   {
    "id": "oscillator-reverb",
@@ -462,8 +462,8 @@
    "description": "A note sequencer into an oscillator and reverb.",
    "author": "n1m21n",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/community/oscillator-reverb.inf",
-   "preview": "https://n1m21n.github.io/Infinite/assets/community/oscillator-reverb.webp"
+   "file": "https://infinitedevices.org/assets/community/oscillator-reverb.inf",
+   "preview": "https://infinitedevices.org/assets/community/oscillator-reverb.webp"
   },
   {
    "id": "ordered-dither",
@@ -473,8 +473,8 @@
    "description": "A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/pixel/ordered-dither.field",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/ordered-dither.jpg"
+   "file": "https://infinitedevices.org/assets/library/pixel/ordered-dither.field",
+   "preview": "https://infinitedevices.org/assets/library/previews/ordered-dither.jpg"
   },
   {
    "id": "liquid-glass",
@@ -484,8 +484,8 @@
    "description": "A frosted, refracting glass pane over whatever is behind it: bent edges, a colour split and a lit rim.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/pixel/liquid-glass.field",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/liquid-glass.jpg"
+   "file": "https://infinitedevices.org/assets/library/pixel/liquid-glass.field",
+   "preview": "https://infinitedevices.org/assets/library/previews/liquid-glass.jpg"
   },
   {
    "id": "metaball-lens",
@@ -495,8 +495,8 @@
    "description": "Three liquid lobes drift over the picture, merging into one blob that refracts and magnifies what is under it.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/pixel/metaball-lens.field",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/metaball-lens.jpg"
+   "file": "https://infinitedevices.org/assets/library/pixel/metaball-lens.field",
+   "preview": "https://infinitedevices.org/assets/library/previews/metaball-lens.jpg"
   },
   {
    "id": "pixel-plate",
@@ -506,8 +506,8 @@
    "description": "A plate of square cells with ragged, notched edges that grows outward cell by cell.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/pixel/pixel-plate.field",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/pixel-plate.jpg"
+   "file": "https://infinitedevices.org/assets/library/pixel/pixel-plate.field",
+   "preview": "https://infinitedevices.org/assets/library/previews/pixel-plate.jpg"
   },
   {
    "id": "iridescent-orb",
@@ -517,8 +517,8 @@
    "description": "A soft holographic pastel ball that slowly spins its colours, with a white sheen and a gloss spot.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/pixel/iridescent-orb.field",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/iridescent-orb.jpg"
+   "file": "https://infinitedevices.org/assets/library/pixel/iridescent-orb.field",
+   "preview": "https://infinitedevices.org/assets/library/previews/iridescent-orb.jpg"
   },
   {
    "id": "phyllotaxis-bloom",
@@ -528,8 +528,8 @@
    "description": "A sunflower of golden-angle seeds, each dot coloured along the spiral. Seed count and turn are live.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/pixel/phyllotaxis-bloom.field",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/phyllotaxis-bloom.jpg"
+   "file": "https://infinitedevices.org/assets/library/pixel/phyllotaxis-bloom.field",
+   "preview": "https://infinitedevices.org/assets/library/previews/phyllotaxis-bloom.jpg"
   },
   {
    "id": "lorenz-attractor",
@@ -539,8 +539,8 @@
    "description": "The butterfly of chaos, integrated live. A glowing trail winds between two lobes and never repeats.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/sketch/lorenz-attractor.js",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/lorenz-attractor.jpg"
+   "file": "https://infinitedevices.org/assets/library/sketch/lorenz-attractor.js",
+   "preview": "https://infinitedevices.org/assets/library/previews/lorenz-attractor.jpg"
   },
   {
    "id": "lotka-volterra",
@@ -550,8 +550,8 @@
    "description": "Predators and prey chasing each other: the population curves on top, the phase loop they trace below.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/sketch/lotka-volterra.js",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/lotka-volterra.jpg"
+   "file": "https://infinitedevices.org/assets/library/sketch/lotka-volterra.js",
+   "preview": "https://infinitedevices.org/assets/library/previews/lotka-volterra.jpg"
   },
   {
    "id": "scale-free-network",
@@ -561,8 +561,8 @@
    "description": "A network that grows by preferential attachment: the rich get richer, hubs emerge, and the graph breathes.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/sketch/scale-free-network.js",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/scale-free-network.jpg"
+   "file": "https://infinitedevices.org/assets/library/sketch/scale-free-network.js",
+   "preview": "https://infinitedevices.org/assets/library/previews/scale-free-network.jpg"
   },
   {
    "id": "rule-110",
@@ -572,8 +572,8 @@
    "description": "A one-dimensional cellular automaton that is Turing-complete. Gliders scroll down the page, one generation at a time.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/sketch/rule-110.js",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/rule-110.jpg"
+   "file": "https://infinitedevices.org/assets/library/sketch/rule-110.js",
+   "preview": "https://infinitedevices.org/assets/library/previews/rule-110.jpg"
   },
   {
    "id": "clifford-attractor",
@@ -583,8 +583,8 @@
    "description": "A strange attractor drawn as a cloud of 20,000 points. Slowly drifting parameters keep reshaping the lace.",
    "author": "",
    "price": 0,
-   "file": "https://n1m21n.github.io/Infinite/assets/library/sketch/clifford-attractor.js",
-   "preview": "https://n1m21n.github.io/Infinite/assets/library/previews/clifford-attractor.jpg"
+   "file": "https://infinitedevices.org/assets/library/sketch/clifford-attractor.js",
+   "preview": "https://infinitedevices.org/assets/library/previews/clifford-attractor.jpg"
   }
  ]
 }

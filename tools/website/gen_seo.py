@@ -12,7 +12,7 @@ Exit codes: 0 written.
 import datetime, html, json, os, re
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 W = os.path.join(ROOT, "website")
-BASE = "https://n1m21n.github.io/Infinite/"
+BASE = "https://infinitedevices.org/"
 SRC = [("Templates", "assets/templates/index.json"), ("Community", "assets/community/index.json"), ("", "assets/library/index.json")]
 
 def items():
