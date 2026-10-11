@@ -422,7 +422,10 @@ def plug_and_cable(c, MT, jack_x, y, zc, direction, colour_mat, far):
 
 
 # ---------------------------------------------------------------- the node: Audio Filter as an instrument object
-def build_node(MT, reach=0, name="node_audio_filter"):
+LAST = {}
+
+
+def build_node(MT, reach=0, name="node_audio_filter", sides=("in", "out")):
     """reach: extra cable length in mm beyond the stock run (the website model has cables long enough to leave the viewport)."""
     c = new_coll(name)
     cd = N3["card"]
@@ -521,8 +524,11 @@ def build_node(MT, reach=0, name="node_audio_filter"):
         ring.location = (sx + (0 if d > 0 else -1.2), jy, zc)
         hole = cylinder_x(f"hole_{side}", ji, 0, 1.3, 0, 0, MT["hole"], c, "jack")
         hole.location = (sx + (0.05 if d > 0 else -1.35), jy, zc)
-    plug_and_cable(c, MT, -W / 2 - 1.2, jy, zc, -1, MT["ember"], ((-W / 2 - 330 - reach * 0.6, -120, 2.5), (-W / 2 - 520 - reach, -260, 2.5)))
-    plug_and_cable(c, MT, W / 2 + 1.2, jy, zc, 1, MT["cat_fx"], ((W / 2 + 330 + reach * 0.6, 40, 2.5), (W / 2 + 560 + reach, 120, 2.5)))
+    if "in" in sides:
+        plug_and_cable(c, MT, -W / 2 - 1.2, jy, zc, -1, MT["ember"], ((-W / 2 - 330 - reach * 0.6, -120, 2.5), (-W / 2 - 520 - reach, -260, 2.5)))
+    if "out" in sides:
+        plug_and_cable(c, MT, W / 2 + 1.2, jy, zc, 1, MT["cat_fx"], ((W / 2 + 330 + reach * 0.6, 40, 2.5), (W / 2 + 560 + reach, 120, 2.5)))
+    LAST["jy"], LAST["zc"] = jy, zc
     return c, (W, H)
 
 
@@ -1082,6 +1088,21 @@ def main():
         if o.parent is None:
             o.location.y += 6000
     export(wide, "node_audio_filter_wide", (0, 6000))
+    # website: two filters in a row, the second patched from the first's output; cables run off both ends
+    ca, (CW, CH) = build_node(MT, reach=3200, name="chain_a", sides=("in",))
+    ja, za = LAST["jy"], LAST["zc"]
+    cb, _ = build_node(MT, reach=3200, name="chain_b", sides=("out",))
+    GAP = 520
+    for o in cb.objects:
+        if o.parent is None:
+            o.location.x += CW + GAP
+    for coll in (ca, cb):
+        for o in coll.objects:
+            if o.parent is None:
+                o.location.y += 12000
+    link_c = new_coll("chain_link")
+    patch_cable(link_c, MT, (CW / 2 + 1.2, ja + 12000, za), (CW + GAP - CW / 2 - 1.2, ja + 12000, za), MT["cat_fx"], name="chain")
+    export([ca, cb, link_c], "node_chain_wide", ((CW + GAP) / 2, 12000))
     export(lfo, "node_lfo", (LX, 0))
     export(fp, "node_field_pixel", (FX, 0))
     export([lfo, fp, pc], "patch_lfo_field_pixel", ((LX + FX) / 2, 0))
