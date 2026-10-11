@@ -1,0 +1,16 @@
+{
+ "version": 1,
+ "items": [
+  {
+   "id": "patch-authoring-skill",
+   "name": "Patch Authoring",
+   "category": "AI Skills",
+   "kind": "Skill",
+   "author": "n1m21n",
+   "description": "Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder.",
+   "price": 0,
+   "preview": "assets/skills/patch-authoring.webp",
+   "file": "assets/skills/infinite-patch-authoring.md"
+  }
+ ]
+}

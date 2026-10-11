@@ -69,3 +69,7 @@
   .site-header { background: var(--ground); -webkit-backdrop-filter: none; backdrop-filter: none; }
   .btn-ghost, .ticker-pill, .tab-pill, .lib-chip, .lib-view, .platform-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+.lib-menu { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(1.7); backdrop-filter: blur(24px) saturate(1.7); box-shadow: var(--glass-hi), var(--shadow-2); }
+.lib-select { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-hi), var(--glass-shadow); }
+@media (prefers-reduced-transparency: reduce) { .lib-menu { background: var(--surface-1); -webkit-backdrop-filter: none; backdrop-filter: none; } }

@@ -27,8 +27,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="brand.css?v=3">
   <link rel="stylesheet" href="style.css?v=63">
-  <link rel="stylesheet" href="library.css?v=14">
-  <link rel="stylesheet" href="glass.css?v=2">
+  <link rel="stylesheet" href="library.css?v=15">
+  <link rel="stylesheet" href="glass.css?v=3">
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZC4TYX1WCL"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -108,8 +108,8 @@
     <section class="section" id="install" aria-label="How to install">
       <div class="container">
         <div class="lib-how">
-          <div><p class="recipe-num mono">01</p><h3>Download</h3><p>Pick an item and press Download. You get one plain-text file: <code>.inf</code> for a template, <code>.field</code> for Pixel, <code>.js</code> for Sketch.</p></div>
-          <div><p class="recipe-num mono">02</p><h3>Import</h3><p>Template: choose <b>File, Open</b> and pick the file. Pixel: add a Field Pixel node and press <b>Import</b> in its Devices row. Sketch: open a Sketch node's editor and paste the file.</p></div>
+          <div><p class="recipe-num mono">01</p><h3>Download</h3><p>Pick an item and press Download. You get one plain-text file: <code>.inf</code> for a template, <code>.field</code> for Pixel, <code>.js</code> for Sketch, <code>.md</code> for an AI skill.</p></div>
+          <div><p class="recipe-num mono">02</p><h3>Import</h3><p>Template: choose <b>File, Open</b> and pick the file. Pixel: add a Field Pixel node and press <b>Import</b> in its Devices row. Sketch: open a Sketch node's editor and paste the file. AI skill: save it as <code>SKILL.md</code> in your agent's skills folder, for example <code>.claude/skills/infinite-patch-authoring/</code>.</p></div>
           <div><p class="recipe-num mono">03</p><h3>Patch</h3><p>Filters read an image you cable in. Generators draw on their own. Every knob can be modulated.</p></div>
         </div>
       </div>
@@ -130,7 +130,7 @@
  },
  "mainEntity": {
   "@type": "ItemList",
-  "numberOfItems": 53,
+  "numberOfItems": 54,
   "itemListElement": [
    {
     "@type": "ListItem",
@@ -833,6 +833,24 @@
     "position": 43,
     "item": {
      "@type": "CreativeWork",
+     "name": "Patch Authoring",
+     "description": "Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder.",
+     "genre": "AI Skills",
+     "image": "https://infinitedevices.org/assets/skills/patch-authoring.webp",
+     "isAccessibleForFree": true,
+     "encodingFormat": "md",
+     "contentUrl": "https://infinitedevices.org/assets/skills/infinite-patch-authoring.md",
+     "author": {
+      "@type": "Person",
+      "name": "n1m21n"
+     }
+    }
+   },
+   {
+    "@type": "ListItem",
+    "position": 44,
+    "item": {
+     "@type": "CreativeWork",
      "name": "Ordered Dither",
      "description": "A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films.",
      "genre": "Pixel",
@@ -844,7 +862,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 44,
+    "position": 45,
     "item": {
      "@type": "CreativeWork",
      "name": "Liquid Glass",
@@ -858,7 +876,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 45,
+    "position": 46,
     "item": {
      "@type": "CreativeWork",
      "name": "Metaball Lens",
@@ -872,7 +890,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 46,
+    "position": 47,
     "item": {
      "@type": "CreativeWork",
      "name": "Pixel Plate",
@@ -886,7 +904,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 47,
+    "position": 48,
     "item": {
      "@type": "CreativeWork",
      "name": "Iridescent Orb",
@@ -900,7 +918,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 48,
+    "position": 49,
     "item": {
      "@type": "CreativeWork",
      "name": "Phyllotaxis Bloom",
@@ -914,7 +932,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 49,
+    "position": 50,
     "item": {
      "@type": "CreativeWork",
      "name": "Lorenz Attractor",
@@ -928,7 +946,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 50,
+    "position": 51,
     "item": {
      "@type": "CreativeWork",
      "name": "Lotka-Volterra",
@@ -942,7 +960,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 51,
+    "position": 52,
     "item": {
      "@type": "CreativeWork",
      "name": "Scale-Free Network",
@@ -956,7 +974,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 52,
+    "position": 53,
     "item": {
      "@type": "CreativeWork",
      "name": "Rule 110",
@@ -970,7 +988,7 @@
    },
    {
     "@type": "ListItem",
-    "position": 53,
+    "position": 54,
     "item": {
      "@type": "CreativeWork",
      "name": "Clifford Attractor",
@@ -1031,6 +1049,7 @@
       <li><a href="library/filtered-mixer.html">Filtered Mixer</a> (Community): Reverb and a mixer through an audio filter.</li>
       <li><a href="library/merged-wavetable.html">Merged Wavetable</a> (Community): Merged notes play a wavetable into reverb.</li>
       <li><a href="library/oscillator-reverb.html">Oscillator Reverb</a> (Community): A note sequencer into an oscillator and reverb.</li>
+      <li><a href="library/patch-authoring-skill.html">Patch Authoring</a> (AI Skills): Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent&#x27;s skills folder.</li>
       <li><a href="library/ordered-dither.html">Ordered Dither</a> (Pixel): A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films.</li>
       <li><a href="library/liquid-glass.html">Liquid Glass</a> (Pixel): A frosted, refracting glass pane over whatever is behind it: bent edges, a colour split and a lit rim.</li>
       <li><a href="library/metaball-lens.html">Metaball Lens</a> (Pixel): Three liquid lobes drift over the picture, merging into one blob that refracts and magnifies what is under it.</li>
@@ -1047,6 +1066,6 @@
   <!-- seo:end -->
 
   
-  <script src="library.js?v=12"></script>
+  <script src="library.js?v=14"></script>
 </body>
 </html>

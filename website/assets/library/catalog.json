@@ -1,7 +1,7 @@
 {
  "name": "Infinite Library",
  "url": "https://infinitedevices.org/library.html",
- "count": 53,
+ "count": 54,
  "items": [
   {
    "id": "first-sound",
@@ -506,6 +506,18 @@
    "file": "https://infinitedevices.org/assets/community/oscillator-reverb.inf",
    "preview": "https://infinitedevices.org/assets/community/oscillator-reverb.webp",
    "page": "https://infinitedevices.org/library/oscillator-reverb.html"
+  },
+  {
+   "id": "patch-authoring-skill",
+   "name": "Patch Authoring",
+   "category": "AI Skills",
+   "type": "Skill",
+   "description": "Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder.",
+   "author": "n1m21n",
+   "price": 0,
+   "file": "https://infinitedevices.org/assets/skills/infinite-patch-authoring.md",
+   "preview": "https://infinitedevices.org/assets/skills/patch-authoring.webp",
+   "page": "https://infinitedevices.org/library/patch-authoring-skill.html"
   },
   {
    "id": "ordered-dither",

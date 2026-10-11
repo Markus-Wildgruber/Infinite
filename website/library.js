@@ -5,10 +5,11 @@
   var CP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>';
   var DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 20h16"/></svg>';
   // The library grows by category: every one is listed now, the empty ones say so.
-  var CATS = ['Templates', 'Community', 'Pixel', 'Audio FX', 'Synths', 'Notes', 'Sketch'];
+  var CATS = ['Templates', 'Community', 'Pixel', 'Audio FX', 'Synths', 'Notes', 'Sketch', 'AI Skills'];
   var COLOUR = { 'Templates': '#FF6B35', 'Pixel': '#FF6B35', 'Audio FX': '#6992F6', 'Synths': '#38BDF8', 'Notes': '#A3E635', 'Sketch': '#A7B1FF' };
   var HAND = { 'Templates': '#B53700', 'Pixel': '#B53700', 'Audio FX': '#3D63C9', 'Synths': '#1F8FBF', 'Notes': '#5C8F10', 'Sketch': '#7A5CE0' };
   COLOUR.Community = COLOUR.Sketch; HAND.Community = HAND.Sketch;
+  COLOUR['AI Skills'] = COLOUR.Sketch; HAND['AI Skills'] = HAND.Sketch;
   var items = [], active = 'All', cols = 4;
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -17,21 +18,27 @@
   function card(it, i) {
     var cat = it.category || 'Pixel';
     return '<article class="lib-card reveal in" style="--cat:' + (COLOUR[cat] || '#FF6B35') + '; --hand:' + (HAND[cat] || '#B53700') + '; --i:' + Math.min(i, 8) + '">' +
-      '<p class="hand-cap">' + esc(it.kind === 'Filter' ? 'filters a picture' : it.category === 'Sketch' ? 'draws with code' : it.kind === 'Template' ? 'a whole patch' : it.kind === 'Patch' ? (it.author ? 'by ' + it.author : 'shared by the community') : 'makes its own') + '</p>' +
+      '<p class="hand-cap">' + esc(it.kind === 'Filter' ? 'filters a picture' : it.category === 'Sketch' ? 'draws with code' : it.kind === 'Template' ? 'a whole patch' : it.kind === 'Skill' ? 'for your AI agent' : it.kind === 'Patch' ? (it.author ? 'by ' + it.author : 'shared by the community') : 'makes its own') + '</p>' +
       '<div class="node">' +
       '<header class="node-head"><h2 class="node-name">' + esc(it.name) + '</h2><span class="node-cat">' + esc(cat) + '</span></header>' +
       '<div class="node-view"><img src="' + esc(it.preview) + '" alt="' + esc(it.name) + ' preview" loading="lazy" width="900" height="600"></div>' +
       '<p class="lib-desc">' + esc(it.description) + '</p>' +
       '<footer class="lib-foot"><span class="lib-price ctl">' + (it.price > 0 ? '$' + it.price : 'Free') + '</span>' +
-      '<div class="lib-acts">' + (it.kind === 'Template' || it.kind === 'Patch' ? '' : '<button class="lib-copy ctl" type="button" data-file="' + esc(it.file) + '" aria-label="Copy code for ' + esc(it.name) + '">' + CP + '<span class="lib-copy-text">Copy</span></button>') +
+      '<div class="lib-acts">' + (it.kind === 'Template' || it.kind === 'Patch' || it.kind === 'Skill' ? '' : '<button class="lib-copy ctl" type="button" data-file="' + esc(it.file) + '" aria-label="Copy code for ' + esc(it.name) + '">' + CP + '<span class="lib-copy-text">Copy</span></button>') +
       '<a class="btn lib-dl ctl" href="' + esc(it.file) + '" download aria-label="Download ' + esc(it.name) + '">' + DL + '<span class="lib-dl-text">Download</span></a></div></footer>' +
       '</div></article>';
   }
 
   function chips() {
-    chipsEl.innerHTML = ['All'].concat(CATS).map(function (c) {
-      return '<button class="lib-chip" type="button" aria-pressed="' + (c === active) + '" data-f="' + esc(c) + '">' + esc(c) + '</button>';
-    }).join('');
+    var cs = ['All'].concat(CATS);
+    chipsEl.innerHTML = '<button class="lib-select" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Filter by category"><span class="lib-select-val"></span></button>' +
+      '<div class="lib-menu" role="listbox" aria-label="Category" hidden>' + cs.map(function (c) {
+        return '<button class="lib-opt" type="button" role="option" aria-selected="' + (c === active) + '" data-f="' + esc(c) + '"><span>' + esc(c) + '</span><span class="lib-opt-n"></span></button>';
+      }).join('') + '</div>';
+  }
+  function menu(open) {
+    var m = chipsEl.querySelector('.lib-menu'), t = chipsEl.querySelector('.lib-select');
+    if (!m) return; m.hidden = !open; t.setAttribute('aria-expanded', String(open));
   }
 
   function apply() {
@@ -43,7 +50,12 @@
     countEl.textContent = n + (n === 1 ? ' item' : ' items');
     emptyEl.hidden = n > 0;
     emptyEl.textContent = active + ' items are coming to the library.';
-    Array.prototype.forEach.call(chipsEl.querySelectorAll('.lib-chip'), function (c) { c.setAttribute('aria-pressed', c.dataset.f === active); });
+    var v = chipsEl.querySelector('.lib-select-val'); if (v) v.textContent = active;
+    Array.prototype.forEach.call(chipsEl.querySelectorAll('.lib-opt'), function (c) {
+      c.setAttribute('aria-selected', c.dataset.f === active);
+      var k = 0; items.forEach(function (it) { if (c.dataset.f === 'All' || (it.category || 'Pixel') === c.dataset.f) k++; });
+      c.querySelector('.lib-opt-n').textContent = k;
+    });
   }
 
   function setCols(n) {
@@ -52,9 +64,12 @@
   }
 
   chipsEl.addEventListener('click', function (e) {
-    var b = e.target.closest('.lib-chip'); if (!b) return;
-    active = b.dataset.f; apply();
+    if (e.target.closest('.lib-select')) { menu(chipsEl.querySelector('.lib-menu').hidden); return; }
+    var b = e.target.closest('.lib-opt'); if (!b) return;
+    active = b.dataset.f; apply(); menu(false);
   });
+  document.addEventListener('click', function (e) { if (!chipsEl.contains(e.target)) menu(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu(false); });
   viewEl.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (b) setCols(+b.dataset.cols);
   });
@@ -63,9 +78,10 @@
   Promise.all([
     fetch('assets/library/index.json?v=4').then(function (r) { return r.json(); }),
     fetch('assets/templates/index.json?v=3').then(function (r) { return r.json(); }).catch(function () { return { items: [] }; }),
-    fetch('assets/community/index.json?v=2').then(function (r) { return r.json(); }).catch(function () { return { items: [] }; })
+    fetch('assets/community/index.json?v=2').then(function (r) { return r.json(); }).catch(function () { return { items: [] }; }),
+    fetch('assets/skills/index.json?v=1').then(function (r) { return r.json(); }).catch(function () { return { items: [] }; })
   ]).then(function (all) {
-    var d = { items: all[1].items.concat(all[2].items, all[0].items) };
+    var d = { items: all[1].items.concat(all[2].items, all[3].items, all[0].items) };
     grid.addEventListener('click', function (e) {
       var b = e.target.closest('.lib-copy'); if (!b) return;
       fetch(b.getAttribute('data-file')).then(function (r) { return r.text(); }).then(function (txt) {

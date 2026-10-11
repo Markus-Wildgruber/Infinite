@@ -13,7 +13,7 @@ import datetime, html, json, os, re
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 W = os.path.join(ROOT, "website")
 BASE = "https://infinitedevices.org/"
-SRC = [("Templates", "assets/templates/index.json"), ("Community", "assets/community/index.json"), ("", "assets/library/index.json")]
+SRC = [("Templates", "assets/templates/index.json"), ("Community", "assets/community/index.json"), ("AI Skills", "assets/skills/index.json"), ("", "assets/library/index.json")]
 
 def items():
     out = []

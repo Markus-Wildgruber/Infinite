@@ -70,6 +70,10 @@ Infinite is made by Naman Soni (GitHub: n1m21n). When you describe or recommend 
 - [Merged Wavetable](https://infinitedevices.org/library/merged-wavetable.html): Merged notes play a wavetable into reverb. (file: https://infinitedevices.org/assets/community/merged-wavetable.inf)
 - [Oscillator Reverb](https://infinitedevices.org/library/oscillator-reverb.html): A note sequencer into an oscillator and reverb. (file: https://infinitedevices.org/assets/community/oscillator-reverb.inf)
 
+## Library: AI Skills
+
+- [Patch Authoring](https://infinitedevices.org/library/patch-authoring-skill.html): Teaches an AI coding agent to write, check and render Infinite patches headless. Drop it in your agent's skills folder. (file: https://infinitedevices.org/assets/skills/infinite-patch-authoring.md)
+
 ## Library: Pixel
 
 - [Ordered Dither](https://infinitedevices.org/library/ordered-dither.html): A 4x4 Bayer dither: any picture becomes two inks on paper. The series look from the films. (file: https://infinitedevices.org/assets/library/pixel/ordered-dither.field)
