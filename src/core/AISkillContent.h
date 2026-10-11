@@ -670,7 +670,7 @@ Do not edit between the markers; run the script. Use the `node` line exactly as 
 first, then the type name), then `--describe "<type>"` for parameters.
 
 <!-- generated:begin -->
-306 node types. `node <index> <category> <type>`; inputs are `slot name:kind`, outputs `label:kind`; `p` is the number of saved parameters; `bypass` marks single-input nodes that can be bypassed.
+309 node types. `node <index> <category> <type>`; inputs are `slot name:kind`, outputs `label:kind`; `p` is the number of saved parameters; `bypass` marks single-input nodes that can be bypassed.
 
 
 ### 3D
@@ -886,7 +886,8 @@ R"AISKILL(| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
 | Type | Inputs | Outputs | p | Notes |
 |---|---|---|---|---|
 | `Audio Analyze` | audio:audio | level:modulator, low:modulator, mid:modulator, high:modulator, onset:modulator, b1:modulator, b2:modulator, b3:modulator, b4:modulator, b5:modulator, b6:modulator, b7:modulator, b8:modulator | 4 | bypass |
-| `Audio File` | none | out:audio | 9 | bypass |
+| `Audio Compare` | a:audio, b:audio | similarity:modulator, level diff:modulator, correlation:modulator, band 1:modulator, band 2:modulator, band 3:modulator, band 4:modulator, band 5:modulator, band 6:modulator, band 7:modulator, band 8:modulator, pitch diff:modulator, onset match:modulator, timing:modulator | 5 |  |
+| `Audio File` | none | out:audio | 10 | bypass |
 | `Audio to CV` | audio:audio | out:modulator | 6 | bypass |
 | `CV Recorder` | in:modulator | out:modulator | 6 | bypass |
 | `CV to Pitch` | in:modulator | out:modulator | 6 | bypass |
@@ -910,6 +911,7 @@ R"AISKILL(| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
 | `Random` | none | out:modulator | 5 | bypass |
 | `Range to Range` | in:modulator | out:modulator | 6 | bypass |
 | `Smoothing` | in:modulator | out:modulator | 2 | bypass |
+| `Sound Analyze` | none | f0:modulator, attack:modulator, decay:modulator, sustain:modulator, release:modulator, bright:modulator, noise:modulator, p1:modulator, p2:modulator, p3:modulator, p4:modulator, p5:modulator, p6:modulator, p7:modulator, p8:modulator | 5 | bypass |
 | `Velocity to CV` | notes:note | out:modulator | 2 | bypass |
 | `Vibrato` | none | out:modulator | 1 | bypass |
 
@@ -918,6 +920,7 @@ R"AISKILL(| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
 | Type | Inputs | Outputs | p | Notes |
 |---|---|---|---|---|
 | `Arpeggiator` | notes:note | out:note | 8 | bypass |
+| `Audio to MIDI` | audio:audio | notes:note | 9 | bypass |
 | `Bouncing Balls` | none | out:note | 9 | bypass |
 | `Chorder` | none | out:note | 9 | bypass |
 | `Gate` | notes:note | out:note | 1 | bypass |
@@ -950,7 +953,8 @@ R"AISKILL(| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
 | `Predictive Coloring` | input:image | out:image | 7 | bypass |
 | `Predictive Modulator` | in:modulator | out:modulator | 6 | bypass |
 | `Predictive Notes` | notes:note | out:note | 10 | bypass |
-| `Predictive Quantize` | notes:note | out:note | 1 | bypass |
+)AISKILL"
+R"AISKILL(| `Predictive Quantize` | notes:note | out:note | 1 | bypass |
 | `Predictive Rhythm` | notes:note | out:note | 5 | bypass |
 | `Predictive Velocity` | notes:note | out:note | 1 | bypass |
 
@@ -959,7 +963,7 @@ R"AISKILL(| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
 | Type | Inputs | Outputs | p | Notes |
 |---|---|---|---|---|
 | `Arrow` | none | out:image | 20 | bypass |
-| `Audio Texture` | input:audio | out:image | 4 | bypass |
+| `Audio Texture` | input:audio | out:image | 10 | bypass |
 | `Blob` | none | out:image | 20 | bypass |
 | `Chevron` | none | out:image | 20 | bypass |
 | `Circle` | none | out:image | 20 | bypass |
@@ -967,8 +971,7 @@ R"AISKILL(| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
 | `Cross` | none | out:image | 20 | bypass |
 | `Draw` | input:image | out:image | 13 | bypass |
 | `Ellipse` | none | out:image | 20 | bypass |
-)AISKILL"
-R"AISKILL(| `FieldPixel` | none | out:image | 9 | bypass |
+| `FieldPixel` | none | out:image | 9 | bypass |
 | `Formula` | none | out:image | 8 | bypass |
 | `Gear` | none | out:image | 20 | bypass |
 | `Heart` | none | out:image | 20 | bypass |
