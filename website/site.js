@@ -522,7 +522,12 @@
     if (!cv || !perches.length) return;
     const g = cv.getContext('2d');
     const COLS = 34, ROWS = 24, X0 = -1.25, X1 = 1.25, Y0 = -0.95, Y1 = 0.85, FX = 0.08, FY = 0.80;
-    const INK = '#12152A', EYE = '#D9430E';
+    // the bird takes its colours from the active mode (brand roles --ink and --accent-ink)
+    let INK = '#12152A', EYE = '#D9430E';
+    const roles = () => {
+      const cs = getComputedStyle(document.documentElement);
+      INK = cs.getPropertyValue('--ink').trim() || INK; EYE = cs.getPropertyValue('--accent-ink').trim() || EYE;
+    };
 
     const inEll = (px, py, cx, cy, rx, ry, rot) => {
       const c = Math.cos(rot), s = Math.sin(rot), dx = px - cx, dy = py - cy;
@@ -598,6 +603,7 @@
       g.font = `620 ${(cw * 1.18).toFixed(2)}px 'Geist Mono', ui-monospace, monospace`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
+      roles();
       for (const [i, j, kind] of cl) {
         const h = ((i * 73856093) ^ (j * 19349663) ^ (tick * 83492791)) & 0xFFFF;
         let ch1 = '1', a = kind === 'leg' ? 0.8 : 1;
@@ -797,6 +803,11 @@
       track.appendChild(frag);
       track.style.setProperty('--dur', `${Math.round(list.length * (1.5 + ti * 0.2))}s`);
     });
+    // animate only while the tapes are on screen
+    if ('IntersectionObserver' in window) {
+      wrap.classList.add('is-off');
+      new IntersectionObserver((es) => es.forEach((en) => wrap.classList.toggle('is-off', !en.isIntersecting)), { rootMargin: '80px' }).observe(wrap);
+    }
     wrap.addEventListener('click', (e) => {
       const b = e.target.closest('.ticker-pill');
       if (b) openNode(b.textContent, b.dataset.cat, b);

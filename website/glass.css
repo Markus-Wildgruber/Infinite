@@ -17,7 +17,7 @@
 .download-card, .film-frame, .predict-card, .wave-card { box-shadow: var(--shadow-2); }
 
 /* short labels only: pills, chips, tabs */
-.btn-ghost, .ticker-pill, .tab-pill, .lib-chip, .lib-view, .platform-chip {
+.btn-ghost, .tab-pill, .lib-chip, .lib-view, .platform-chip {
   background: var(--glass);
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-hi), var(--glass-shadow);
@@ -67,9 +67,12 @@
 @media (prefers-reduced-transparency: reduce) {
   :root { --glass: var(--surface-1); }
   .site-header { background: var(--ground); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .btn-ghost, .ticker-pill, .tab-pill, .lib-chip, .lib-view, .platform-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .btn-ghost, .tab-pill, .lib-chip, .lib-view, .platform-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 .lib-menu { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(1.7); backdrop-filter: blur(24px) saturate(1.7); box-shadow: var(--glass-hi), var(--shadow-2); }
 .lib-select { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-hi), var(--glass-shadow); }
 @media (prefers-reduced-transparency: reduce) { .lib-menu { background: var(--surface-1); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+/* marquee pills: ~600 of them move at once, so no backdrop blur (it re-blurs every frame); the tint is the glass colour, solid */
+.ticker-pill { background: color-mix(in srgb, var(--surface-1) 92%, var(--ink)); box-shadow: var(--glass-hi), 0 1px 2px color-mix(in srgb, var(--shadow) 8%, transparent); }
