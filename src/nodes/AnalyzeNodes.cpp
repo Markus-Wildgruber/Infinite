@@ -863,8 +863,11 @@ public:
    // Main thread only, once per frame from CookIfNeeded.
    void DrainRetired() { mSampleSlot.DrainRetired(); }
 
-   void PushParams(float volume, float gain, float attack, float release, bool loop, bool monitor, float pitchSemitones = 0.0f)
+   void PushParams(float volume, float gain, float attack, float release, bool loop, bool monitor, float pitchSemitones = 0.0f,
+                   bool follow = false, float offsetSeconds = 0.0f)
    {
+      mFollow.store(follow, std::memory_order_relaxed);
+      mOffsetSeconds.store(offsetSeconds, std::memory_order_relaxed);
       mVolume.store(volume, std::memory_order_relaxed);
       mGain.store(gain, std::memory_order_relaxed);
       mPitchSemitones.store(pitchSemitones, std::memory_order_relaxed);
@@ -882,7 +885,14 @@ public:
    // RequestRetrigger() below, from the audio thread itself
    // (AudioEngine::RunTopology's Arrangement Timeline retrigger lookahead) -
    // safe either way since it is just an atomic store.
-   void RequestPlay() { mPlaying.store(true, std::memory_order_relaxed); }
+   // Play at the end of a non-looping file starts it over: before, the
+   // cursor sat on the last frame and every later Play ended at once, so the
+   // node stayed silent until it was recreated.
+   void RequestPlay()
+   {
+      mPlayFromEnd.store(true, std::memory_order_relaxed);
+      mPlaying.store(true, std::memory_order_relaxed);
+   }
    void RequestPause() { mPlaying.store(false, std::memory_order_relaxed); }
    void RequestRestart() { mRestartRequested.store(true, std::memory_order_release); }
    bool IsPlaying() const { return mPlaying.load(std::memory_order_relaxed); }
@@ -973,13 +983,22 @@ public:
       const bool hasBuffer = mActiveBuffer != nullptr && mActiveBuffer->numFrames > 0;
       const bool clipBlock = mClipPending;
       mClipPending = false;
+      if (mPlayFromEnd.exchange(false, std::memory_order_relaxed) && hasBuffer &&
+          mPos >= (double)mActiveBuffer->numFrames - 1.0)
+         mPos = 0.0;
 
       if (clipBlock)
       {
          ProcessClipBlock(buffer, hasBuffer, monitor);
       }
+      else if (mFollow.load(std::memory_order_relaxed))
+      {
+         mClipActive = false;
+         ProcessFollowBlock(buffer, hasBuffer);
+      }
       else
       {
+         mFollowActive = false;
          mClipActive = false;
          const bool loop = mLoop.load(std::memory_order_relaxed);
          for (int i = 0; i < buffer.numFrames; i++)
@@ -1008,7 +1027,10 @@ public:
                   }
                }
             }
-            WriteFrame(buffer, i, left * volume, right * volume, gain, monitor);
+            // `monitor` no longer blanks the canvas output: it only mutes the
+            // direct Audio Out route (SilentAtAudioOut), so a switch or mixer
+            // fed by this node still hears it.
+            WriteFrame(buffer, i, left * volume, right * volume, gain, true);
          }
          mFramePos.store((int64_t)mPos, std::memory_order_relaxed);
       }
@@ -1017,6 +1039,60 @@ public:
    }
 
 private:
+   // Transport-locked playback (followTransport). The file position is a
+   // pure function of the transport clock: (BlockStartSeconds - offset) *
+   // file rate * varispeed. A cursor runs on continuously between blocks and
+   // is re-seated only on a transport jump (start, seek, loop lap - all bump
+   // ResetEpoch) or when it has drifted more than 5 ms from the clock, so
+   // uninterrupted playback never re-seeks and a seek lands sample-accurately.
+   void ProcessFollowBlock(AudioBuffer& buffer, bool hasBuffer)
+   {
+      Transport& tr = Transport::Instance();
+      if (!hasBuffer || !tr.IsPlaying())
+      {
+         mFollowActive = false;
+         for (int i = 0; i < buffer.numFrames; i++)
+            WriteFrame(buffer, i, 0.0f, 0.0f, 1.0f, false);
+         return;
+      }
+      const double frames = (double)mActiveBuffer->numFrames;
+      const double fileRate = mActiveBuffer->sampleRate > 0.0 ? mActiveBuffer->sampleRate : mSampleRate;
+      const double pitchRatio = std::pow(2.0, (double)mMailbox.SmoothedValue(kFilePitchParam) / 12.0);
+      const double offset = (double)mOffsetSeconds.load(std::memory_order_relaxed);
+      // With no audio clock (headless sweeps) the frame-driven Seconds() is the clock.
+      const double clock = tr.AudioSampleRate() > 0.0 ? tr.BlockStartSeconds() : tr.Seconds();
+      const double target = (clock - offset) * fileRate * pitchRatio;
+      const unsigned long long epoch = tr.ResetEpoch();
+      if (!mFollowActive || epoch != mFollowEpoch || std::fabs(target - mFollowCursor) > 0.005 * fileRate)
+         mFollowCursor = target;
+      mFollowActive = true;
+      mFollowEpoch = epoch;
+
+      const bool loop = mLoop.load(std::memory_order_relaxed);
+      for (int i = 0; i < buffer.numFrames; i++)
+      {
+         const float volume = mMailbox.SmoothedValue(kFileVolumeParam);
+         const float gain = mMailbox.SmoothedValue(kFileGainParam);
+         const float ratio = powf(2.0f, mMailbox.SmoothedValue(kFilePitchParam) / 12.0f);
+         float left = 0.0f, right = 0.0f;
+         double p = mFollowCursor;
+         if (loop && p >= frames)
+            p = std::fmod(p, frames);
+         if (p >= 0.0 && p < frames)
+         {
+            left = ReadBufferInterp(*mActiveBuffer, 0, p);
+            right = ReadBufferInterp(*mActiveBuffer, 1, p);
+            mPos = p; // so switching follow off carries on from here
+         }
+         mFollowCursor += mPlaybackRate * ratio;
+         WriteFrame(buffer, i, left * volume, right * volume, gain, true);
+      }
+      double shown = mFollowCursor;
+      if (loop && shown >= frames)
+         shown = std::fmod(shown, frames);
+      mFramePos.store((int64_t)std::clamp(shown, 0.0, frames), std::memory_order_relaxed);
+   }
+
    void WriteFrame(AudioBuffer& buffer, int i, float left, float right, float gain, bool monitor)
    {
       // Still analysed while `monitor` is off - "silent but still analysed"
@@ -1125,7 +1201,14 @@ private:
    std::atomic<bool> mMonitor { true };
 
    std::atomic<bool> mPlaying { false };
+   std::atomic<bool> mPlayFromEnd { false };
    std::atomic<bool> mRestartRequested { false };
+   std::atomic<bool> mFollow { false };
+   std::atomic<float> mOffsetSeconds { 0.0f };
+   // Transport-locked cursor, audio thread only - see ProcessFollowBlock.
+   bool mFollowActive = false;
+   unsigned long long mFollowEpoch = 0;
+   double mFollowCursor = 0.0;
    std::atomic<int64_t> mFramePos { 0 };
    double mPos = 0.0; // audio-thread-only canvas playback cursor, source frames
 
@@ -1312,7 +1395,7 @@ bool AudioFileNode::OpenFromDecoded(const std::string& path, Platform::SampleBuf
    mAudioNode->PushParams(volume, gain, attack, release, loop, monitor, pitch);
    mAudioNode->RequestRestart();
 
-   const size_t slash = path.find_last_of('/');
+   const size_t slash = path.find_last_of("/\\"); // Windows paths use backslashes
    mFileName = (slash == std::string::npos) ? path : path.substr(slash + 1);
    mFilePath = path;
    mStatus = "loaded";
@@ -1328,21 +1411,12 @@ bool AudioFileNode::OpenFromDecoded(const std::string& path, Platform::SampleBuf
 void AudioFileNode::SweepPrepare()
 {
    OpenFromDecoded("sweep-tone.wav", MakeSweepToneBuffer());
+   // The sweep has no audio clock (BlockStartSeconds stays put), so the
+   // node's own playhead is what plays the tone; followTransport and offset
+   // are probed from there (see SweepNeedsClock / SweepPrerequisitesFor).
+   followTransport = false;
+   mWasFollowing = false;
    Play();
-}
-
-void AudioFileNode::SweepPostAlter(const std::string& paramName, int& frameId)
-{
-   if (paramName != "followTransport")
-      return;
-   // followTransport only acts on a transport play -> pause edge between cooks. Drive one, then restore.
-   Transport& tr = Transport::Instance();
-   const bool was = tr.IsPlaying();
-   tr.SetPlaying(true);
-   CookIfNeeded(frameId++);
-   tr.SetPlaying(false);
-   CookIfNeeded(frameId++);
-   tr.SetPlaying(was);
 }
 
 bool AudioFileNode::OpenViaDialog()
@@ -1374,6 +1448,8 @@ void AudioFileNode::Restart()
 
 bool AudioFileNode::IsPlaying() const
 {
+   if (followTransport)
+      return mLoaded && Transport::Instance().IsPlaying();
    return mAudioNode && mAudioNode->IsPlaying();
 }
 
@@ -1391,23 +1467,31 @@ void AudioFileNode::CookIfNeeded(int frameId)
    if (!mAudioNode)
       mAudioNode = std::make_unique<AudioFilePlayerAudioNode>();
 
-   mAudioNode->PushParams(volume, gain, attack, release, loop, monitor, pitch);
+   mAudioNode->PushParams(volume, gain, attack, release, loop, monitor, pitch, followTransport, offset);
    mAudioNode->DrainRetired();
 
-   // Following the transport keeps the track locked to the same play/pause the
-   // rest of the patch obeys, so a recording lines up with the audio.
-   if (followTransport)
+   // monitor decides which Audio Out terminals sum this node into the
+   // device, which is fixed when the topology is built.
+   if (monitor != mLastMonitor)
    {
-      const bool transportPlaying = Transport::Instance().IsPlaying();
-      if (transportPlaying != mWasTransportPlaying)
-      {
-         if (transportPlaying)
-            Play();
-         else
-            Pause();
-         mWasTransportPlaying = transportPlaying;
-      }
+      mLastMonitor = monitor;
+      AudioTopologyRequest::Request();
    }
+
+   // Following the transport, the audio thread reads the position straight
+   // off the transport clock (ProcessFollowBlock); nothing to drive here.
+   // Turning follow off hands over to the node's own playhead in the state
+   // the transport is in, so the sound does not stop or jump.
+   const bool transportPlaying = Transport::Instance().IsPlaying();
+   if (mWasFollowing && !followTransport)
+   {
+      if (transportPlaying)
+         Play();
+      else
+         Pause();
+   }
+   mWasFollowing = followTransport;
+   mWasTransportPlaying = transportPlaying;
 
    mLevels = mAudioNode->ReadLevels();
 }

@@ -76,6 +76,7 @@ namespace app
             NoteNodeUidChanged(mintedUid, spawned);
          }
          spawned->showParams = rec.showParams;
+         spawned->label = rec.label;
          spawned->node->bypassed = rec.bypassed;
          spawned->showMiniViewport = rec.showMiniViewport;
          spawned->showAdvancedParams = rec.showAdvancedParams;

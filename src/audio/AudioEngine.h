@@ -183,6 +183,10 @@ struct AudioTerminal
    // terminal still writes its own capture ring, so a recording is unchanged.
    bool mixToDevice = true;
 
+   // The source asked not to be heard directly (INode::SilentAtAudioOut):
+   // never summed into the device, whatever MarkDuplicateDeviceTerminals finds.
+   bool muted = false;
+
    // A live-monitoring Audio Out: skipped by terminal-level delay compensation, so it is neither
    // delayed to match a slower terminal nor counted when finding the slowest one.
    bool live = false;
@@ -256,8 +260,8 @@ inline void MarkDuplicateDeviceTerminals(std::vector<AudioTerminal>& terminals)
 {
    for (size_t i = 0; i < terminals.size(); i++)
    {
-      terminals[i].mixToDevice = true;
-      if (terminals[i].numWindows > 0)
+      terminals[i].mixToDevice = !terminals[i].muted;
+      if (terminals[i].numWindows > 0 || terminals[i].muted)
          continue;
       for (size_t k = 0; k < i; k++)
          if (terminals[k].numWindows == 0 && terminals[k].mixToDevice && terminals[k].bufferIndex == terminals[i].bufferIndex)

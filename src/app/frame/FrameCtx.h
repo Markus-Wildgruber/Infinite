@@ -1,6 +1,7 @@
 #pragma once
 // Shared state for the stages split out of main(). See docs/plans/main-split/README.md (Block C).
 #include "app/AppShared.h"
+#include "audio/AudioEngine.h"
 #include "app/frame/FrameTests.h"
 #include <optional>
 

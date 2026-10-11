@@ -17,6 +17,7 @@
 #include "nodes/PredictiveQuantizeNode.h"
 #include "nodes/PredictiveRhythmNode.h"
 #include "nodes/PredictiveVelocityNode.h"
+#include "nodes/SoundAnalyzeNode.h"
 #include "nodes/VideoSourceNode.h"
 #include "nodes/WavetableNode.h"
 
@@ -811,7 +812,8 @@ namespace app
          return false;
       return dynamic_cast<IAudioSource*>(node) != nullptr || node->AudioInputSlot(0) != nullptr ||
              dynamic_cast<INoteSource*>(node) != nullptr || node->NoteInputSlot(0) != nullptr ||
-             dynamic_cast<VibratoNode*>(node) != nullptr || dynamic_cast<EnvelopeNode*>(node) != nullptr;
+             dynamic_cast<VibratoNode*>(node) != nullptr || dynamic_cast<EnvelopeNode*>(node) != nullptr ||
+             dynamic_cast<SoundAnalyzeNode*>(node) != nullptr; // pin-less, file-driven: same carve-in as Vibrato
    }
 
    float MpcNodeWidth()

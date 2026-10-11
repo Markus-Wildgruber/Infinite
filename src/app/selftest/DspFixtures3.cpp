@@ -1399,6 +1399,36 @@ namespace EqTest
       const double ratio = outRms / std::max(1e-9, inRms);
       return (float)(20.0 * log10(std::max(1e-9, ratio)));
    }
+
+   // RenderedMagnitudeDb for low tones: its fixed 50 ms window is only 2.35
+   // cycles at 47 Hz, and a partial half-cycle skews an RMS ratio once the
+   // filter shifts the output's phase. This one measures over a whole
+   // number of half-periods (sin^2 averages to exactly 1/2 over any of them)
+   // spanning at least 250 ms, after the same 300 ms settle.
+   float RenderedMagnitudeDbLong(AudioEffectNode& node, float toneHz, double sampleRate)
+   {
+      node.CookIfNeeded(1);
+      const int warmupSamples = (int)(0.3 * sampleRate);
+      const double halfPeriod = sampleRate / (2.0 * (double)toneHz);
+      const int halfPeriods = std::max(2, (int)std::ceil(0.25 * sampleRate / halfPeriod));
+      const int testSamples = std::max(16, (int)std::lround((double)halfPeriods * halfPeriod));
+      auto tone = [toneHz, sampleRate](int i) {
+         return (float)sin(2.0 * M_PI * (double)toneHz * (double)i / sampleRate);
+      };
+      std::vector<std::vector<float>> out;
+      DelayTest::RunSamples(node, warmupSamples + testSamples, 1, [&tone](int i, int) { return tone(i); }, &out);
+
+      double sumInSq = 0.0, sumOutSq = 0.0;
+      for (int i = warmupSamples; i < warmupSamples + testSamples; i++)
+      {
+         const double x = (double)tone(i);
+         const double y = (double)out[0][(size_t)i];
+         sumInSq += x * x;
+         sumOutSq += y * y;
+      }
+      const double ratio = sqrt(sumOutSq / std::max(1e-18, sumInSq));
+      return (float)(20.0 * log10(std::max(1e-9, ratio)));
+   }
 }
 
 static bool RunEqFixture()
@@ -1505,6 +1535,63 @@ static bool RunEqFixture()
       printf("DSPTEST eq series composition: two +6dB peaks at 1kHz -> %.2f dB (want ~+12)  %s\n", at1k,
              ok ? "OK" : "FAIL");
       all &= ok;
+   }
+
+   // 5) Designed gain, rendered through the real node and checked against
+   //    hand-derived RBJ numbers (not against EqDsp's own closed form, which
+   //    section 1 already ties to the render - a wrong cookbook formula would
+   //    pass that and fail this). Case a is the reported "-12 dB on the low
+   //    band barely touches below 47 Hz" scenario: a fresh EQ with ONLY
+   //    band1Gain changed. Band 1 must default to a low shelf at 80 Hz, and
+   //    a shelf's freq is its half-gain midpoint (see EqDsp::BandType), so:
+   //    -6 dB at 80 Hz, -10.4 at 47 Hz, -11.7 at 30 Hz, flat at 1 kHz.
+   {
+      struct Probe { float hz, wantDb, tolDb; };
+      auto check = [&](const char* label, const std::function<void(AudioEffectNode&)>& setup,
+                       const std::vector<Probe>& probes) {
+         bool ok = true;
+         std::string got;
+         for (const Probe& p : probes)
+         {
+            auto node = MakeNode(sampleRate);
+            setup(*node);
+            const float db = RenderedMagnitudeDbLong(*node, p.hz, sampleRate);
+            ok &= std::fabs(db - p.wantDb) <= p.tolDb;
+            char buf[64];
+            snprintf(buf, sizeof(buf), " %.0fHz %.2f (want %.1f)", p.hz, db, p.wantDb);
+            got += buf;
+         }
+         printf("DSPTEST eq designed gain (%s):%s  %s\n", label, got.c_str(), ok ? "OK" : "FAIL");
+         return ok;
+      };
+
+      {
+         auto probeNode = MakeNode(sampleRate);
+         const bool defaultOk = EqDsp::SanitizeType(probeNode->Param("band1Type")) == EqDsp::kLowShelf &&
+                                std::fabs(probeNode->Param("band1Freq") - 80.0f) < 0.01f &&
+                                probeNode->Param("band1On") >= 0.5f;
+         printf("DSPTEST eq band 1 default: type %s, %.0f Hz, %s  %s\n",
+                EqDsp::TypeName(EqDsp::SanitizeType(probeNode->Param("band1Type"))), probeNode->Param("band1Freq"),
+                probeNode->Param("band1On") >= 0.5f ? "on" : "off", defaultOk ? "OK" : "FAIL");
+         all &= defaultOk;
+      }
+
+      all &= check("default band 1, gain -12 dB",
+                   [](AudioEffectNode& n) { *n.ParamPtr("band1Gain") = -12.0f; },
+                   { { 30.0f, -11.7f, 0.5f }, { 47.0f, -10.4f, 0.5f }, { 80.0f, -6.0f, 0.5f },
+                     { 1000.0f, 0.0f, 0.3f } });
+      all &= check("peak 250 Hz Q1 -12 dB",
+                   [](AudioEffectNode& n) {
+                      SetAllOff(n);
+                      SetBand(n, 1, EqDsp::kPeak, 250.0f, 1.0f, -12.0f, true);
+                   },
+                   { { 250.0f, -12.0f, 0.5f }, { 30.0f, -0.2f, 0.4f }, { 4000.0f, 0.0f, 0.3f } });
+      all &= check("high shelf 4 kHz +9 dB",
+                   [](AudioEffectNode& n) {
+                      SetAllOff(n);
+                      SetBand(n, 4, EqDsp::kHighShelf, 4000.0f, 0.707f, 9.0f, true);
+                   },
+                   { { 16000.0f, 9.0f, 0.5f }, { 4000.0f, 4.5f, 0.5f }, { 100.0f, 0.0f, 0.3f } });
    }
 
    return all;

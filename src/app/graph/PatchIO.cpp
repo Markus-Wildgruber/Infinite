@@ -69,6 +69,7 @@ namespace app
          rec.uid = gn.uid;
          rec.category = gn.category;
          rec.typeName = gn.typeName;
+         rec.label = gn.label;
          // The cached live position, not the spawn position: the node has almost
          // certainly been dragged since it was created. Read from the cache
          // rather than the editor, since saving runs outside the editor context.

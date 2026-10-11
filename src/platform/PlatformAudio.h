@@ -38,6 +38,9 @@ namespace Platform
    std::string OpenAudioDialog();
    // Standard MIDI files (.mid / .midi), for the MIDI File node.
    std::string OpenMidiDialog();
+   // Save-as for a .mid (Audio to MIDI's export). Returns the chosen path with
+   // the .mid extension, or "" if cancelled.
+   std::string SaveMidiDialog(const std::string& suggestedName = "Untitled.mid");
 
    bool AudioStart(std::string& outError);
    void AudioStop();

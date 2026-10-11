@@ -125,6 +125,7 @@ namespace Patch
       uint64_t uid = 0;
       std::string category;
       std::string typeName;
+      std::string label; // GraphNode::label; its own `label` line, written only when set
       float x = 0.0f, y = 0.0f;
       // False only when the reader saw this node block with no `pos` line (a
       // hand-written file); PatchLayout places those. True for everything the

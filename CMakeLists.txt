@@ -407,6 +407,8 @@ set(COMMON_SOURCES
     src/app/AppState.cpp
     src/app/Startup.cpp
     src/app/bodies/AudioBodyKit.cpp
+    src/app/bodies/AudioCompareBody.cpp
+    src/app/bodies/SoundAnalyzeBody.cpp
     src/app/bodies/AudioNodeBodies.cpp
     src/app/bodies/FieldParams.cpp
     src/app/bodies/FxBodies1.cpp
@@ -452,6 +454,7 @@ set(COMMON_SOURCES
     src/app/graph/PatchLoad.cpp
     src/app/graph/Projector.cpp
     src/app/graph/Rpc.cpp
+    src/app/graph/AudioProbeJobs.cpp
     src/app/graph/Wiring.cpp
     src/app/panels/ArrangePanel.cpp
     src/app/panels/ArrangeRender.cpp
@@ -546,6 +549,9 @@ set(COMMON_SOURCES
     src/audio/MeterRing.cpp
     src/audio/MidiFile.cpp
     src/audio/AudioCaptureRing.cpp
+    src/audio/AudioProbe.cpp
+    src/audio/AudioAnalysis.cpp
+    src/audio/SoundAnalysis.cpp
     external/miniz.c
     external/shine/shine_mp3.c
     src/audio/AudioVoice.cpp
@@ -647,6 +653,9 @@ set(COMMON_SOURCES
     src/nodes/AudioNodes.cpp
     src/nodes/AudioMeterNode.cpp
     src/nodes/NoteNodes.cpp
+    src/nodes/AudioToMidiNode.cpp
+    src/nodes/AudioCompareNode.cpp
+    src/nodes/SoundAnalyzeNode.cpp
     src/nodes/WavetableNode.cpp
     src/nodes/AnalogNode.cpp
     src/nodes/WaveTerrainNode.cpp
@@ -658,6 +667,7 @@ set(COMMON_SOURCES
     src/nodes/AudioColorRampNode.cpp
     src/audio/dsp/SpectralAdditiveSynth.cpp
     src/audio/dsp/MolderDsp.cpp
+    src/audio/dsp/BasicPitch.cpp
     src/audio/dsp/GrainMolderDsp.cpp
     src/audio/dsp/SlicerDsp.cpp
     src/nodes/OscillatorNode.cpp
@@ -973,6 +983,9 @@ if(WIN32)
         dbghelp
     )
     target_include_directories(Infinite PRIVATE "${ONNXRUNTIME_INCLUDE_DIR}")
+    # Audio to MIDI's model runner (audio/dsp/BasicPitch.cpp) is compiled
+    # everywhere and stubs itself out where ONNX Runtime is not linked.
+    target_compile_definitions(Infinite PRIVATE INFINITE_HAS_ORT=1)
     # onnxruntime.dll, DirectML.dll (its own runtime dependency - see the
     # FetchContent comment above) and the bundled model weights all need to
     # sit next to Infinite.exe to run, exactly like infinite-vst3-scanner.exe
@@ -988,7 +1001,10 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_CURRENT_SOURCE_DIR}/assets/models/u2netp.onnx"
                 "$<TARGET_FILE_DIR:Infinite>/assets/models/u2netp.onnx"
-        COMMENT "Copying onnxruntime.dll, DirectML.dll and the u2netp model next to Infinite.exe")
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets/models/basic-pitch.onnx"
+                "$<TARGET_FILE_DIR:Infinite>/assets/models/basic-pitch.onnx"
+        COMMENT "Copying onnxruntime.dll, DirectML.dll and the u2netp and basic-pitch models next to Infinite.exe")
     # M_PI etc. live behind _USE_MATH_DEFINES in MSVC's math.h; defining on the
     # command line lands before any cmath include.
     target_compile_definitions(Infinite PRIVATE
@@ -1125,6 +1141,7 @@ elseif(APPLE)
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_include_directories(Infinite PRIVATE "${ONNXRUNTIME_INCLUDE_DIR}" "${FFMPEG_INCLUDE_DIR}")
+    target_compile_definitions(Infinite PRIVATE INFINITE_HAS_ORT=1)
     target_link_libraries(Infinite PRIVATE
         Threads::Threads
         ${CMAKE_DL_LIBS}
@@ -1176,6 +1193,9 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_CURRENT_SOURCE_DIR}/assets/models/u2netp.onnx"
                 "$<TARGET_FILE_DIR:Infinite>/assets/models/u2netp.onnx"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets/models/basic-pitch.onnx"
+                "$<TARGET_FILE_DIR:Infinite>/assets/models/basic-pitch.onnx"
         COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:Infinite>/Resources/drumkits/infinite-basic"
         COMMAND ${CMAKE_COMMAND} -E copy_directory

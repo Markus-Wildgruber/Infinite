@@ -248,6 +248,8 @@ bool Write(const std::string& path, const Data& data, std::string& outError)
          file << "  uid " << node.uid << "\n";
       if (!node.id.empty())
          file << "  id " << node.id << "\n";
+      if (!node.label.empty())
+         file << "  label " << EscapeLine(node.label) << "\n";
       file << "  pos " << FloatToString(px) << " " << FloatToString(py) << "\n";
       file << "  flags " << (node.showParams ? 1 : 0) << " " << (node.bypassed ? 1 : 0) << " "
            << (node.showMiniViewport ? 1 : 0) << " " << (node.showAdvancedParams ? 1 : 0) << "\n";
@@ -599,6 +601,14 @@ bool ReadStream(std::istream& file, Data& outData, std::string& outError)
       else if (tag == "uid" && inNode)
       {
          in >> current.uid;
+      }
+      else if (tag == "label" && inNode)
+      {
+         std::string raw;
+         std::getline(in, raw);
+         if (!raw.empty() && raw[0] == ' ')
+            raw.erase(0, 1);
+         current.label = UnescapeLine(TrimRight(raw));
       }
       else if (tag == "id" && inNode)
       {

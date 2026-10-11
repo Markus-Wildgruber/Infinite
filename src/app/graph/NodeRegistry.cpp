@@ -16,6 +16,7 @@
 #include "nodes/AnalogNode.h"
 #include "nodes/AnalyzeNodes.h"
 #include "nodes/AudioColorRampNode.h"
+#include "nodes/AudioCompareNode.h"
 #include "nodes/AudioDisplacementNode.h"
 #include "nodes/AudioEffectNode.h"
 #include "nodes/AudioMeterNode.h"
@@ -23,6 +24,7 @@
 #include "nodes/AudioPluginNode.h"
 #include "nodes/AudioRibbonNode.h"
 #include "nodes/AudioTextureNode.h"
+#include "nodes/AudioToMidiNode.h"
 #include "nodes/BlendNode.h"
 #include "nodes/ColorRampNode.h"
 #include "nodes/CurveNode.h"
@@ -89,6 +91,7 @@
 #include "nodes/SimulationNodes.h"
 #include "nodes/SlicerNode.h"
 #include "nodes/SlideshowNode.h"
+#include "nodes/SoundAnalyzeNode.h"
 #include "nodes/Switcher3DNode.h"
 #include "nodes/SwitcherNode.h"
 #include "nodes/SyphonInNode.h"
@@ -350,6 +353,7 @@ namespace app
       REGISTER_NODE(NoteSequencerNode, Note Sequencer, "Notes");
       REGISTER_NODE(RandomNoteGeneratorNode, Random Note Generator, "Notes");
       REGISTER_NODE(MidiFileNode, MIDI File, "Notes");
+      REGISTER_NODE(AudioToMidiNode, Audio to MIDI, "Notes");
       REGISTER_NODE(ChorderNode, Chorder, "Notes");
       REGISTER_NODE(NoteStackNode, Note Stack, "Notes");
       REGISTER_NODE(NoteCapturerNode, Note Capturer, "Notes");
@@ -360,6 +364,8 @@ namespace app
       REGISTER_NODE(VelocityToCVNode, Velocity to CV, "Modulators");
       REGISTER_NODE(CVRecorderNode, CV Recorder, "Modulators");
       REGISTER_NODE(AudioToCVNode, Audio to CV, "Modulators");
+      REGISTER_NODE(AudioCompareNode, Audio Compare, "Modulators");
+      REGISTER_NODE(SoundAnalyzeNode, Sound Analyze, "Modulators");
 
       // P3c effects - one AudioEffectNode class serves every EffectDef table
       // entry, the same pattern the filter-table loop above uses for

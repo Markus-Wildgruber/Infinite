@@ -109,6 +109,10 @@ public:
    // that subtraction lands on the loop-start axis and misplaces the whole
    // block's envelope, dropping the last few ms before the loop point.
    double BlockStartBeats() const { return mBlockStartBeats.load(std::memory_order_relaxed); }
+   // Seconds() at that same instant - for players that follow the transport
+   // in real time rather than in beats (Audio File, Audio to MIDI), so a
+   // seek, a loop lap or a start lands them sample-accurately.
+   double BlockStartSeconds() const { return mBlockStartSeconds.load(std::memory_order_relaxed); }
 
    // Offline render clock decoupling: keeps visual cooking locked to frame k's
    // exact timestamp (k / fps) while audio synthesis advances along its own
@@ -183,6 +187,7 @@ private:
    std::atomic<double> mAudioSecondsOffset { 0.0 };
    std::atomic<double> mPendingSeekSeconds { -1.0 };
    std::atomic<double> mBlockStartBeats { 0.0 };
+   std::atomic<double> mBlockStartSeconds { 0.0 };
    std::atomic<float> mPendingBpm { -1.0f }; // <= 0 means "nothing staged"
 
    std::atomic<bool> mLoopEnabled { false };

@@ -439,6 +439,7 @@ bool gHeadlessNeedProbe = false;
 
    // The assistant chat dock, right of the canvas next to the node browser.
    bool gAssistantPanelOpen = false;
+   float gAssistantPanelWidth = 380.0f;
 
    // The dockable viewport panel: every node index in this list gets its own
    // card, stacked left-to-right when bottom-docked or top-to-bottom when

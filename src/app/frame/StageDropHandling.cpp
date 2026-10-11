@@ -5,6 +5,7 @@
 #include "core/GltfImport.h"
 #include "nodes/AnalyzeNodes.h"
 #include "nodes/AudioPluginNode.h"
+#include "nodes/AudioToMidiNode.h"
 #include "nodes/DrumSequencerNode.h"
 #include "nodes/FieldElementNode.h"
 #include "nodes/FieldGraphNode.h"
@@ -23,6 +24,7 @@
 #include "nodes/PaulStretchNode.h"
 #include "nodes/SamplerNode.h"
 #include "nodes/SlicerNode.h"
+#include "nodes/SoundAnalyzeNode.h"
 #include "nodes/VideoSourceNode.h"
 
 namespace app
@@ -61,6 +63,8 @@ void DrawDropHandling(FrameCtx& fc)
          static const std::vector<std::string> kMidiExt = { "mid", "midi" };
          MidiFileNode* dropTargetMidi = FindNodeUnderCanvasPoint<MidiFileNode>(canvasPos);
          SamplerNode* dropTargetSampler = FindNodeUnderCanvasPoint<SamplerNode>(canvasPos);
+         AudioToMidiNode* dropTargetAudioToMidi = FindNodeUnderCanvasPoint<AudioToMidiNode>(canvasPos);
+         SoundAnalyzeNode* dropTargetSoundAnalyze = FindNodeUnderCanvasPoint<SoundAnalyzeNode>(canvasPos);
          MpcNode* dropTargetMpc = FindNodeUnderCanvasPoint<MpcNode>(canvasPos);
          std::vector<std::string> mpcDropPaths;
          SlicerNode* dropTargetSlicer = FindNodeUnderCanvasPoint<SlicerNode>(canvasPos);
@@ -222,6 +226,26 @@ void DrawDropHandling(FrameCtx& fc)
                if (dropTargetMpc != nullptr)
                {
                   mpcDropPaths.push_back(path); // loaded together below, so a multi-file drop fills successive pads
+                  continue;
+               }
+               if (dropTargetAudioToMidi != nullptr)
+               {
+                  // Path only: the node decodes and transcribes it on its next cook.
+                  ensureDroppedCheckpoint();
+                  dropTargetAudioToMidi->path = path;
+                  dropTargetAudioToMidi->exportMessage.clear();
+                  dropTargetAudioToMidi = nullptr;
+                  gPatchDirty = true;
+                  continue;
+               }
+               if (dropTargetSoundAnalyze != nullptr)
+               {
+                  // Path only: the node decodes and analyses it on its next cook.
+                  ensureDroppedCheckpoint();
+                  dropTargetSoundAnalyze->path = path;
+                  dropTargetSoundAnalyze->applyMessage.clear();
+                  dropTargetSoundAnalyze = nullptr;
+                  gPatchDirty = true;
                   continue;
                }
                if (dropTargetSampler != nullptr)

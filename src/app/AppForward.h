@@ -20,6 +20,8 @@ class AudioFileNode;
 class ImageAnalyzeNode;
 // nodes/AudioColorRampNode.h
 class AudioColorRampNode;
+// nodes/AudioCompareNode.h
+class AudioCompareNode;
 // nodes/AudioEffectNode.h
 class AudioEffectNode;
 // nodes/AudioDisplacementNode.h
@@ -36,6 +38,8 @@ class SplitterNode;
 class AudioRibbonNode;
 // nodes/AudioTextureNode.h
 class AudioTextureNode;
+// nodes/AudioToMidiNode.h
+class AudioToMidiNode;
 // nodes/BlendNode.h
 class BlendNode;
 // nodes/ColorRampNode.h
@@ -226,6 +230,8 @@ class ParticleSystemNode;
 class SlicerNode;
 // nodes/SlideshowNode.h
 class SlideshowNode;
+// nodes/SoundAnalyzeNode.h
+class SoundAnalyzeNode;
 // nodes/Switcher3DNode.h
 class Switcher3DNode;
 // nodes/SwitcherNode.h

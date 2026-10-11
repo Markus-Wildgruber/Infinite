@@ -1749,7 +1749,7 @@ bool RunShapeResonatorFixture()
       {
          Mesh mesh;
          std::vector<Particle> cloud;
-         Polyline curve;
+         struct Polyline curve; // "struct": wingdi.h declares a Polyline() function
          bool hasCurve = false;
          unsigned long long rev = 1;
          const Mesh& GetMesh() override { return mesh; }
@@ -1758,7 +1758,7 @@ bool RunShapeResonatorFixture()
          Material GetMaterial() const override { return Material(); }
          const std::vector<Particle>* GetPointCloud() override { return cloud.empty() ? nullptr : &cloud; }
          unsigned long long PointCloudRevision() override { return cloud.size(); }
-         const Polyline* GetCurve() override { return hasCurve ? &curve : nullptr; }
+         const struct Polyline* GetCurve() override { return hasCurve ? &curve : nullptr; }
          unsigned long long CurveStamp() override { return hasCurve ? 7 : 0; }
       };
       StubSource curveSrc, cloudSrc;

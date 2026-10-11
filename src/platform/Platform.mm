@@ -1330,6 +1330,28 @@ namespace Platform
       }
    }
 
+   std::string SaveMidiDialog(const std::string& suggestedName)
+   {
+      @autoreleasepool
+      {
+         NSSavePanel* panel = [NSSavePanel savePanel];
+         [panel setTitle:@"Save MIDI file"];
+         [panel setNameFieldStringValue:
+            [NSString stringWithUTF8String:suggestedName.empty() ? "Untitled.mid"
+                                                                 : suggestedName.c_str()]];
+         if (@available(macOS 11.0, *))
+         {
+            UTType* tMid = [UTType typeWithFilenameExtension:@"mid"];
+            if (tMid != nil)
+               [panel setAllowedContentTypes:@[ tMid ]];
+         }
+         if ([panel runModal] != NSModalResponseOK)
+            return std::string();
+         NSURL* url = [panel URL];
+         return url ? std::string([[url path] UTF8String]) : std::string();
+      }
+   }
+
    std::string OpenModelDialog()
    {
       @autoreleasepool

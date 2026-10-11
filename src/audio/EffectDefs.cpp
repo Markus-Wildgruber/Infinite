@@ -133,6 +133,11 @@ namespace
             // observable type within its try budget. An explicit hp 12
             // candidate cuts everything below its corner, including a probe
             // far below it, regardless of where that corner starts.
+            // bandNType is an integer index stored as a float: 0 low shelf,
+            // 1 peak, 2 high shelf, 3/4/5 hp 12/24/36, 6/7/8 lp 12/24/36,
+            // 9 bp, 10 notch, 11 all-pass (EqDsp::BandType / TypeNames - the
+            // body's dropdown registers those names as the param's enum
+            // options). Band 1 defaults to a low shelf, band 5 to a high shelf.
             std::vector<float> typeCandidates;
             if (b == 4)
                typeCandidates = { (float)EqDsp::kHp12 };

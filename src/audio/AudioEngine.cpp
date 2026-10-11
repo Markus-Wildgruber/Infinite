@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 
+#include "AudioProbe.h"
 #include "core/Transport.h"
 #include "platform/PlatformAudio.h"
 
@@ -407,6 +408,14 @@ void AudioEngine::RunTopology(ProcessList* list, AudioBuffer& deviceBuffer, doub
    // rather than RebuildAudioTopology, is what actually mutates cursors/
    // inboxes now.
    ApplyNoteWiringIfNew(list);
+   // Live captures tap the device callback only - the one caller that passes
+   // stage timings. An offline take (ProcessOffline) must neither land in a
+   // capture nor touch the probe's audio-thread state from another thread -
+   // except an offline capture, which stops the device and renders through
+   // ProcessOffline itself (AudioProbe::SetOffline).
+   const bool probeBlock = AudioProbe::Instance().Offline() ? outStageMs == nullptr : outStageMs != nullptr;
+   if (probeBlock)
+      AudioProbe::Instance().BeginBlock(mSampleRate.load(std::memory_order_relaxed));
 
    // Truncate to the pool's fixed capacity rather than overrun a pooled
    // buffer - see the kAudioMax* comment in AudioEngine.h. Silences the
@@ -632,6 +641,8 @@ void AudioEngine::RunTopology(ProcessList* list, AudioBuffer& deviceBuffer, doub
       {
          entry.node->ProcessBlockMulti(inputPtrs, entry.numInputs, outputPtrs, numOuts);
       }
+      if (probeBlock)
+         AudioProbe::Instance().OnNodeProcessed(entry.node, outputPtrs[0], numFrames);
       if (mOfflineTaps != nullptr)
          for (OfflineTap& tap : *mOfflineTaps)
          {

@@ -41,6 +41,9 @@ struct GraphNode
    std::unique_ptr<INode> node;
    std::string typeName;
    std::string category;
+   // A name the user (or the assistant, rename_node) gave this node; shown as
+   // its title instead of the type's own name. Empty = no rename. Saved.
+   std::string label;
    int index = 0;
    // Stable identity. `index` is reused by RemoveNodeByIndex, so anything that
    // must survive a delete + undo (arrangement clips reference srcUid) keys on

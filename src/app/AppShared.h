@@ -11,6 +11,7 @@
 #include "audio/PluginScanner.h"
 #include "audio/SampleScanner.h"
 #include "core/GestureRecorder.h"
+#include "core/ImageCable.h"
 #include "core/field/FieldDevice.h"
 #include "core/field/FieldGraphHost.h"
 #include "platform/PlatformMedia.h"
@@ -3234,6 +3235,7 @@ void DrawArpeggiatorBody(GraphNode& gn, ArpeggiatorNode* n);
 void DrawNoteSequencerBody(GraphNode& gn, NoteSequencerNode* n);
 
 void DrawMidiFileBody(GraphNode& gn, MidiFileNode* n);
+void DrawAudioToMidiBody(GraphNode& gn, AudioToMidiNode* n);
 
 void DrawRandomNoteGeneratorBody(GraphNode& gn, RandomNoteGeneratorNode* n);
 
@@ -3248,6 +3250,10 @@ void DrawBouncingBallsBody(GraphNode& gn, BouncingBallsNode* n);
 void DrawStrumBody(GraphNode& gn, NoteStrumNode* n);
 
 void DrawAudioToCVBody(GraphNode& gn, AudioToCVNode* n);
+
+void DrawAudioCompareBody(GraphNode& gn, AudioCompareNode* n);
+
+void DrawSoundAnalyzeBody(GraphNode& gn, SoundAnalyzeNode* n);
 
 void DrawEnvelopeBody(GraphNode& gn, EnvelopeNode* n);
 
@@ -3756,7 +3762,12 @@ void DrawModMatrixDocked(const char* id, const ImVec2& size);
 // INFINITE_AI_SIDEBAR and a `claude` executable was found.
 bool AssistantAvailable();
 void DrawAssistantPanelDocked(const char* id, const ImVec2& size);
-constexpr float kAssistantPanelWidth = 380.0f;
+// Called instead of the draw while the panel is hidden, so a running answer
+// still lands in the log and the saved chat.
+void PumpAssistantHidden();
+// Drag-resizable from the panel's left edge; remembered across launches.
+extern float gAssistantPanelWidth;
+constexpr float kAssistantPanelMinWidth = 280.0f;
 
 bool IsNodeVideoCompatible(const GraphNode& gn);
 
@@ -4565,6 +4576,14 @@ void Redo();
 
 bool HandleRpcCommand(const std::string& method, const nlohmann::json& params,
                          nlohmann::json& outResult, std::string& outError);
+
+// Audio measurement over RPC (graph/AudioProbeJobs.cpp): capture_audio,
+// analyze_file and analysis_result. PumpAudioProbeJobs runs once per frame.
+bool IsAudioProbeRpc(const std::string& method);
+bool HandleAudioProbeRpc(const std::string& method, const nlohmann::json& params,
+                         nlohmann::json& outResult, std::string& outError);
+void PumpAudioProbeJobs();
+bool RunAudioAnalysisTest(); // INFINITE_AUDIOANALYSISTEST
 
 void DrawMinimap();
 

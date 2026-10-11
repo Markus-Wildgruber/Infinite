@@ -487,6 +487,14 @@ namespace app
                      // the ring's own `enabled` flag - see AudioTerminal's comment.
                      terminals.push_back({ idx, ring });
                      terminals.back().live = audioOut != nullptr && audioOut->live;
+                     if (resolved->SilentAtAudioOut())
+                     {
+                        // Not heard from here; an Output still records it,
+                        // an Audio Out's capture (what you hear) does not.
+                        terminals.back().muted = true;
+                        if (audioOut != nullptr)
+                           terminals.back().capture = nullptr;
+                     }
                   }
                }
             }

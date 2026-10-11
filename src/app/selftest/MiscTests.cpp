@@ -15,9 +15,8 @@
 #include "nodes/AudioPluginNode.h"
 #include "nodes/DrumPatterns.h"
 #include "nodes/MacroNodes.h"
-#include "platform/PluginHandleInternal.h"
-#include "platform/linux/PluginHandleInternalLinux.h"
-#include "platform/win/PluginHandleInternalWin.h"
+#include "platform/PlatformMidi.h"
+#include "platform/PlatformPlugins.h"
 
 namespace app
 {

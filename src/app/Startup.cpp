@@ -19,9 +19,11 @@
 #include "core/UpdateCheck.h"
 #include "core/field/PinTable.h"
 #include "nodes/AnalyzeNodes.h"
+#include "nodes/AudioCompareNode.h"
 #include "nodes/AudioEffectNode.h"
 #include "nodes/AudioNodes.h"
 #include "nodes/AudioPluginNode.h"
+#include "nodes/AudioToMidiNode.h"
 #include "nodes/CurveNode.h"
 #include "nodes/CurvesNode.h"
 #include "nodes/DepthProjectionNode.h"
@@ -56,6 +58,7 @@
 #include "nodes/ShapeNode.h"
 #include "nodes/SimulationNodes.h"
 #include "nodes/SlicerNode.h"
+#include "nodes/SoundAnalyzeNode.h"
 #include "nodes/Text3DNode.h"
 #include "nodes/TextNode.h"
 #include "nodes/UtilityNodes.h"
@@ -590,6 +593,14 @@ int InitApp(FrameCtx& fc, int argc, char** argv)
       return PredictiveVelocity::RunPredVelocityTest() ? 0 : 1;
    if (getenv("INFINITE_PREDRHYTHMTEST") != nullptr)
       return PredictiveRhythm::RunPredRhythmTest() ? 0 : 1;
+   if (getenv("INFINITE_AUDIOTOMIDITEST") != nullptr)
+      return AudioToMidiNode::RunSelfTest() ? 0 : 1;
+   if (getenv("INFINITE_AUDIOANALYSISTEST") != nullptr)
+      return RunAudioAnalysisTest() ? 0 : 1;
+   if (getenv("INFINITE_AUDIOCOMPARETEST") != nullptr)
+      return AudioCompareNode::RunSelfTest() ? 0 : 1;
+   if (getenv("INFINITE_SOUNDANALYSISTEST") != nullptr)
+      return SoundAnalyzeNode::RunSelfTest() ? 0 : 1;
    if (getenv("INFINITE_DRIFTTEST") != nullptr)
       return PredictionNodes::RunDriftTest() ? 0 : 1;
    if (getenv("INFINITE_PREDFEEDBACKTEST") != nullptr)

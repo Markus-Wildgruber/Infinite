@@ -162,3 +162,13 @@ under the SIL Open Font License 1.1; full text in
 `external/fonts/Noto/OFL.txt`. The files are subsets of the upstream
 Regular weight (notofonts/noto-cjk), cut to the glyphs used by the
 translation tables by `tools/i18n/subset_fonts.py`.
+
+
+Basic Pitch (Windows and Linux)
+-------------------------------
+
+Spotify's note-transcription model, bundled as `assets/models/basic-pitch.onnx`
+for the Audio to MIDI node, with its post-processing ported to C++ in
+`src/audio/dsp/BasicPitch.cpp`. Copyright 2022 Spotify AB, Apache License 2.0
+(https://github.com/spotify/basic-pitch/blob/main/LICENSE). Details and
+citation in `assets/models/NOTICE.txt`.

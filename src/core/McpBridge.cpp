@@ -8,10 +8,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
@@ -36,7 +40,11 @@ namespace McpBridge
          "Work in this order: (1) get_graph to see what is already there - never rebuild what exists; "
          "(2) describe every node type before using it - never guess type names, slot names, outputs or "
          "parameter keys; (3) make changes with batch so each request is one undo step and fails as a whole; "
-         "(4) check the result with get_graph / get_bindings and, for pictures, render_frame. "
+         "(4) check the result with get_graph / get_bindings, for pictures render_frame, and for sound analyze_audio "
+         "(numbers: levels, bands, pitch, onsets - compare several nodes in one call) or analyze_file (whole files: "
+         "tempo, key, spectrum). Use transport to play/pause/seek, e.g. play from 0 before comparing sources; for "
+         "repeatable comparisons use analyze_audio with offline:true (renders the patch itself, sample-accurate). "
+         "Tidy or adjust with move_node, set_bypass (instead of zeroing a mix) and rename_node. "
          "Node indices change after undo, redo or a failed batch: re-read get_graph then. "
          "An image only shows if it reaches an Output node; sound only if it reaches Audio Out or an Output's audio input. "
          "Prefer modulators (LFO, Envelope, Audio Analyze, ...) bound with bind_modulator over per-frame expressions "
@@ -62,7 +70,11 @@ namespace McpBridge
            "The current patch, compact: nodes (index, type, category, bypassed), cables (image/geometry/audio/notes), "
            "modulation, expressions and globals. Parameter values are not included - use get_params for one node.",
            R"({"type":"object","properties":{}})" },
-         { "get_params", "Every saved parameter value of one node, as {\"<kind> <key>\": value}.",
+         { "get_params",
+           "Every saved parameter value of one node, as {\"<kind> <key>\": value}; kind is f (float), i (int), b (bool, "
+           "\"1\"/\"0\"), c (colour) or s (text, given literally - a Windows path has single backslashes). Numbered keys "
+           "count from 0: a Mixer's mute0 is the channel labelled 1. Dropdowns are listed again under _options with "
+           "their option names in index order (e.g. an EQ band type 0 = low shelf); _label is the node's custom name.",
            R"({"type":"object","properties":{"index":{"type":"integer"}},"required":["index"]})" },
          { "get_bindings",
            "Modulation bindings, expressions and globals with parameter keys and ranges. With index, also lists that "
@@ -83,7 +95,10 @@ namespace McpBridge
          { "disconnect", "Remove a cable by its link id (the id field of a get_graph cable; it appears once the canvas has drawn).",
            R"({"type":"object","properties":{"linkId":{"type":"integer"}},"required":["linkId"]})" },
          { "set_param",
-           "Set one saved parameter by its key (from describe / get_params). Dropdowns take the option value as saved.",
+           "Set one saved parameter by its key (from describe / get_params). Bools take true/false (or 1/0), numbers a "
+           "number, text a plain string (no escaping: a path exactly as written), colours [r,g,b] 0..1. Dropdowns "
+           "take the option number or its name (get_params _options lists them). A wrong type is an error, not a "
+           "silent 0. Setting a file path loads the file.",
            R"({"type":"object","properties":{"index":{"type":"integer"},"name":{"type":"string"},"value":{}},"required":["index","name","value"]})" },
          { "bind_modulator",
            "Drive a parameter from a modulator output (LFO, Envelope, Random, Macro, Audio Analyze bands, ...). param is "
@@ -117,6 +132,57 @@ namespace McpBridge
            "Replace the WHOLE patch with patch-file source (one undo step). Only when the user asks for a new patch; "
            "validate it first.",
            R"({"type":"object","properties":{"text":{"type":"string"}},"required":["text"]})" },
+         { "transport",
+           "Play, pause or move the timeline. action: play (starts the audio engine too; fromStart:true plays from 0), "
+           "pause (keeps the position), resume (plays on from there), stop (= pause; rewind:true also goes back to 0), "
+           "toggle, rewind, seek (seconds or beats), start_audio, state (default). bpm sets the tempo. Returns playing, "
+           "seconds, beats, bpm, audioRunning and the loop. An Audio File with followTransport on (the default) plays "
+           "exactly at the transport time minus its offset, so seeks and restarts land on the same sample; Audio to "
+           "MIDI's notes follow the transport the same way.",
+           R"({"type":"object","properties":{"action":{"type":"string","enum":["play","pause","resume","stop","toggle","rewind","seek","start_audio","state"]},"fromStart":{"type":"boolean"},"rewind":{"type":"boolean"},"seconds":{"type":"number"},"beats":{"type":"number"},"bpm":{"type":"number"}}})" },
+         { "move_node",
+           "Move a node on the canvas: x/y place it, dx/dy move it by that much (canvas units, as get_graph's x/y). "
+           "One undo step.",
+           R"({"type":"object","properties":{"index":{"type":"integer"},"x":{"type":"number"},"y":{"type":"number"},"dx":{"type":"number"},"dy":{"type":"number"}},"required":["index"]})" },
+         { "set_bypass",
+           "Bypass a node (it passes its input straight through, or goes silent / stops cooking when it has none) or "
+           "enable it again - the same as the B key. Omit bypassed to toggle. Use this to take an effect out instead "
+           "of zeroing its mix.",
+           R"({"type":"object","properties":{"index":{"type":"integer"},"bypassed":{"type":"boolean"}},"required":["index"]})" },
+         { "rename_node",
+           "Give a node a title of its own (shown on the canvas and saved with the patch); an empty name goes back to "
+           "the type's name. get_graph lists it as label.",
+           R"({"type":"object","properties":{"index":{"type":"integer"},"name":{"type":"string"}},"required":["index","name"]})" },
+         { "get_notes",
+           "The notes an Audio to MIDI node transcribed (times in seconds of the file) or a MIDI File node plays (in "
+           "beats): t, dur, note name, midi, level, plus count, range and pitch-class counts. Filter with from/to "
+           "(time), low/high (MIDI numbers); limit (default 200). Use it to check which notes were detected, e.g. "
+           "whether high notes are there.",
+           R"({"type":"object","properties":{"index":{"type":"integer"},"from":{"type":"number"},"to":{"type":"number"},"low":{"type":"integer"},"high":{"type":"integer"},"limit":{"type":"integer"}},"required":["index"]})" },
+         { "analyze_audio",
+           "Listen to nodes as NUMBERS: records `seconds` of each node's live audio output (up to 4 nodes, captured over "
+           "exactly the same time span) and returns per node: rms/peak dB, 8 band levels, spectral centroid, onsets, "
+           "pitch (median note, range, a melody of notes) and a 50-row timeline; with 2+ nodes also a comparison against "
+           "the first (level and band differences, waveform correlation and time offset, pitch agreement, onset "
+           "match). Measure the node itself (an Audio Out measures what feeds it); it must be playing and lead to an "
+           "Audio Out. play:true rewinds and starts the transport first. offline:true instead renders the patch "
+           "itself from start (seconds on the transport, default the current position) with the device paused: "
+           "sample-accurate and identical every run, independent of live timing - best for A/B comparisons such as "
+           "a synth played by Audio to MIDI against the original Audio File.",
+           R"({"type":"object","properties":{"nodes":{"type":"array","items":{"type":"integer"},"maxItems":4},"node":{"type":"integer"},"seconds":{"type":"number","minimum":0.2,"maximum":30},"frameSeconds":{"type":"number"},"play":{"type":"boolean"},"offline":{"type":"boolean"},"start":{"type":"number","minimum":0}}})" },
+         { "analyze_file",
+           "Analyse a whole audio file offline (path, or node = a node with a file such as Audio File): duration, "
+           "levels, average spectrum, onset rate, tempo (bpm + confidence), key (+ chroma), pitch summary and a "
+           "timeline. notes:true also transcribes it (note count, density, polyphony, range, first notes) - slower. "
+           "sound:true adds what a synth needs to recreate it: f0, inharmonicity, partials (frequency, level, T60 "
+           "decay), ADSR, spectral envelope, brightness, noisiness - pick one note with start/length (seconds), "
+           "f0 (Hz hint) and partials (1-32). A Sound Analyze node can apply such a profile to a synth.",
+           R"({"type":"object","properties":{"path":{"type":"string"},"node":{"type":"integer"},"notes":{"type":"boolean"},"sound":{"type":"boolean"},"start":{"type":"number"},"length":{"type":"number"},"f0":{"type":"number"},"partials":{"type":"integer"}}})" },
+         { "get_sound_profile",
+           "A Sound Analyze node's last result as numbers: f0, partials (frequency, level dB, T60), ADSR, spectral "
+           "envelope, brightness, noisiness. Set its path/start/length with set_param first; its body's Apply button "
+           "(or the values) configure a synth.",
+           R"({"type":"object","properties":{"index":{"type":"integer"}},"required":["index"]})" },
          { "render_frame",
            "Look at the picture: returns the Output node's current image plus brightness/colour statistics.",
            R"({"type":"object","properties":{"output":{"type":"integer","description":"Output node index when there are several"}}})" },
@@ -254,6 +320,11 @@ namespace McpBridge
             json c = { {"index", n.value("index", -1)}, {"type", n.value("typeName", "")}, {"category", n.value("category", "")} };
             if (n.value("bypassed", false))
                c["bypassed"] = true;
+            if (n.contains("label") && n["label"].is_string())
+               c["label"] = n["label"];
+            // Positions, so a layout can be tidied with move_node.
+            c["x"] = std::round(n.value("x", 0.0));
+            c["y"] = std::round(n.value("y", 0.0));
             nodes.push_back(c);
          }
          out["nodes"] = nodes;
@@ -280,6 +351,65 @@ namespace McpBridge
          return out;
       }
 
+      // analyze_audio / analyze_file: the app only starts a job (its RPC
+      // handlers must not block its UI thread); this process does the waiting.
+      json RunAnalysis(Link& link, const std::string& name, json params)
+      {
+         json reply;
+         std::string err;
+         auto call = [&](const char* method, const json& p) -> bool
+         {
+            if (!link.Call(method, p, reply, err))
+               return false;
+            if (reply.contains("error"))
+            {
+               err = reply["error"].value("message", "error");
+               return false;
+            }
+            return true;
+         };
+
+         double budget = 180.0; // a long file with notes:true takes a while
+         if (name == "analyze_audio")
+         {
+            const bool offline = params.value("offline", false);
+            if (!offline && params.value("play", false) && !call("transport", { { "action", "play" }, { "fromStart", true } }))
+               return TextResult(err, true);
+            params.erase("play");
+            // Offline renders as fast as the graph allows, which for a heavy patch can be slower than real time.
+            const double seconds = std::clamp(params.value("seconds", 3.0), 0.2, 30.0);
+            budget = offline ? seconds * 20.0 + 40.0 : seconds * 2.0 + 30.0;
+            if (!call("capture_audio", params))
+               return TextResult(err, true);
+         }
+         else if (!call("analyze_file", params))
+            return TextResult(err, true);
+         const json id = reply.value("result", json::object()).value("id", json());
+         if (!id.is_number_integer())
+            return TextResult("Infinite did not return an analysis id (is this Infinite older than the tool?)", true);
+
+         const auto start = std::chrono::steady_clock::now();
+         for (;;)
+         {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            if (!call("analysis_result", { { "id", id } }))
+               return TextResult(err, true);
+            const json r = reply.value("result", json::object());
+            const std::string status = r.value("status", "");
+            if (status == "done")
+            {
+               json out = r.value("result", json::object());
+               if (r.contains("note"))
+                  out["note"] = r["note"];
+               return TextResult(out.dump(), false);
+            }
+            if (status == "error")
+               return TextResult(r.value("error", std::string("analysis failed")), true);
+            if (std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count() > budget)
+               return TextResult("analysis timed out", true);
+         }
+      }
+
       json CallTool(Link& link, const std::string& name, const json& args)
       {
          bool known = false;
@@ -289,6 +419,8 @@ namespace McpBridge
             return TextResult("unknown tool '" + name + "'", true);
 
          json params = args.is_object() ? args : json::object();
+         if (name == "analyze_audio" || name == "analyze_file")
+            return RunAnalysis(link, name, params);
          std::string tmpImage;
          if (name == "render_frame")
          {

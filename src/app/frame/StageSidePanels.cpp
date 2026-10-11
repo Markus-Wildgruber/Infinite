@@ -279,8 +279,10 @@ void DrawSidePanels(FrameCtx& fc)
       if (gAssistantPanelOpen)
       {
          ImGui::SameLine(0.0f, 0.0f);
-         DrawAssistantPanelDocked("##assistantpanel", ImVec2(kAssistantPanelWidth, graphHeight));
+         DrawAssistantPanelDocked("##assistantpanel", ImVec2(gAssistantPanelWidth, graphHeight));
       }
+      else
+         PumpAssistantHidden();
 
       // ---- node browser / search panel ----
       // Always sticks to the rightmost edge of the window

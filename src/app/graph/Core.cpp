@@ -218,6 +218,8 @@ namespace app
    // header reading whatever primitive was spawned first.
    std::string NodeTitle(const GraphNode& gn)
    {
+      if (!gn.label.empty())
+         return gn.label;
       if (auto* opNode = dynamic_cast<GeometryOpNode*>(gn.node.get()))
       {
          const auto& names = GeometryOpNode::OpNames();

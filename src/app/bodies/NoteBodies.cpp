@@ -5,6 +5,7 @@
 #include "audio/DspMath.h"
 #include "audio/MidiFile.h"
 #include "nodes/AudioNodes.h"
+#include "nodes/AudioToMidiNode.h"
 #include "nodes/ModulatorNodes.h"
 #include "nodes/NoteNodes.h"
 #include "nodes/PredictiveNotesNode.h"
@@ -1890,6 +1891,201 @@ namespace app
          row.Knob("vel", &n->velocity, 0.0f, 2.0f, "%.2f", kKnobSmall);
          row.Checkbox("loop", &n->loop);
          row.End();
+      }
+
+      EndAudioBody();
+   }
+
+
+   void DrawAudioToMidiBody(GraphNode& gn, AudioToMidiNode* n)
+   {
+      using State = AudioToMidiNode::State;
+      const std::vector<BasicPitch::Note>& notes = n->Notes();
+      const State state = n->GetState();
+      char stat[128];
+      if (state == State::Converting)
+         snprintf(stat, sizeof(stat), "converting... %d%%", (int)(n->Progress() * 100.0f));
+      else if (state == State::Failed)
+         snprintf(stat, sizeof(stat), "%s", n->Status().c_str());
+      else if (state == State::Ready)
+         snprintf(stat, sizeof(stat), "%d notes - %.1f s", (int)notes.size(), n->DurationSeconds());
+      else
+         snprintf(stat, sizeof(stat), "no audio file");
+      BeginAudioBody(gn.index, gn.category, kAudioNodeWidth, stat);
+
+      auto fileName = [](const std::string& p) { return p.substr(p.find_last_of("/\\") == std::string::npos ? 0 : p.find_last_of("/\\") + 1); };
+      if (ImGui::Button("Load...", ImVec2(90, 0)))
+      {
+         const std::string path = Platform::OpenAudioDialog();
+         if (!path.empty())
+         {
+            PushUndoCheckpoint();
+            n->path = path;
+            n->exportMessage.clear();
+            gPatchDirty = true;
+         }
+      }
+      ImGui::SameLine();
+      // Live input: record whatever is patched into "audio", transcribe on Stop.
+      ImGui::BeginDisabled(!n->input.IsConnected() && !n->IsRecording());
+      if (n->IsRecording())
+      {
+         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+         if (ImGui::Button("Stop", ImVec2(60, 0)))
+         {
+            PushUndoCheckpoint();
+            n->StopRecording();
+            gPatchDirty = true;
+         }
+         ImGui::PopStyleColor();
+      }
+      else if (ImGui::Button("Record", ImVec2(60, 0)))
+      {
+         std::string err;
+         n->exportMessage = n->StartRecording(err) ? std::string() : err;
+      }
+      ImGui::EndDisabled();
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+         ImGui::SetTooltip("%s", n->input.IsConnected() ? "Record the audio input; on Stop it is saved and transcribed."
+                                                        : "Patch audio into the \"audio\" input to record it live.");
+      ImGui::SameLine();
+      if (n->IsRecording())
+         ImGui::TextDisabled("recording %.1f s", n->RecordedSeconds());
+      else if (!n->path.empty())
+         ImGui::TextDisabled("%s", fileName(n->path).c_str());
+      else
+         ImGui::TextDisabled("Load, record, or drop a file");
+
+      // Piano roll of the transcription across the whole file. Note names on
+      // the left at every C; hovering a note shows its name, time and level.
+      {
+         const float w = gAudioBodyW;
+         const float h = 160.0f;
+         const ImVec2 origin = ImGui::GetCursorScreenPos();
+         const ImVec2 br(origin.x + w, origin.y + h);
+         ImDrawList* dl = ImGui::GetWindowDrawList();
+         const bool isLight = IsThemeLight();
+         dl->AddRectFilled(origin, br, isLight ? IM_COL32(236, 240, 248, 255) : IM_COL32(16, 16, 22, 255), 4.0f);
+         const ImU32 dim = isLight ? IM_COL32(90, 90, 110, 255) : IM_COL32(150, 150, 170, 255);
+         if (state == State::Converting)
+         {
+            // Progress fills the roll itself, so the node does not change height.
+            const float p = std::clamp(n->Progress(), 0.0f, 1.0f);
+            const ImU32 fill = IM_COL32((int)(gAudioTint.r * 255.0f), (int)(gAudioTint.g * 255.0f), (int)(gAudioTint.b * 255.0f), 90);
+            dl->AddRectFilled(origin, ImVec2(origin.x + w * p, br.y), fill, 4.0f);
+            const char* msg = "Listening for notes...";
+            const ImVec2 ts = ImGui::CalcTextSize(msg);
+            dl->AddText(ImVec2(origin.x + (w - ts.x) * 0.5f, origin.y + (h - ts.y) * 0.5f), dim, msg);
+         }
+         else if (state == State::Ready && notes.empty())
+         {
+            const char* msg = "No notes found - try more sensitivity";
+            const ImVec2 ts = ImGui::CalcTextSize(msg);
+            dl->AddText(ImVec2(origin.x + (w - ts.x) * 0.5f, origin.y + (h - ts.y) * 0.5f), dim, msg);
+         }
+         else if (!notes.empty())
+         {
+            const double len = std::max(0.001, n->DurationSeconds());
+            int lo = 127, hi = 0;
+            for (const BasicPitch::Note& note : notes)
+            {
+               lo = std::min(lo, note.pitch);
+               hi = std::max(hi, note.pitch);
+            }
+            lo = std::max(0, lo - 1);
+            hi = std::min(127, hi + 1);
+            const float noteH = std::max(1.5f, (h - 6.0f) / (float)(hi - lo + 1));
+            static const char* kNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+            const float axisW = 26.0f;
+            const float rollX = origin.x + axisW;
+            const float rollW = w - axisW;
+            dl->PushClipRect(origin, br, true);
+            // Octave lines and names at every C, so pitches can be read off.
+            for (int p = lo; p <= hi; p++)
+               if (p % 12 == 0)
+               {
+                  const float y = br.y - 3.0f - (float)(p - lo + 1) * noteH;
+                  dl->AddLine(ImVec2(rollX, y + noteH), ImVec2(br.x, y + noteH), isLight ? IM_COL32(0, 0, 0, 30) : IM_COL32(255, 255, 255, 25));
+                  char lbl[8];
+                  snprintf(lbl, sizeof(lbl), "C%d", p / 12 - 1);
+                  dl->AddText(ImVec2(origin.x + 2.0f, y + noteH - ImGui::GetTextLineHeight() * 0.5f), dim, lbl);
+               }
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            const bool rollHovered = ImGui::IsWindowHovered() && mouse.x >= rollX && mouse.x < br.x && mouse.y >= origin.y && mouse.y < br.y;
+            const BasicPitch::Note* hoveredNote = nullptr;
+            for (const BasicPitch::Note& note : notes)
+            {
+               const float x0 = rollX + (float)(note.start / len) * rollW;
+               const float x1 = std::max(x0 + 1.0f, rollX + (float)(note.end / len) * rollW);
+               const float y = br.y - 3.0f - (float)(note.pitch - lo + 1) * noteH;
+               // Brighter = louder, so the strong notes read first.
+               const int alpha = 90 + (int)(165.0f * std::clamp(note.amplitude * 1.6f, 0.0f, 1.0f));
+               const ImU32 col = IM_COL32((int)(gAudioTint.r * 255.0f), (int)(gAudioTint.g * 255.0f), (int)(gAudioTint.b * 255.0f), alpha);
+               dl->AddRectFilled(ImVec2(x0, y), ImVec2(x1, y + noteH - 0.5f), col);
+               if (rollHovered && mouse.x >= x0 - 1.0f && mouse.x <= x1 + 1.0f && mouse.y >= y - 1.0f && mouse.y <= y + noteH + 1.0f)
+                  hoveredNote = &note;
+            }
+            if (hoveredNote != nullptr)
+               ImGui::SetTooltip("%s%d  at %.2f s  for %.2f s  level %.2f", kNames[hoveredNote->pitch % 12],
+                                 hoveredNote->pitch / 12 - 1, hoveredNote->start, hoveredNote->end - hoveredNote->start,
+                                 hoveredNote->amplitude);
+            else if (rollHovered)
+            {
+               const int p = lo + (int)std::floor((br.y - 3.0f - mouse.y) / noteH);
+               ImGui::SetTooltip("%s%d  %.2f s", kNames[((p % 12) + 12) % 12], p / 12 - 1, (mouse.x - rollX) / rollW * len);
+            }
+            const double ph = n->PlayheadSeconds();
+            if (ph >= 0.0)
+            {
+               const float x = rollX + (float)(std::min(ph, len) / len) * rollW;
+               dl->AddLine(ImVec2(x, origin.y), ImVec2(x, br.y), isLight ? IM_COL32(40, 40, 60, 230) : IM_COL32(240, 240, 255, 230), 1.5f);
+            }
+            dl->PopClipRect();
+         }
+         ImGui::Dummy(ImVec2(w, h));
+      }
+
+      {
+         AudioKnobRow row(4);
+         row.Knob("sensitivity", &n->sensitivity, 0.0f, 1.0f, "%.2f", kKnobSmall);
+         row.Knob("hold", &n->hold, 0.0f, 1.0f, "%.2f", kKnobSmall);
+         row.Knob("min len", &n->minLengthMs, 10.0f, 500.0f, "%.0f ms", kKnobSmall);
+         row.Checkbox("loop", &n->loop);
+         row.End();
+      }
+      {
+         AudioKnobRow row(4);
+         row.KnobInt("low note", &n->lowNote, 21, 108);
+         row.KnobInt("high note", &n->highNote, 21, 108);
+         row.KnobInt("voices", &n->polyphony, 0, 16);
+         row.Knob("offset", &n->offsetMs, -500.0f, 500.0f, "%.0f ms", kKnobSmall);
+         row.End();
+      }
+
+      ImGui::BeginDisabled(notes.empty());
+      if (ImGui::Button("Export MIDI...", ImVec2(110, 0)))
+      {
+         std::string suggested = fileName(n->path);
+         const size_t dot = suggested.find_last_of('.');
+         suggested = (dot == std::string::npos ? suggested : suggested.substr(0, dot)) + ".mid";
+         const std::string out = Platform::SaveMidiDialog(suggested);
+         if (!out.empty())
+         {
+            std::string err;
+            n->exportMessage = n->ExportMidi(out, err) ? "saved " + fileName(out) : "export failed: " + err;
+         }
+      }
+      ImGui::EndDisabled();
+      if (state == State::Failed && !n->path.empty())
+      {
+         ImGui::SameLine();
+         if (ImGui::Button("Retry", ImVec2(60, 0)))
+            n->Reconvert();
+      }
+      if (!n->exportMessage.empty())
+      {
+         ImGui::SameLine();
+         ImGui::TextDisabled("%s", n->exportMessage.c_str());
       }
 
       EndAudioBody();

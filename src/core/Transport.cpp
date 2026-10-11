@@ -193,6 +193,7 @@ void Transport::AdvanceAudioClock(int numFrames)
    }
    ApplyPendingTempo(); // after the seek consumed its offsets, before we advance
    mBlockStartBeats.store(Beats(), std::memory_order_relaxed); // before the advance AND before any wrap
+   mBlockStartSeconds.store(Seconds(), std::memory_order_relaxed);
    if (mPlaying.load(std::memory_order_relaxed))
       mAudioSampleCounter.fetch_add((uint64_t)numFrames, std::memory_order_relaxed);
    WrapLoopIfNeeded();
@@ -292,6 +293,7 @@ void Transport::BeginOfflineAudioBlock(int numFrames)
    // the capture has to happen before the counter advances.
    mOfflineInAudioBlock.store(true, std::memory_order_relaxed);
    mBlockStartBeats.store(Beats(), std::memory_order_relaxed);
+   mBlockStartSeconds.store(Seconds(), std::memory_order_relaxed);
    if (mPlaying.load(std::memory_order_relaxed))
       mAudioSampleCounter.fetch_add((uint64_t)numFrames, std::memory_order_relaxed);
 }

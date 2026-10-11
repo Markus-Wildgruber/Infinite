@@ -2,10 +2,14 @@
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "app/AppUndo.h"
+#include "audio/AudioEngine.h"
 #include "core/ExprGlobals.h"
 #include "core/ImageCable.h"
 #include "core/PatchJson.h"
+#include "nodes/AudioToMidiNode.h"
 #include "nodes/DrumPatterns.h"
+#include "nodes/NoteNodes.h"
+#include "nodes/SoundAnalyzeNode.h"
 #include "nodes/Geometry3DNodes.h"
 #include "nodes/OutputNode.h"
 
@@ -178,6 +182,38 @@ namespace app
          return false;
       }
 
+      // {"<kind> <key>": [option names]} for every dropdown of `gn` whose
+      // saved key is known. Dropdowns register their option names with their
+      // ParamRef when the node draws; a node that has not drawn yet is asked
+      // to (gRpcParamProbe), so the next call has them.
+      json EnumOptionsOf(const GraphNode& gn, const std::vector<std::pair<std::string, std::string>>& raw)
+      {
+         json out = json::object();
+         JoinLiveTier1();
+         auto join = gParamJoin.find(gn.typeName);
+         bool any = false;
+         for (const auto& kv : Modulation::Instance().AllKnownParams())
+         {
+            if (kv.second.nodeIndex != gn.index)
+               continue;
+            any = true;
+            if (!kv.second.isEnum || kv.second.enumOptions.empty() || join == gParamJoin.end())
+               continue;
+            auto k = join->second.keyOfParam.find(kv.second.paramIndex);
+            if (k == join->second.keyOfParam.end())
+               continue;
+            for (const auto& r : raw)
+               if (r.first.size() > 2 && r.first.compare(2, std::string::npos, k->second) == 0)
+               {
+                  out[r.first] = kv.second.enumOptions;
+                  break;
+               }
+         }
+         if (!any)
+            gRpcParamProbe.insert(gn.index);
+         return out;
+      }
+
       // The saved key and on-screen label of a parameter index, when known.
       void DescribeParam(const GraphNode& gn, int param, json& rec)
       {
@@ -222,6 +258,131 @@ namespace app
             params[key] = it->second;
          }
          return true;
+      }
+
+      // Text params travel through RPC literally: the patch format escapes
+      // backslash and newline (Patch.cpp's EscapeLine/UnescapeLine), but a
+      // caller handing over a Windows path like D:\new\file means those
+      // characters, not a newline. get_params unescapes what SaveParams wrote
+      // and set_param escapes before LoadParams, so a get -> set round trip is
+      // the identity.
+      std::string EscapeParamText(const std::string& value)
+      {
+         std::string out;
+         for (char c : value)
+         {
+            if (c == '\\')
+               out += "\\\\";
+            else if (c == '\n')
+               out += "\\n";
+            else if (c != '\r')
+               out += c;
+         }
+         return out;
+      }
+
+      std::string UnescapeParamText(const std::string& raw)
+      {
+         std::string out;
+         for (size_t i = 0; i < raw.size(); i++)
+         {
+            if (raw[i] == '\\' && i + 1 < raw.size() && (raw[i + 1] == 'n' || raw[i + 1] == '\\'))
+            {
+               out += raw[i + 1] == 'n' ? '\n' : '\\';
+               i++;
+            }
+            else
+               out += raw[i];
+         }
+         return out;
+      }
+
+      bool ParseNumber(const std::string& text, double& out)
+      {
+         const char* begin = text.c_str();
+         char* end = nullptr;
+         out = std::strtod(begin, &end);
+         while (end != nullptr && *end == ' ')
+            end++;
+         return end != begin && end != nullptr && *end == '\0' && std::isfinite(out);
+      }
+
+      // A set_param value as the patch-format text for its kind (the letter
+      // before the key: f/i/b/c/s), or false with a reason. Before this, any
+      // JSON was dumped as-is, so `true` reached Reader::Bool as "true" and
+      // silently read as false, and "abc" read as 0.
+      bool ParamValueText(char kind, const json& v, std::string& out, std::string& err)
+      {
+         double num = 0.0;
+         switch (kind)
+         {
+         case 'b':
+            if (v.is_boolean())
+               out = v.get<bool>() ? "1" : "0";
+            else if (v.is_number())
+               out = v.get<double>() != 0.0 ? "1" : "0";
+            else if (v.is_string())
+            {
+               std::string w = v.get<std::string>();
+               std::transform(w.begin(), w.end(), w.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+               if (w == "1" || w == "true" || w == "on" || w == "yes")
+                  out = "1";
+               else if (w == "0" || w == "false" || w == "off" || w == "no")
+                  out = "0";
+               else
+               {
+                  err = "expects true or false, got \"" + v.get<std::string>() + "\"";
+                  return false;
+               }
+            }
+            else
+            {
+               err = "expects true or false";
+               return false;
+            }
+            return true;
+         case 'f':
+         case 'i':
+            if (v.is_boolean())
+               num = v.get<bool>() ? 1.0 : 0.0;
+            else if (v.is_number())
+               num = v.get<double>();
+            else if (!(v.is_string() && ParseNumber(v.get<std::string>(), num)))
+            {
+               err = std::string("expects a number, got ") + (v.is_string() ? "\"" + v.get<std::string>() + "\"" : v.dump());
+               return false;
+            }
+            if (kind == 'i')
+               out = std::to_string((long long)std::llround(num));
+            else
+            {
+               char buf[64];
+               snprintf(buf, sizeof(buf), "%.9g", num);
+               out = buf;
+            }
+            return true;
+         case 'c':
+            if (v.is_array() && v.size() == 3 && v[0].is_number() && v[1].is_number() && v[2].is_number())
+            {
+               char buf[96];
+               snprintf(buf, sizeof(buf), "%.9g %.9g %.9g", v[0].get<double>(), v[1].get<double>(), v[2].get<double>());
+               out = buf;
+               return true;
+            }
+            if (v.is_string())
+            {
+               out = v.get<std::string>();
+               return true;
+            }
+            err = "expects [r, g, b] (0..1 each) or \"r g b\"";
+            return false;
+         case 's':
+            out = EscapeParamText(v.is_string() ? v.get<std::string>() : v.dump());
+            return true;
+         default:
+            out = v.is_string() ? v.get<std::string>() : v.dump();
+            return true;
+         }
       }
    }
 
@@ -368,7 +529,14 @@ namespace app
          Patch::SaveParams(gn->node.get(), raw);
          json out = json::object();
          for (const auto& kv : raw)
-            out[kv.first] = kv.second;
+            out[kv.first] = kv.first.rfind("s ", 0) == 0 ? UnescapeParamText(kv.second) : kv.second;
+         // Dropdowns: the option names, index order, so "i band1Type": "0" can
+         // be read as "low shelf". A sibling field keeps the value map flat.
+         const json options = EnumOptionsOf(*gn, raw);
+         if (!options.empty())
+            out["_options"] = options;
+         if (gn->label.size())
+            out["_label"] = gn->label;
          outResult = out;
          return true;
       }
@@ -402,21 +570,55 @@ namespace app
             outError = "unknown param '" + name + "' on this node";
             return false;
          }
-         std::string valueStr;
-         if (params.contains("value"))
+         if (!params.contains("value"))
          {
-            const json& v = params["value"];
-            if (v.is_string())
-               valueStr = v.get<std::string>();
-            else
-               valueStr = v.dump();
+            outError = "missing 'value'";
+            return false;
+         }
+         json value = params["value"];
+         if (value.is_string() && (matchedKey[0] == 'i' || matchedKey[0] == 'f'))
+         {
+            // A dropdown accepts the option's name ("low shelf") as well as its number.
+            const json options = EnumOptionsOf(*gn, raw);
+            auto it = options.find(matchedKey);
+            if (it != options.end())
+            {
+               std::string want = value.get<std::string>();
+               std::transform(want.begin(), want.end(), want.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+               for (size_t i = 0; i < it->size(); i++)
+               {
+                  std::string opt = (*it)[i].is_string() ? (*it)[i].get<std::string>() : std::string();
+                  std::transform(opt.begin(), opt.end(), opt.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                  if (opt == want)
+                  {
+                     value = (int)i;
+                     break;
+                  }
+               }
+               if (value.is_string() && !IsDigits(want))
+               {
+                  outError = "'" + name + "' has no option '" + value.get<std::string>() + "' (options: " + it->dump() + ")";
+                  return false;
+               }
+            }
+         }
+         std::string valueStr, valueErr;
+         if (!ParamValueText(matchedKey[0], value, valueStr, valueErr))
+         {
+            outError = "'" + name + "' " + valueErr;
+            return false;
          }
          PushUndoCheckpoint();
          Patch::LoadParams(gn->node.get(), { { matchedKey, valueStr } });
+         // A file path (or a formula/Field source) only takes effect through the
+         // same reload a patch load runs; without it an Audio File given a new
+         // path never loaded the file and hid its controls until the next undo.
+         if (matchedKey[0] == 's')
+            ReloadDerivedState(gn->node.get());
          outResult = json::object();
          return true;
       }
-      else if (method == "set_node_position" || method == "get_node_position")
+      else if (method == "set_node_position" || method == "get_node_position" || method == "move_node")
       {
          const int index = params.value("index", -1);
          GraphNode* gn = FindNodeByIndex(index);
@@ -427,12 +629,27 @@ namespace app
          }
          ed::EditorContext* prevEditor = ed::GetCurrentEditor();
          ed::SetCurrentEditor(gEditor);
-         if (method == "set_node_position")
+         if (method == "set_node_position" || method == "move_node")
          {
-            const float x = params.value("x", 0.0f);
-            const float y = params.value("y", 0.0f);
+            // x/y place it; dx/dy move it from where it is. Canvas units,
+            // the same numbers get_graph reports.
+            const ImVec2 at = ed::GetNodePosition(gn->NodeId());
+            float x = params.value("x", at.x);
+            float y = params.value("y", at.y);
+            x += params.value("dx", 0.0f);
+            y += params.value("dy", 0.0f);
+            if (!std::isfinite(x) || !std::isfinite(y) || std::fabs(x) > 1e6f || std::fabs(y) > 1e6f)
+            {
+               ed::SetCurrentEditor(prevEditor);
+               outError = "position out of range";
+               return false;
+            }
+            PushUndoCheckpoint();
             ed::SetNodePosition(gn->NodeId(), ImVec2(x, y));
-            outResult = json::object();
+            gn->liveX = x;
+            gn->liveY = y;
+            gPatchDirty = true;
+            outResult = { {"x", x}, {"y", y} };
          }
          else
          {
@@ -440,6 +657,183 @@ namespace app
             outResult = { {"x", p.x}, {"y", p.y} };
          }
          ed::SetCurrentEditor(prevEditor);
+         return true;
+      }
+      else if (method == "set_bypass")
+      {
+         // Bypass = the node passes its input straight through (or goes
+         // silent / stops cooking when it has none), as the B key does.
+         const int index = params.value("index", -1);
+         GraphNode* gn = FindNodeByIndex(index);
+         if (gn == nullptr)
+         {
+            outError = "unknown node index";
+            return false;
+         }
+         bool want = !gn->node->bypassed;
+         if (params.contains("bypassed"))
+         {
+            if (!params["bypassed"].is_boolean())
+            {
+               outError = "'bypassed' must be true or false";
+               return false;
+            }
+            want = params["bypassed"].get<bool>();
+         }
+         if (want != gn->node->bypassed)
+         {
+            PushUndoCheckpoint();
+            gn->node->bypassed = want;
+            if (dynamic_cast<IAudioSource*>(gn->node.get()) != nullptr || dynamic_cast<INoteSource*>(gn->node.get()) != nullptr ||
+                gn->node->AudioNodeForNotePorts() != nullptr)
+               RebuildAudioTopology();
+            gPatchDirty = true;
+         }
+         outResult = { {"bypassed", gn->node->bypassed} };
+         return true;
+      }
+      else if (method == "rename_node")
+      {
+         // A title of the user's choosing; "" goes back to the type's own name.
+         const int index = params.value("index", -1);
+         GraphNode* gn = FindNodeByIndex(index);
+         if (gn == nullptr)
+         {
+            outError = "unknown node index";
+            return false;
+         }
+         if (!params.contains("name") || !params["name"].is_string())
+         {
+            outError = "'name' must be a string (\"\" removes the rename)";
+            return false;
+         }
+         std::string label = params["name"].get<std::string>();
+         for (char& ch : label)
+            if (ch == '\n' || ch == '\r' || ch == '\t')
+               ch = ' ';
+         if (label.size() > 80)
+            label.resize(80);
+         if (label != gn->label)
+         {
+            PushUndoCheckpoint();
+            gn->label = label;
+            gPatchDirty = true;
+         }
+         outResult = { {"title", NodeTitle(*gn)} };
+         return true;
+      }
+      else if (method == "get_notes")
+      {
+         // The notes a note-file node plays, as numbers: Audio to MIDI (the
+         // transcription, in seconds of the file) or MIDI File (in beats).
+         const int index = params.value("index", -1);
+         GraphNode* gn = FindNodeByIndex(index);
+         if (gn == nullptr)
+         {
+            outError = "unknown node index";
+            return false;
+         }
+         const double from = params.value("from", 0.0);
+         const double to = params.value("to", 1e12);
+         const int low = params.value("low", 0);
+         const int high = params.value("high", 127);
+         const int limit = std::clamp(params.value("limit", 200), 1, 2000);
+         auto noteName = [](int p) {
+            static const char* names[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+            return std::string(names[((p % 12) + 12) % 12]) + std::to_string(p / 12 - 1);
+         };
+         json notes = json::array();
+         int total = 0, lo = 128, hi = -1;
+         int histogram[12] = {};
+         if (auto* a2m = dynamic_cast<AudioToMidiNode*>(gn->node.get()))
+         {
+            for (const BasicPitch::Note& n : a2m->Notes())
+            {
+               if (n.end < from || n.start > to || n.pitch < low || n.pitch > high)
+                  continue;
+               total++;
+               lo = std::min(lo, n.pitch);
+               hi = std::max(hi, n.pitch);
+               histogram[n.pitch % 12]++;
+               if ((int)notes.size() < limit)
+                  notes.push_back({ {"t", std::round(n.start * 1000.0) / 1000.0}, {"dur", std::round((n.end - n.start) * 1000.0) / 1000.0},
+                                    {"note", noteName(n.pitch)}, {"midi", n.pitch}, {"level", std::round(n.amplitude * 100.0f) / 100.0f} });
+            }
+            outResult = { {"unit", "seconds"}, {"durationSeconds", a2m->DurationSeconds()} };
+            if (a2m->GetState() == AudioToMidiNode::State::Converting)
+               outResult["warning"] = "still converting (" + std::to_string((int)(a2m->Progress() * 100.0f)) + "%) - ask again shortly";
+            else if (a2m->GetState() == AudioToMidiNode::State::Failed)
+               outResult["warning"] = a2m->Status();
+         }
+         else if (auto* mf = dynamic_cast<MidiFileNode*>(gn->node.get()))
+         {
+            const MidiFile::Song* song = mf->GetSong();
+            if (song != nullptr)
+            {
+               // Pair each note-on with its note-off (same note and track).
+               std::vector<const MidiFile::Event*> open;
+               for (const MidiFile::Event& e : song->events)
+               {
+                  if (e.on)
+                  {
+                     open.push_back(&e);
+                     continue;
+                  }
+                  for (size_t i = 0; i < open.size(); i++)
+                     if (open[i]->note == e.note && open[i]->track == e.track)
+                     {
+                        const MidiFile::Event& on = *open[i];
+                        open.erase(open.begin() + (long)i);
+                        if (e.beat < from || on.beat > to || on.note < low || on.note > high)
+                           break;
+                        total++;
+                        lo = std::min(lo, (int)on.note);
+                        hi = std::max(hi, (int)on.note);
+                        histogram[on.note % 12]++;
+                        if ((int)notes.size() < limit)
+                           notes.push_back({ {"t", std::round(on.beat * 1000.0) / 1000.0}, {"dur", std::round((e.beat - on.beat) * 1000.0) / 1000.0},
+                                             {"note", noteName(on.note)}, {"midi", on.note}, {"level", std::round(on.velocity / 1.27) / 100.0},
+                                             {"channel", on.channel + 1} });
+                        break;
+                     }
+               }
+               std::sort(notes.begin(), notes.end(), [](const json& x, const json& y) { return x["t"].get<double>() < y["t"].get<double>(); });
+            }
+            outResult = { {"unit", "beats"} };
+         }
+         else
+         {
+            outError = "node " + std::to_string(index) + " (" + gn->typeName + ") has no notes - use an Audio to MIDI or MIDI File node";
+            return false;
+         }
+         json pcs = json::object();
+         for (int i = 0; i < 12; i++)
+            if (histogram[i] > 0)
+               pcs[noteName(i + 12).substr(0, noteName(i + 12).size() - 1)] = histogram[i];
+         outResult["count"] = total;
+         outResult["range"] = total > 0 ? json::array({ noteName(lo), noteName(hi) }) : json::array();
+         outResult["pitchClasses"] = pcs;
+         outResult["notes"] = notes;
+         if (total > (int)notes.size())
+            outResult["truncated"] = "showing the first " + std::to_string(notes.size()) + " of " + std::to_string(total) +
+                                     " - narrow from/to/low/high or raise limit";
+         return true;
+      }
+      else if (method == "get_sound_profile")
+      {
+         // A Sound Analyze node's last result: partials, envelope, spectrum.
+         const int index = params.value("index", -1);
+         GraphNode* gn = FindNodeByIndex(index);
+         auto* sa = gn != nullptr ? dynamic_cast<SoundAnalyzeNode*>(gn->node.get()) : nullptr;
+         if (sa == nullptr)
+         {
+            outError = "node " + std::to_string(index) + " is not a Sound Analyze node";
+            return false;
+         }
+         if (const nlohmann::json* profile = sa->ProfileJson())
+            outResult = *profile;
+         else
+            outResult = { {"status", sa->Status().empty() ? std::string("no analysis yet - give it a file (set_param path)") : sa->Status()} };
          return true;
       }
       else if (method == "fit_view")
@@ -689,8 +1083,10 @@ namespace app
             const std::string m = call.is_object() ? call.value("method", std::string()) : std::string();
             // load_patch_text replaces the whole graph and clears the undo
             // suppression this batch relies on (ApplyPatchData).
+            // transport and the measuring calls act outside the patch, so a
+            // failed batch's undo could not take them back.
             if (m.empty() || m == "batch" || m == "undo" || m == "redo" || m == "new_patch" || m == "load_patch" ||
-                m == "load_patch_text")
+                m == "load_patch_text" || m == "transport" || IsAudioProbeRpc(m))
             {
                failMsg = "method '" + m + "' is not allowed inside a batch";
                failAt = (int)i;
@@ -1006,6 +1402,90 @@ namespace app
       {
          NewPatch();
          outResult = json::object();
+         return true;
+      }
+      else if (IsAudioProbeRpc(method))
+         return HandleAudioProbeRpc(method, params, outResult, outError);
+      else if (method == "transport")
+      {
+         // Play/stop/seek for clients that compare sources: starting both from
+         // 0 is what makes two captures line up. "play" also starts the audio
+         // engine, which no longer opens at launch.
+         Transport& tr = Transport::Instance();
+         const std::string action = params.value("action", std::string("state"));
+         std::string warning;
+         auto ensureAudio = [&]()
+         {
+            if (AudioEngine::Instance().SampleRate() > 0.0)
+               return;
+            gAudioStartError.clear();
+            if (!StartAudioEngine(gAudioStartError))
+               warning = "the audio device could not start: " + gAudioStartError;
+         };
+         if (params.contains("bpm"))
+         {
+            const double bpm = params["bpm"].is_number() ? params["bpm"].get<double>() : 0.0;
+            if (bpm < 20.0 || bpm > 400.0)
+            {
+               outError = "bpm must be a number from 20 to 400";
+               return false;
+            }
+            tr.SetTempo((float)bpm);
+         }
+         if (action == "play" || action == "resume")
+         {
+            // resume = play on from where it was paused (play does the same
+            // unless fromStart); the position is never reset by a pause.
+            if (action == "play" && params.value("fromStart", false))
+               tr.Rewind();
+            ensureAudio();
+            tr.SetPlaying(true);
+         }
+         else if (action == "pause")
+            tr.SetPlaying(false); // keeps the position: resume carries on from here
+         else if (action == "stop")
+         {
+            // Stop = pause, and back to the start with rewind:true.
+            tr.SetPlaying(false);
+            if (params.value("rewind", false))
+               tr.Rewind();
+         }
+         else if (action == "toggle")
+         {
+            if (!tr.IsPlaying())
+               ensureAudio();
+            tr.TogglePlay();
+         }
+         else if (action == "rewind")
+            tr.Rewind();
+         else if (action == "seek")
+         {
+            if (params.contains("seconds") && params["seconds"].is_number())
+               tr.Seek(std::max(0.0, params["seconds"].get<double>()));
+            else if (params.contains("beats") && params["beats"].is_number())
+               tr.SeekBeats(std::max(0.0, params["beats"].get<double>()));
+            else
+            {
+               outError = "seek needs 'seconds' or 'beats'";
+               return false;
+            }
+         }
+         else if (action == "start_audio")
+            ensureAudio();
+         else if (action != "state")
+         {
+            outError = "unknown action '" + action + "' (play, pause, resume, stop, toggle, rewind, seek, start_audio, state)";
+            return false;
+         }
+         outResult = { { "playing", tr.IsPlaying() },
+                       { "seconds", std::round(tr.Seconds() * 1000.0) / 1000.0 },
+                       { "beats", std::round(tr.Beats() * 1000.0) / 1000.0 },
+                       { "bpm", tr.Tempo() },
+                       { "audioRunning", AudioEngine::Instance().SampleRate() > 0.0 },
+                       { "sampleRate", AudioEngine::Instance().SampleRate() },
+                       { "loop", { { "enabled", tr.LoopEnabled() }, { "startBeats", tr.LoopStartBeats() }, { "endBeats", tr.LoopEndBeats() } } } };
+         if (!warning.empty())
+            outResult["warning"] = warning;
          return true;
       }
       else if (method == "undo")

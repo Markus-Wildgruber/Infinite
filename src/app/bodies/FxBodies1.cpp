@@ -678,9 +678,17 @@ namespace app
             snprintf(freqBuf, sizeof(freqBuf), "%.0f Hz", bands[selected].freq);
          else
             snprintf(freqBuf, sizeof(freqBuf), "%.2f kHz", bands[selected].freq / 1000.0f);
-         char capBuf[80];
-         snprintf(capBuf, sizeof(capBuf), "band %d \xC2\xB7 %s \xC2\xB7 %+.1f dB \xC2\xB7 Q %.2f", selected + 1,
-                  freqBuf, bands[selected].gain, bands[selected].q);
+         // The band's type by name, so a screenshot (or the assistant reading
+         // one) never has to decode the stored integer - see EqDsp::TypeNames.
+         // Gain is only printed for the three types that have a gain term.
+         char capBuf[112];
+         if (EqDsp::UsesGain(bands[selected].type))
+            snprintf(capBuf, sizeof(capBuf), "band %d \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 %+.1f dB \xC2\xB7 Q %.2f",
+                     selected + 1, EqDsp::TypeName(bands[selected].type), freqBuf, bands[selected].gain,
+                     bands[selected].q);
+         else
+            snprintf(capBuf, sizeof(capBuf), "band %d \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 Q %.2f", selected + 1,
+                     EqDsp::TypeName(bands[selected].type), freqBuf, bands[selected].q);
          dl->AddText(ImVec2(origin.x + 6.0f, origin.y + 4.0f), ScopeTextCol(), capBuf);
       }
 
@@ -827,6 +835,18 @@ namespace app
                              dotRec ? recCol : IM_COL32(235, 245, 255, isSelected ? 220 : 120), 12, 1.5f);
             }
             dl->AddCircle(ImVec2(hx[b], hy[b]), dotR, IM_COL32(20, 24, 32, 220), 12, 1.2f);
+
+            // Band number beside its handle, so which dot is which band is
+            // readable without hovering. Above the dot, or below it when the
+            // dot sits against the top edge (a +24 dB band).
+            const char numText[2] = { (char)('1' + b), '\0' };
+            const ImVec2 numSize = ImGui::CalcTextSize(numText);
+            float numY = hy[b] - dotR - numSize.y - 1.0f;
+            if (numY < origin.y + 2.0f)
+               numY = hy[b] + dotR + 1.0f;
+            const ImU32 numCol = isSelected ? ScopeTextCol()
+                                            : (isLight ? IM_COL32(40, 50, 70, 150) : IM_COL32(235, 245, 255, 130));
+            dl->AddText(ImVec2(hx[b] - numSize.x * 0.5f, numY), numCol, numText);
          }
       }
 
@@ -837,9 +857,10 @@ namespace app
       if (hovered || active)
       {
          const int b = dragBand;
-         char buf[80];
-         snprintf(buf, sizeof(buf), "band %d  %.0f Hz  %+.1f dB  Q %.2f  %s", b + 1, bands[b].freq,
-                  bands[b].gain, bands[b].q, bands[b].on ? "on" : "off");
+         char buf[112];
+         snprintf(buf, sizeof(buf), "band %d  %s  %.0f Hz  %+.1f dB  Q %.2f  %s", b + 1,
+                  EqDsp::TypeName(bands[b].type), bands[b].freq, bands[b].gain, bands[b].q,
+                  bands[b].on ? "on" : "off");
          SetAudioReadout("eq", buf);
       }
       // No trailing Dummy: the InvisibleButton above already reserved this

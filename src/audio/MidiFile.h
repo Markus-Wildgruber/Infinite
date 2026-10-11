@@ -36,4 +36,9 @@ namespace MidiFile
    // Parses `size` bytes. On failure returns false and fills `error`.
    bool Parse(const uint8_t* data, size_t size, Song& out, std::string& error);
    bool Load(const std::string& path, Song& out, std::string& error);
+
+   // Writes `song` as a format-0 file (channel 1, 480 ticks per beat) with one
+   // tempo event at `bpm`, so the notes land at the same seconds they play at.
+   // Track/channel fields are not written. On failure returns false and fills `error`.
+   bool Save(const std::string& path, const Song& song, double bpm, std::string& error);
 }

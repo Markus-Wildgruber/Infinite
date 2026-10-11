@@ -184,13 +184,20 @@ private:
 // its own AudioFilePlayerAudioNode (defined in AnalyzeNodes.cpp), the same
 // two-object split SamplerNode/AudioSamplerNode use.
 //
-// `monitor` and `volume` no longer mean "audible on the hardware output
-// regardless of the patch" - this node's own AVAudioEngine is gone.
-// Audibility now comes entirely from whether this node's output is patched
-// (directly or through other audio nodes) into an Audio Out; `monitor`
-// silences this node's own output buffer (still analysed - see Levels())
-// the same way "silent but still analysed" always meant, just scoped to the
-// graph instead of to the speakers.
+// Audibility comes from whether this node's output is patched (directly or
+// through other audio nodes) into an Audio Out. `monitor` only decides the
+// DIRECT route: off, a cable straight into an Audio Out / Output is not heard
+// (SilentAtAudioOut), while every other node it feeds - a switch, a mixer, an
+// analyser - still gets the full signal. So "monitor off" + a switch means
+// "heard only through the switch". An Arrangement clip of this node stays
+// silent with monitor off, as before.
+//
+// `followTransport` locks playback to the transport clock: the file position
+// is the transport's time minus `offset` (seconds; the file's start sits at
+// that transport time), read sample-accurately at every block, so starting,
+// seeking and loop laps all land on the same sample every time. Before the
+// start (or past the end with loop off) it is silent. Off, the node keeps
+// its own playhead (Play / Pause / Restart).
 class AudioFileNode : public INode, public IAudioSource
 {
 public:
@@ -208,7 +215,22 @@ public:
    void SweepPrepare() override;
    // The sweep tone lasts 1 s (about 190 blocks of 256 at 48 kHz); measure past its end so loop shows.
    int SweepMeasureBlocks() const override { return 230; }
-   void SweepPostAlter(const std::string& paramName, int& frameId) override;
+   // SweepPrepare turns follow off (the node's own playhead plays the tone);
+   // the clock runs so `followTransport` and `offset` have a playing
+   // transport to lock to.
+   bool SweepNeedsClock() const override { return true; }
+   std::vector<SweepParamPrereq> SweepPrerequisitesFor(const std::string& paramName) const override
+   {
+      // offset: locked, not looping, so the tone has ended at the measure
+      // point unless the offset moves the file's start later.
+      if (paramName == "offset")
+         return { { "followTransport", 1.0f }, { "loop", 0.0f } };
+      // followTransport: a start far in the future, so locking is silence.
+      if (paramName == "followTransport")
+         return { { "offset", 1000.0f } };
+      return {};
+   }
+   bool SweepParamIsRouting(const std::string& paramName) const override { return paramName == "monitor"; }
 
    // While a file is loaded this node must keep processing every block even
    // with no path to an Audio Out - both to advance its own playhead and so
@@ -248,8 +270,9 @@ public:
    const Platform::AudioLevels& Levels() const { return mLevels; }
 
    bool loop = true;
-   bool followTransport = true; // play/pause with the global transport
-   bool monitor = true;         // audible into the graph, or silent but still analysed
+   bool followTransport = true; // locked to the transport clock (see the class comment)
+   bool monitor = true;         // heard when wired straight into an Audio Out (see the class comment)
+   float offset = 0.0f;         // seconds: transport time at which the file starts (follow mode)
    float volume = 0.8f;
    float gain = 1.0f;
    float attack = 0.5f;
@@ -268,7 +291,10 @@ public:
       v.Bool("monitor", monitor); v.Float("volume", volume); v.Float("gain", gain);
       v.Float("attack", attack); v.Float("release", release);
       v.Float("pitch", pitch);
+      v.Float("offset", offset);
    }
+
+   bool SilentAtAudioOut() const override { return !monitor; }
 
    // Reloads from whatever path a patch restored. Called after loading.
    void ReloadFromPath()
@@ -287,6 +313,8 @@ private:
    std::string mFilePath;
    std::string mStatus = "no file loaded";
    bool mWasTransportPlaying = false;
+   bool mWasFollowing = true;
+   bool mLastMonitor = true;
    bool mLoaded = false;
    double mDuration = 0.0;
    int mLastCookFrame = -1;

@@ -23,6 +23,19 @@
 // See SanitizeType() for what happens to a saved patch that used one.
 namespace EqDsp
 {
+   // The stored bandNType value (a float param, read through SanitizeType):
+   //   0 low shelf   1 peak   2 high shelf
+   //   3 hp 12   4 hp 24   5 hp 36   6 lp 12   7 lp 24   8 lp 36
+   //   9 bp   10 notch   11 all-pass
+   // Saved patches store these integers - append only, never reorder.
+   //
+   // Shelf freq is the RBJ cookbook's midpoint: the shelf is at HALF its gain
+   // (-6 dB of a -12 dB shelf) at freq and reaches its full gain only about
+   // an octave and a half beyond it (80 Hz, Q 0.707, -12 dB: -10.4 dB at
+   // 47 Hz, -11.7 dB at 30 Hz). Q 0.707 is the steepest shelf without an
+   // overshoot bump; higher Q adds one. Peak freq is the centre, where the
+   // full gain applies. The help text and the DSP fixture (RunEqFixture,
+   // "designed shelf/peak gain") rely on this convention.
    enum BandType
    {
       kLowShelf = 0, kPeak, kHighShelf,

@@ -421,6 +421,28 @@ namespace Platform
       return AppendExtensionIfMissing(std::string(res), ".field");
    }
 
+   std::string SaveMidiDialog(const std::string& suggestedName)
+   {
+      if (IsHeadlessOrExitAfter()) return "";
+      ScopedHostEnvironment hostEnv;
+      EnsureDialogBackendChecked();
+      const char* const filterPatterns[] = {
+         "*.mid"
+      };
+      std::string defaultPath = suggestedName.empty() ? "Untitled.mid" : suggestedName;
+      defaultPath = AppendExtensionIfMissing(defaultPath, ".mid");
+
+      const char* res = tinyfd_saveFileDialog(
+         "Save MIDI File",
+         defaultPath.c_str(),
+         1,
+         filterPatterns,
+         "MIDI file (*.mid)"
+      );
+      if (!res) return "";
+      return AppendExtensionIfMissing(std::string(res), ".mid");
+   }
+
    std::string OpenFolderDialog(const char* title, const std::string& initialDir)
    {
       if (IsHeadlessOrExitAfter()) return "";

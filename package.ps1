@@ -77,6 +77,8 @@ Copy-Item $OrtDll $Stage
 Copy-Item $DmlDll $Stage
 New-Item -ItemType Directory -Force (Join-Path $Stage "assets\models") | Out-Null
 Copy-Item (Join-Path $ModelDir "u2netp.onnx") (Join-Path $Stage "assets\models")
+# Audio to MIDI's transcription model (Basic Pitch, see assets/models/NOTICE.txt).
+Copy-Item (Join-Path $ModelDir "basic-pitch.onnx") (Join-Path $Stage "assets\models")
 # Resources\ (fonts, icons, drumkits) sits next to the exe: BundledResourcePath()
 # in main.cpp looks for it there. The POST_BUILD copy in CMakeLists.txt fills it.
 $ResDir = Join-Path (Split-Path -Parent $Exe) "Resources"

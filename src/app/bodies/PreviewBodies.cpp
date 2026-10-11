@@ -10,6 +10,7 @@
 #include "nodes/ImageSpectralSynthNode.h"
 #include "nodes/MetallicNode.h"
 #include "nodes/OscillatorNode.h"
+#include "nodes/SceneNodes.h"
 #include "nodes/UtilityNodes.h"
 #include "nodes/WaveTerrainNode.h"
 #include "nodes/WavetableNode.h"

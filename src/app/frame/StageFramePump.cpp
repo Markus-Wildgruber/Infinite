@@ -357,6 +357,7 @@ void DrawFramePump(FrameCtx& fc)
       // since last frame, before any ed:: drawing reads the graph this frame.
       gRpcParamProbe.clear(); // last frame's requests were served by its DrawNodeBodies
       RemoteControl::DrainPending(HandleRpcCommand);
+      PumpAudioProbeJobs(); // drains live audio captures, collects finished analyses
       PollPendingKeyed(); // before ClearFrameParams: last frame's registered controls are still here
 
       std::string pendingOpenPatch;

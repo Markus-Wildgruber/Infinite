@@ -921,6 +921,11 @@ void DrawMenuBar(FrameCtx& fc)
             return clicked;
          };
 
+         // Rightmost of the cluster, mirroring the dock: the assistant sits
+         // just left of the node browser. Only when a `claude` was found.
+         if (AssistantAvailable() &&
+             TopBarIconToggle("##assistantPanelToggle", gAssistantPanelOpen, &Tabler::DrawMessage, T("Assistant (show / hide)")))
+            gAssistantPanelOpen = !gAssistantPanelOpen;
          if (TopBarIconToggle("##arrangePanelToggle", gArrangePanelOpen, &Tabler::DrawBox3D, T("Arrangement timeline")))
             gArrangePanelOpen = !gArrangePanelOpen;
          if (TopBarIconToggle("##perfPanelToggle", gPerfPanelOpen, &Tabler::DrawDisc, T("Performance mode")))

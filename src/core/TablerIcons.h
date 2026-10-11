@@ -258,6 +258,27 @@ namespace Tabler
       dl->AddLine(P(9, 4.6f), P(9, 19.4f), col, stroke);
    }
 
+   // Tabler: message (speech bubble with two text lines)
+   inline void DrawMessage(ImDrawList* dl, ImVec2 center, float size, ImU32 col, float customStroke = 0.0f)
+   {
+      const float s = size / 24.0f;
+      const float stroke = customStroke > 0.0f ? customStroke : ImMax(1.2f, 1.6f * s);
+      auto P = [&](float x, float y) { return Point24(center, size, x, y); };
+
+      const float r = 3.0f * s;
+      const float pi = 3.14159265f;
+      dl->PathArcTo(P(6, 7), r, pi, pi * 1.5f);
+      dl->PathArcTo(P(18, 7), r, pi * 1.5f, pi * 2.0f);
+      dl->PathArcTo(P(18, 15), r, 0.0f, pi * 0.5f);
+      dl->PathLineTo(P(13, 18));
+      dl->PathLineTo(P(8, 21));
+      dl->PathLineTo(P(8, 18));
+      dl->PathArcTo(P(6, 15), r, pi * 0.5f, pi);
+      dl->PathStroke(col, ImDrawFlags_Closed, stroke);
+      dl->AddLine(P(8, 9), P(16, 9), col, stroke);
+      dl->AddLine(P(8, 13), P(14, 13), col, stroke);
+   }
+
    inline void DrawGridDots(ImDrawList* dl, ImVec2 center, float size, ImU32 col, float customStroke = 0.0f)
    {
       const float s = size / 24.0f;

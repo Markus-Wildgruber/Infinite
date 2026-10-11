@@ -231,6 +231,13 @@ public:
    // can't do work that only happens inside ProcessBlock (like recording).
    virtual bool RequiresAudioProcessing() const { return false; }
 
+   // True while a node wired straight into an Audio Out / Output should not
+   // be heard there (Audio File with "monitor" off). Its output still feeds
+   // every other node it is patched into, so it can be heard only through,
+   // say, a switch or a mixer; a direct Output still records it. The
+   // topology must be rebuilt when this changes (AudioTopologyRequest).
+   virtual bool SilentAtAudioOut() const { return false; }
+
    // True for a node whose output comes from outside the process entirely -
    // a live camera, MIDI controller, or Syphon/Spout receiver - and so can't
    // be pre-synthesized for an Offline Render take (main.cpp's
@@ -277,4 +284,8 @@ public:
    // probed), on the control and the altered rig alike. For params that act on an edge (transport play/pause) rather than a steady value; the
    // node does its own CookIfNeeded(frameId++) calls so both rigs go through the same edge.
    virtual void SweepPostAlter(const std::string& /*paramName*/, int& /*frameId*/) {}
+   // True for a param that acts on routing rather than on the node's own
+   // output (Audio File's `monitor` picks which Audio Out terminals hear it),
+   // so no PCM signature can see it. The sweep reports it like a uiOnly param.
+   virtual bool SweepParamIsRouting(const std::string& /*paramName*/) const { return false; }
 };

@@ -16,6 +16,8 @@ namespace PatchJson
          jn["uid"] = n.uid;
          jn["category"] = n.category;
          jn["typeName"] = n.typeName;
+         if (!n.label.empty())
+            jn["label"] = n.label;
          jn["x"] = n.x;
          jn["y"] = n.y;
          jn["showParams"] = n.showParams;

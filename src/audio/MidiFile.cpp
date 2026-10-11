@@ -1,7 +1,10 @@
 #include "MidiFile.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 
 namespace MidiFile
 {
@@ -203,22 +206,77 @@ namespace MidiFile
 
    bool Load(const std::string& path, Song& out, std::string& error)
    {
-      FILE* f = fopen(path.c_str(), "rb");
+      // u8path, like Save: fopen would read the path in the ANSI codepage on
+      // Windows and miss any file whose name is not plain ASCII.
+      std::ifstream f(std::filesystem::u8path(path), std::ios::binary);
       if (!f)
       {
          error = "cannot open file";
          return false;
       }
       std::vector<uint8_t> bytes;
-      uint8_t buf[65536];
-      size_t n;
-      while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+      char buf[65536];
+      while (f.read(buf, sizeof(buf)) || f.gcount() > 0)
       {
-         bytes.insert(bytes.end(), buf, buf + n);
+         bytes.insert(bytes.end(), (const uint8_t*)buf, (const uint8_t*)buf + f.gcount());
          if (bytes.size() > (64u << 20))
             break;
       }
-      fclose(f);
       return Parse(bytes.data(), bytes.size(), out, error);
+   }
+
+   bool Save(const std::string& path, const Song& song, double bpm, std::string& error)
+   {
+      const int kDivision = 480;
+      std::vector<uint8_t> track;
+      auto varLen = [&](uint32_t v)
+      {
+         uint8_t tmp[5];
+         int n = 0;
+         tmp[n++] = (uint8_t)(v & 0x7F);
+         while ((v >>= 7) != 0)
+            tmp[n++] = (uint8_t)((v & 0x7F) | 0x80);
+         while (n > 0)
+            track.push_back(tmp[--n]);
+      };
+
+      const uint32_t usPerBeat = (uint32_t)std::lround(60000000.0 / std::clamp(bpm, 1.0, 999.0));
+      varLen(0);
+      track.insert(track.end(), { 0xFF, 0x51, 0x03, (uint8_t)(usPerBeat >> 16), (uint8_t)(usPerBeat >> 8), (uint8_t)usPerBeat });
+
+      // Song events are sorted by beat with offs before ons at the same beat,
+      // which is also the order a file must have them in.
+      long long lastTick = 0;
+      for (const Event& e : song.events)
+      {
+         const long long tick = std::max(lastTick, std::llround(std::max(0.0, e.beat) * kDivision));
+         varLen((uint32_t)(tick - lastTick));
+         lastTick = tick;
+         track.push_back(e.on && e.velocity > 0 ? 0x90 : 0x80);
+         track.push_back((uint8_t)(e.note & 0x7F));
+         track.push_back(e.on ? (uint8_t)std::clamp((int)e.velocity, 1, 127) : (uint8_t)0x40);
+      }
+      varLen(0);
+      track.insert(track.end(), { 0xFF, 0x2F, 0x00 });
+
+      std::vector<uint8_t> file = { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, (uint8_t)(kDivision >> 8), (uint8_t)kDivision,
+                                    'M', 'T', 'r', 'k' };
+      const uint32_t len = (uint32_t)track.size();
+      file.insert(file.end(), { (uint8_t)(len >> 24), (uint8_t)(len >> 16), (uint8_t)(len >> 8), (uint8_t)len });
+      file.insert(file.end(), track.begin(), track.end());
+
+      std::ofstream f(std::filesystem::u8path(path), std::ios::binary | std::ios::trunc);
+      if (!f)
+      {
+         error = "cannot write file";
+         return false;
+      }
+      f.write((const char*)file.data(), (std::streamsize)file.size());
+      if (!f)
+      {
+         error = "cannot write file";
+         return false;
+      }
+      return true;
    }
 }

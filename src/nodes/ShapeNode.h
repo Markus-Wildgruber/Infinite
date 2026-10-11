@@ -31,11 +31,39 @@ public:
    unsigned long long TextureRevision() const override { return mRevision; }
 
    // Public so the ImGui params panel can bind widgets straight to them.
+   //
+   // Units (what kFragSrc's main() does - documenting it, not a spec to
+   // change: saved patches depend on it):
+   //  - posX/posY: the shape's centre as a fraction of the output image,
+   //    0..1 on each axis (posX 0 = left edge, posY 0 = bottom, 1 = top;
+   //    0.5/0.5 = centre). Values outside 0..1 are legal (off-canvas).
+   //  - Every length below is measured in IMAGE HEIGHTS on both axes
+   //    (p.x is scaled by width/height before any shape maths), so a size
+   //    never stretches with the image's aspect ratio: 0.5 = half the image
+   //    height = H/2 pixels, on x as well as y.
+   //  - sizeX/sizeY are HALF-extents measured from the centre. Rectangle and
+   //    Rounded Rect use them directly (a Rectangle is 2*sizeX*H by
+   //    2*sizeY*H pixels; sizeX 0.07 on 1024x1024 = 143 px = 14 % of the
+   //    width, on 1920x1080 = 151 px = 7.9 %); Cross, Arrow and Chevron are
+   //    built from them unstretched too, and Line uses sizeX as its
+   //    half-length. The radial shapes (Circle, Polygon, Star, ...) use
+   //    sizeY as the radius and stretch x by sizeX/sizeY, so at equal sizes a
+   //    Circle's radius is sizeY*H pixels. Polygon/Triangle/Hexagon: sizeY is
+   //    the inradius (centre to the middle of a side). Ellipse divides its y
+   //    radius by a fixed 1.6.
+   //  - cornerRadius (corner radius / Ring and Line half-thickness),
+   //    strokeWidth (half-thickness, centred on the edge) and feather (edge
+   //    softening half-width) are in the same image-height units.
+   //  - rotation: degrees about the centre, positive = counter-clockwise as
+   //    displayed; applied after the aspect correction, so it never shears.
    int shapeType = 0; // index into ShapeNames()
    float width = 1024.0f;
    float height = 1024.0f;
-   float sizeX = 0.35f;
-   float sizeY = 0.35f;
+   float sizeX = 0.35f; // half-width in image heights (radial shapes: x radius)
+   float sizeY = 0.35f; // half-height in image heights (radial shapes: the radius)
+   // size/aspect are dead since the split into sizeX/sizeY: nothing reads
+   // them and no widget shows them, but VisitParams still saves/loads them
+   // so an old patch's keys keep round-tripping.
    float size = 0.35f;
    float aspect = 1.0f;
    float cornerRadius = 0.05f;

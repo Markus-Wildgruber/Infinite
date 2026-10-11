@@ -47,22 +47,50 @@ namespace app
          ImGui::ProgressBar((float)(n->Position() / dur), ImVec2(kPreviewSize, 0));
          ImGui::TextDisabled("%.1f / %.1f s", n->Position(), dur);
 
+         // Locked to the transport, these buttons ARE the transport: the
+         // file's position always comes from the transport clock.
+         Transport& tr = Transport::Instance();
          if (n->IsPlaying())
          {
             if (ImGui::Button("Pause", ImVec2(kPreviewSize * 0.48f, 0)))
-               n->Pause();
+            {
+               if (n->followTransport)
+                  tr.SetPlaying(false);
+               else
+                  n->Pause();
+            }
          }
          else if (ImGui::Button("Play", ImVec2(kPreviewSize * 0.48f, 0)))
          {
-            n->Play();
+            if (n->followTransport)
+               tr.SetPlaying(true);
+            else
+               n->Play();
          }
          ImGui::SameLine();
          if (ImGui::Button("Restart", ImVec2(kPreviewSize * 0.48f, 0)))
-            n->Restart();
+         {
+            if (n->followTransport)
+               tr.Seek(std::max(0.0, (double)n->offset));
+            else
+               n->Restart();
+         }
 
          ModCheckbox("follow transport", &n->followTransport);
+         if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("On: the file plays exactly at the transport's time (minus offset), so start,\n"
+                              "seek and loop always land on the same sample. Off: its own Play / Pause.");
+         if (n->followTransport)
+         {
+            ModSlider("offset", &n->offset, -60.0f, 60.0f);
+            if (ImGui::IsItemHovered())
+               ImGui::SetTooltip("Seconds: the transport time at which the file starts.");
+         }
          ModCheckbox("loop", &n->loop);
-         ModCheckbox("audible", &n->monitor);
+         ModCheckbox("monitor", &n->monitor);
+         if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Heard when wired straight into an Audio Out. Off, other nodes it feeds\n"
+                              "(a switch, a mixer, an analyser) still get the full signal.");
          ModSlider("volume", &n->volume, 0.0f, 1.0f);
          ModSlider("gain", &n->gain, 0.1f, 16.0f);
          ModSlider("pitch", &n->pitch, -24.0f, 24.0f);
@@ -1213,19 +1241,76 @@ namespace app
    void DrawAudioTextureParams(AudioTextureNode* n)
    {
       DropdownButton("mode", AudioTextureNode::ModeNames(), n->mode, [n](int i) { n->mode = i; });
-      if (n->mode == AudioTextureNode::kModeWaveform)
-      {
+      const bool waveform = (n->mode == AudioTextureNode::kModeWaveform);
+      const bool spectrogram = (n->mode == AudioTextureNode::kModeSpectrogram);
+      // One selector slot whose meaning follows the mode: the Waveform's
+      // sample window, or the FFT size of the two spectrum modes (up to 8192
+      // for low-end resolution). Different labels, so different discrete
+      // param slots - a binding on one never drives the other.
+      if (waveform)
          DropdownButton("window", AudioTextureNode::WindowSizeNames(), n->windowSizeIndex, [n](int i) { n->windowSizeIndex = i; });
+      else
+         DropdownButton("fft", AudioTextureNode::FftSizeNames(), n->fftSizeIndex, [n](int i) { n->fftSizeIndex = i; });
+      ModSlider("gain", &n->gain, 0.1f, 10.0f);
+      ModSlider("smoothing", &n->smoothing, 0.0f, 0.99f);
+
+      // Spectrum params are greyed, not hidden, when the mode ignores them:
+      // the node keeps its height and every slider keeps its draw-order
+      // param index (existing bindings on gain/smoothing stay put).
+      NodeSeparator("spectrum");
+      ImGui::BeginDisabled(waveform);
+      ModSlider("floor", &n->dbFloor, -120.0f, -20.0f, "%.0f dB");
+      ModSlider("ceiling", &n->dbCeiling, -40.0f, 12.0f, "%.0f dB");
+      ModSlider("min freq", &n->freqMin, 10.0f, 2000.0f, "%.0f Hz", kParamWidth, false, 0.0f,
+                FrequencyTaper::PosToValue, FrequencyTaper::ValueToPos);
+      ModSlider("max freq", &n->freqMax, 200.0f, 24000.0f, "%.0f Hz", kParamWidth, false, 0.0f,
+                FrequencyTaper::PosToValue, FrequencyTaper::ValueToPos);
+      ImGui::EndDisabled();
+      ImGui::BeginDisabled(!spectrogram);
+      ModSliderInt("history", &n->history, AudioTextureNode::kHistoryMin, AudioTextureNode::kHistoryMax);
+      ImGui::EndDisabled();
+
+      // Readouts: the window actually rendered after clamping (ceiling above
+      // floor, max freq under Nyquist), the FFT bin width, and the time span
+      // the spectrogram covers.
+      const float sr = n->SampleRate();
+      float dbLo = 0.0f;
+      float dbHi = 0.0f;
+      float fLo = 0.0f;
+      float fHi = 0.0f;
+      n->ResolveDbRange(dbLo, dbHi);
+      n->ResolveFreqRange(sr, fLo, fHi);
+      auto fmtHz = [](char* buf, size_t size, float hz)
+      {
+         if (hz >= 1000.0f)
+            snprintf(buf, size, "%.1fk", hz / 1000.0f);
+         else
+            snprintf(buf, size, "%.0f", hz);
+      };
+      char loBuf[24];
+      char hiBuf[24];
+      fmtHz(loBuf, sizeof(loBuf), fLo);
+      fmtHz(hiBuf, sizeof(hiBuf), fHi);
+      ImGui::TextDisabled("%.0f..%.0f dB  %s-%s Hz", dbLo, dbHi, loBuf, hiBuf);
+      if (waveform)
+      {
+         const int win = AudioTextureNode::kWindowSizes[std::clamp(n->windowSizeIndex, 0, AudioTextureNode::kWindowSizeCount - 1)];
+         ImGui::TextDisabled("window %.0f ms", 1000.0f * (float)win / sr);
       }
       else
       {
-         ImGui::BeginDisabled();
-         int dummy = 1; // 1024
-         DropdownButton("window (1024)", AudioTextureNode::WindowSizeNames(), dummy, [](int) {});
-         ImGui::EndDisabled();
+         const int fft = n->FftSize();
+         const float bin = sr / (float)fft;
+         if (spectrogram)
+         {
+            const int cols = std::clamp(n->history, AudioTextureNode::kHistoryMin, AudioTextureNode::kHistoryMax);
+            ImGui::TextDisabled("bin %.1f Hz  %.1f s", bin, (float)(cols * AudioTextureNode::kSpectrogramHop) / sr);
+         }
+         else
+         {
+            ImGui::TextDisabled("bin %.1f Hz  %.0f ms", bin, 1000.0f * (float)fft / sr);
+         }
       }
-      ModSlider("gain", &n->gain, 0.1f, 10.0f);
-      ModSlider("smoothing", &n->smoothing, 0.0f, 0.99f);
    }
 
 

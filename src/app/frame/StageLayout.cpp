@@ -192,7 +192,7 @@ void DrawLayout(FrameCtx& fc)
                                                           - (perfVertical ? gPerfPanelHeight : 0.0f)
                                                           - (arrangeVertical ? gArrangePanelHeight : 0.0f));
          const float maxWidth = std::max(kViewportPanelMinWidth,
-                                         room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? kAssistantPanelWidth : 0.0f) -
+                                         room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? gAssistantPanelWidth : 0.0f) -
                                          (matrixHorizontal ? gModMatrixWidth : 0.0f) -
                                          (perfHorizontal ? gPerfPanelWidth : 0.0f) -
                                          (arrangeHorizontal ? gArrangePanelWidth : 0.0f));
@@ -204,7 +204,7 @@ void DrawLayout(FrameCtx& fc)
                                                                 - (perfVertical ? gPerfPanelHeight : 0.0f)
                                                                 - (arrangeVertical ? gArrangePanelHeight : 0.0f));
          const float maxMatrixWidth = std::max(kModMatrixMinWidth,
-                                               room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? kAssistantPanelWidth : 0.0f) -
+                                               room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? gAssistantPanelWidth : 0.0f) -
                                                (viewportHorizontal ? gViewportPanelWidth : 0.0f) -
                                                (perfHorizontal ? gPerfPanelWidth : 0.0f) -
                                                (arrangeHorizontal ? gArrangePanelWidth : 0.0f));
@@ -216,7 +216,7 @@ void DrawLayout(FrameCtx& fc)
                                                               - (matrixVertical ? gModMatrixHeight : 0.0f)
                                                               - (arrangeVertical ? gArrangePanelHeight : 0.0f));
          const float maxPerfWidth = std::max(kPerfPanelMinWidth,
-                                             room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? kAssistantPanelWidth : 0.0f) -
+                                             room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? gAssistantPanelWidth : 0.0f) -
                                              (viewportHorizontal ? gViewportPanelWidth : 0.0f) -
                                              (matrixHorizontal ? gModMatrixWidth : 0.0f) -
                                              (arrangeHorizontal ? gArrangePanelWidth : 0.0f));
@@ -228,12 +228,18 @@ void DrawLayout(FrameCtx& fc)
                                                                  - (matrixVertical ? gModMatrixHeight : 0.0f)
                                                                  - (perfVertical ? gPerfPanelHeight : 0.0f));
          const float maxArrangeWidth = std::max(kArrangePanelMinWidth,
-                                                room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? kAssistantPanelWidth : 0.0f) -
+                                                room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f) - (gAssistantPanelOpen ? gAssistantPanelWidth : 0.0f) -
                                                 (viewportHorizontal ? gViewportPanelWidth : 0.0f) -
                                                 (matrixHorizontal ? gModMatrixWidth : 0.0f) -
                                                 (perfHorizontal ? gPerfPanelWidth : 0.0f));
          gArrangePanelHeight = std::min(std::max(gArrangePanelHeight, kArrangePanelMinHeight), maxArrangeHeight);
          gArrangePanelWidth = std::min(std::max(gArrangePanelWidth, kArrangePanelMinWidth), maxArrangeWidth);
+
+         // The assistant chat is dragged wider from its left edge; it may take
+         // everything except the node browser and a 200 px sliver of canvas.
+         const float maxAssistantWidth = std::max(kAssistantPanelMinWidth,
+                                                  room.x - 200.0f - (gNodePanelOpen ? kNodePanelWidth : 0.0f));
+         gAssistantPanelWidth = std::min(std::max(gAssistantPanelWidth, kAssistantPanelMinWidth), maxAssistantWidth);
       }
 
       // Measured before the top/left panels below consume any of it, so the
@@ -333,7 +339,7 @@ void DrawLayout(FrameCtx& fc)
       // side by side instead of one clipping the other or the two overlapping.
       float rightReserved = 0.0f;
       if (gNodePanelOpen) rightReserved += kNodePanelWidth;
-      if (gAssistantPanelOpen) rightReserved += kAssistantPanelWidth;
+      if (gAssistantPanelOpen) rightReserved += gAssistantPanelWidth;
       if (viewportRight) rightReserved += gViewportPanelWidth;
       if (matrixRight) rightReserved += gModMatrixWidth;
       if (perfRight) rightReserved += gPerfPanelWidth;

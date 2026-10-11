@@ -62,8 +62,9 @@ request. `get_bindings {index}` lists a node's parameters with their numbers, ke
 |---|---|---|
 | `list_node_types` | | `{<category>: [type, ...]}` |
 | `describe` | `type?` | without `type`: `{types}`. With it: `{type, category, params[{key, kind, default}], inputs[{slot, name, kind, label}], outputs[{label, kind, modulator}], canBypass, hardwareDriven}` |
-| `get_graph` | | the patch as JSON (nodes, cables, `modulation`, `expressions`, `globals`) plus `links[{id, srcIndex, srcOutput, dstIndex, dstSlot \| dstParamPin \| dstColorPin}]` |
-| `get_params` | `index` | `{"<kind> <key>": "<value>", ...}`, every saved value of the node |
+| `get_graph` | | the patch as JSON (nodes with `label` when renamed, cables, `modulation`, `expressions`, `globals`) plus `links[{id, srcIndex, srcOutput, dstIndex, dstSlot \| dstParamPin \| dstColorPin}]` |
+| `get_params` | `index` | `{"<kind> <key>": "<value>", ...}`, every saved value of the node. Kinds: `f` float, `i` int, `b` bool (`"1"`/`"0"`), `c` colour (`"r g b"`), `s` text - returned literally (a Windows path has single backslashes), not in the patch file's escaped form. Numbered keys count from 0 (`mute0` is the Mixer channel labelled 1). Dropdowns also appear in `_options` (`{"i band1Type": ["low shelf", "peak", ...]}`, index order) once the node has drawn; `_label` is the node's custom name |
+| `get_notes` | `index`, `from?`, `to?`, `low?`, `high?` (MIDI), `limit?` (200) | `{unit, count, range[lo, hi], pitchClasses{}, notes[{t, dur, note, midi, level, channel?}], durationSeconds?, truncated?, warning?}`: Audio to MIDI's transcription (seconds) or a MIDI File's notes (beats) |
 | `get_bindings` | `index?` | `{modulation[{dst, param, src, srcOutput, lo, hi, hasRange, enabled, curve, dstKey?, dstLabel?, min?, max?}], expressions[{dst, param, text, curve, error?, shadowedByModulator?}], globals[{name, expr, value, error?}]}`; with `index`, also `params[{param, dstKey?, dstLabel?, min?, max?, options?}]` for that node |
 | `explain` | `all?` | `{text, graph}`: the graph as `Infinite --explain` prints it |
 | `get_node_position` | `index` | `{x, y}` |
@@ -76,17 +77,49 @@ request. `get_bindings {index}` lists a node's parameters with their numbers, ke
 | `delete_node` | `index` | `{}`; also drops its cables and every binding to or from it |
 | `connect` | `src`, `dst`, `srcOutput?` (0), `dstSlot` | `{}`; the same compatibility rules as dragging a cable |
 | `disconnect` | `linkId` (from `get_graph` `links`) | `{}` |
-| `set_param` | `index`, `name` (saved key), `value` | `{}` |
+| `set_param` | `index`, `name` (saved key), `value` | `{}`. A dropdown also takes its option name (`"low shelf"`). The value is checked against the key's kind: bools take `true`/`false` (also `1`/`0`, `"on"`/`"off"`), numbers a number or numeric string, colours `[r, g, b]` or `"r g b"`, text a literal string (no escaping - `D:\new\file` stays as written). A mismatch is an error instead of a silent default. Setting a text key also reloads the node's derived state, so a new file `path` loads at once (Audio File, Sampler, Image, ...) |
 | `bind_modulator` | `dst`, `param`, `src`, `srcOutput?`, `lo?` + `hi?` (destination units; both or neither, neither = full range), `curve?` (-1..1), `enabled?` | `{dst, param}`; `src`'s output must be a modulator |
 | `unbind_modulator` | `dst`, `param` | `{}` |
 | `set_expression` | `dst`, `param`, `text` (leading `=` optional; empty removes it), `curve?` | `{dst, param, shadowedByModulator?}` (a wired modulator wins over an expression) |
 | `set_global` | `name`, `expr` | `{}`; replaces a global of that name in place, or appends one |
 | `remove_global` | `name` | `{}` |
 | `auto_wire_inputs` | `index` | `{wiredSlots, feederIndices}`: feeds every empty input with a default source |
-| `set_node_position` | `index`, `x`, `y` | `{}` |
+| `set_node_position` / `move_node` | `index`, `x?`, `y?`, `dx?`, `dy?` | `{x, y}`; x/y place the node, dx/dy move it from where it is |
+| `set_bypass` | `index`, `bypassed?` (omit to toggle) | `{bypassed}`; as the B key: the node passes its input through |
+| `rename_node` | `index`, `name` (`""` clears) | `{title}`; saved with the patch (`label` line) |
 | `expand_node` | `index` | `{}` |
 
 Each building call is one undo step.
+
+### Transport
+
+| Method | Params | Result |
+|---|---|---|
+| `transport` | `action?` (`play`, `pause`, `resume`, `stop`, `toggle`, `rewind`, `seek`, `start_audio`, `state` - the default), `fromStart?` (with `play`), `rewind?` (with `stop`), `seconds?` / `beats?` (with `seek`), `bpm?` | `{playing, seconds, beats, bpm, audioRunning, sampleRate, loop{enabled, startBeats, endBeats}, warning?}`. `pause` and `stop` keep the position (`stop` with `rewind: true` goes back to 0); `resume` and `play` carry on from it. `play`, `resume` and `toggle` also start the audio engine, which does not open at launch; `warning` says why when the device would not open |
+
+### Measuring sound
+
+Numbers instead of pictures (`graph/AudioProbeJobs.cpp`, `audio/AudioAnalysis.cpp`). Handlers
+never block the UI thread, so measuring is start-then-poll; the MCP bridge's `analyze_audio` and
+`analyze_file` tools do the polling and return the finished result in one call.
+
+| Method | Params | Result |
+|---|---|---|
+| `capture_audio` | `node` or `nodes` (1-4 indices), `seconds?` (3, 0.2-30), `frameSeconds?` (0.1), `offline?`, `start?` (seconds, with `offline`) | `{id, seconds, offline?}`. Taps each node's audio output from the same block on, so several nodes are compared over exactly the same span. An Audio Out is measured through the node feeding it. Live, it fails when the engine is off or a node has no audio output. `offline: true` pauses the device and renders the graph itself from `start` (default: the current position) as an offline render does, so the result is sample-accurate and identical every run; the device and transport are restored afterwards. One capture at a time |
+| `analyze_file` | `path` or `node` (a node with a `path`), `notes?` (false), `sound?` (false), `start?`, `length?`, `f0?`, `partials?` | `{id, seconds}`. Decodes the file and analyses it whole, with tempo and key; `notes: true` adds a Basic Pitch transcription summary (Windows/Linux); `sound: true` adds a `sound` profile of the region (f0, inharmonicity, partials with level and T60, ADSR, spectral envelope) |
+| `get_sound_profile` | `index` (a Sound Analyze node) | its last profile (as `sound` above, plus `file`), or `{status}` |
+| `analysis_result` | `id` | `{status: "capturing" \| "analyzing", progress}` while running; `{status: "done", result, note?}`; `{status: "error", error}` |
+
+A capture `result` is `{nodes[{index, type, seconds, rmsDb, peakDb, crestDb, silentRatio, centroidHz,
+bands[{hz[lo, hi], db}], onsetCount, onsetsPerSecond, onsets[], pitch{pitchedRatio, medianHz?,
+median?, range?, melody[{t, note, dur}]?}, timeline{t[], rmsDb[], peakDb[], centroidHz[], pitchHz[],
+bandsDb[][]}, warning?}], compare?[{a, b, levelDiffDb, bandDiffDb[], spectralSimilarity,
+spectralShapeSimilarity, correlation, bestLagMs, correlationAtBestLag, medianPitchDiffCents?,
+pitchAgreement?, onsetMatch?, onsetOffsetMs?, envelopeCorrelation?}]}`. Levels are dBFS RMS (a
+full-scale sine reads -3 dB); differences are A minus B, and a positive `bestLagMs` means B lags A.
+A file `result` has the same per-node fields plus `file`, `channels`, `tempo{bpm, confidence}`,
+`key{name, confidence, chroma[12]}` and, with `notes`, `notes{count, perSecond, averagePolyphony,
+range, pitchClassCounts[12], first[]}`.
 
 ### `batch`
 

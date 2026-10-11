@@ -657,6 +657,12 @@ namespace AudioParamSweep
       const EffectParamDef* def = FindEffectParamDef(cand.name, probeSlot.name);
       if (def && def->uiOnly)
          return { true, false, true };
+      if (!def)
+      {
+         std::unique_ptr<INode> probe(NodeFactory::Instance().MakeNode(cand.name));
+         if (probe && probe->SweepParamIsRouting(probeSlot.name))
+            return { true, false, true };
+      }
 
       // An explicit candidate list overrides the generic sequence below -
       // see EffectParamDef::testCandidates.

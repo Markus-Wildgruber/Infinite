@@ -4,10 +4,12 @@
 #include "audio/AudioEngine.h"
 #include "audio/EffectDefs.h"
 #include "nodes/AnalogNode.h"
+#include "nodes/AudioCompareNode.h"
 #include "nodes/AudioEffectNode.h"
 #include "nodes/AudioMeterNode.h"
 #include "nodes/AudioNodes.h"
 #include "nodes/AudioPluginNode.h"
+#include "nodes/AudioToMidiNode.h"
 #include "nodes/DrumSequencerNode.h"
 #include "nodes/EquationNode.h"
 #include "nodes/GrainMolderNode.h"
@@ -27,6 +29,7 @@
 #include "nodes/PredictiveVelocityNode.h"
 #include "nodes/SamplerNode.h"
 #include "nodes/SlicerNode.h"
+#include "nodes/SoundAnalyzeNode.h"
 #include "nodes/WaveTerrainNode.h"
 #include "nodes/WavetableNode.h"
 
@@ -611,6 +614,8 @@ namespace app
          DrawRandomNoteGeneratorBody(gn, n);
       else if (auto* n = dynamic_cast<MidiFileNode*>(gn.node.get()))
          DrawMidiFileBody(gn, n);
+      else if (auto* n = dynamic_cast<AudioToMidiNode*>(gn.node.get()))
+         DrawAudioToMidiBody(gn, n);
       else if (auto* n = dynamic_cast<ChorderNode*>(gn.node.get()))
          DrawChorderBody(gn, n);
       else if (auto* n = dynamic_cast<NoteStackNode*>(gn.node.get()))
@@ -623,6 +628,10 @@ namespace app
          DrawStrumBody(gn, n);
       else if (auto* n = dynamic_cast<AudioToCVNode*>(gn.node.get()))
          DrawAudioToCVBody(gn, n);
+      else if (auto* n = dynamic_cast<AudioCompareNode*>(gn.node.get()))
+         DrawAudioCompareBody(gn, n);
+      else if (auto* n = dynamic_cast<SoundAnalyzeNode*>(gn.node.get()))
+         DrawSoundAnalyzeBody(gn, n);
       else if (auto* n = dynamic_cast<EnvelopeNode*>(gn.node.get()))
          DrawEnvelopeBody(gn, n);
       else if (auto* n = dynamic_cast<AudioEffectNode*>(gn.node.get()))
