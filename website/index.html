@@ -563,7 +563,7 @@
 
   <script>
     // the stage model eases back to square when let go
-    (function(){var m=document.getElementById('stage-model');if(!m)return;var back=function(){m.cameraOrbit='0deg 90deg 1.55m';};['pointerup','pointercancel','pointerleave'].forEach(function(e){m.addEventListener(e,back);});})();
+    (function(){var m=document.getElementById('stage-model');if(!m)return;var R=1.55,fit=function(){var a=m.clientWidth/Math.max(m.clientHeight,1);R=Math.round(155*Math.max(1,Math.min(2.4,2.6/a)))/100;m.setAttribute('min-camera-orbit','-28deg 70deg '+R+'m');m.setAttribute('max-camera-orbit','28deg 105deg '+R+'m');m.setAttribute('camera-orbit','0deg 90deg '+R+'m');};fit();window.addEventListener('resize',fit);var back=function(){if('jumpCameraToGoal' in m)m.cameraOrbit='0deg 90deg '+R+'m';};['pointerup','pointercancel','pointerleave'].forEach(function(e){m.addEventListener(e,back);});})();
     // model-viewer (about 300 KB) loads only when a 3D model is about to scroll into view
     (function () {
       var els = document.querySelectorAll('.stage-model, .download-tile'), done = false;
@@ -580,6 +580,6 @@
   </script>
   <script src="nodes.js?v=2" defer></script>
   <script src="app.js?v=31" defer></script>
-  <script src="site.js?v=6" defer></script>
+  <script src="site.js?v=7" defer></script>
 </body>
 </html>

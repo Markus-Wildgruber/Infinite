@@ -69,7 +69,8 @@
         });
       } else {
         a.href = '#download';
-        if (label) label.textContent = OS === 'mobile' ? 'Get it for your computer' : 'Download Infinite';
+        if (OS === 'mobile') a.style.display = 'none'; // a phone cannot install it, so no button at all
+        else if (label) label.textContent = 'Download Infinite';
       }
     });
   }
