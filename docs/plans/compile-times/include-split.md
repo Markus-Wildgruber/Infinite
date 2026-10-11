@@ -163,12 +163,15 @@ Still to do before merging:
 5. Link check for forward declarations: a `class`/`struct` mismatch only
    shows up as an unresolved symbol on MSVC.
 
-Merging with work in progress elsewhere: on 2026-10-09 the main checkout had
-uncommitted changes from other sessions that touch the same files:
-- `src/app/AppCommon.h` adds `#include "nodes/AudioToMidiNode.h"`: put it in
-  the TUs that use the node instead (`graph/NodeRegistry.cpp`,
-  `bodies/AudioNodeBodies.cpp`); the guardrail rejects it in AppCommon.h.
-- `src/platform/Platform.h` gains new declarations: move each into the
-  matching `Platform<Topic>.h`.
-- `AppShared.h`, `StageMenuBar.cpp`, `StageSidePanels.cpp` (assistant panel):
-  ordinary text merges.
+Merged into `feature/ai-assistant-sidebar` on 2026-10-11 (fast-forward). The
+other sessions' uncommitted work in the main checkout (Audio to MIDI, Audio
+Compare, audio probe RPC, assistant panel) was carried over on top and adapted:
+- `AppCommon.h` kept slim; `AudioToMidiNode` / `AudioCompareNode` are
+  forward-declared in `AppForward.h` and included in the TUs that need the full
+  type (`NodeRegistry.cpp`, `AudioNodeBodies.cpp`, `NoteBodies.cpp`,
+  `StageDropHandling.cpp`, `Startup.cpp`, `AudioCompareBody.cpp`).
+- `Platform::SaveMidiDialog` declared in `PlatformAudio.h` (next to
+  `OpenMidiDialog`); new files include `PlatformAudio.h` / `PlatformPlugins.h`
+  instead of the umbrella.
+- New app TU `graph/AudioProbeJobs.cpp` and `graph/Rpc.cpp` include
+  `audio/AudioEngine.h` explicitly.
