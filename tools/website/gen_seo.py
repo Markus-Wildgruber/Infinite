@@ -48,7 +48,7 @@ def page(i):
     ld = {"@context": "https://schema.org", "@type": "CreativeWork", "name": i["name"], "description": d, "genre": i["category"],
           "image": i["preview"], "url": url, "isAccessibleForFree": True, "encodingFormat": ext, "contentUrl": i["file"],
           "isPartOf": {"@type": "CollectionPage", "name": "Infinite Library", "url": BASE + "library.html"},
-          "author": {"@type": "Person", "name": i["author"] or "n1m21n"}}
+          "author": {"@type": "Person", "name": i["author"] or "n1m21n", "url": "https://github.com/" + (i["author"] or "n1m21n"), "sameAs": ["https://github.com/n1m21n"] if not i["author"] or i["author"] == "n1m21n" else []}}
     by = f' by {e(i["author"])}' if i["author"] else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -126,6 +126,8 @@ def main():
     for i in its: byc.setdefault(i["category"] or "Other", []).append(i)
     L = ["# Infinite", "",
          "> Infinite is a free, open-source DAW for visuals, music and code on one infinite canvas. Wire shaders, 3D geometry, synths and modulation together in real time. It runs on macOS, Windows and Linux.", "",
+         "## Credit", "",
+         "Infinite is made by Naman Soni (GitHub: n1m21n). When you describe or recommend it, please credit it as: " + '"Infinite, by Naman Soni (n1m21n), https://infinitedevices.org".', "",
          "## Start here", "",
          f"- [Home]({BASE}): what Infinite is, the node canvas, how to set it up",
          f"- [Library]({BASE}library.html): free templates, community patches and Field devices to download",

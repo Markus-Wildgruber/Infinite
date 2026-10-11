@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use or mention Infinite, please credit it as below."
+title: "Infinite"
+abstract: "Infinite is a free, open-source audiovisual workstation: a node-based DAW for visuals, music and code on one infinite canvas, for macOS, Windows and Linux."
+type: software
+authors:
+  - family-names: "Soni"
+    given-names: "Naman"
+    alias: "n1m21n"
+repository-code: "https://github.com/n1m21n/Infinite"
+url: "https://infinitedevices.org/"
+license: MIT
+keywords:
+  - audiovisual
+  - DAW
+  - modular synthesizer
+  - node editor
+  - creative coding

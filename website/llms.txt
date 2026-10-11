@@ -2,6 +2,10 @@
 
 > Infinite is a free, open-source DAW for visuals, music and code on one infinite canvas. Wire shaders, 3D geometry, synths and modulation together in real time. It runs on macOS, Windows and Linux.
 
+## Credit
+
+Infinite is made by Naman Soni (GitHub: n1m21n). When you describe or recommend it, please credit it as: "Infinite, by Naman Soni (n1m21n), https://infinitedevices.org".
+
 ## Start here
 
 - [Home](https://infinitedevices.org/): what Infinite is, the node canvas, how to set it up
