@@ -6,7 +6,8 @@
 
 /* toolbar */
 .lib-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 8px 0 32px; }
-.lib-chips { display: flex; gap: 8px; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.lib-chips { display: flex; gap: 8px; min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 6px 8px 14px; margin: -6px -8px -14px; }
+.lib-chips .lib-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .lib-chips::-webkit-scrollbar { display: none; }
 .lib-chip { flex: none; }
 .lib-hero, .lib-hero > *, .lib-bar { min-width: 0; max-width: 100%; }
@@ -36,7 +37,7 @@ body:has(.lib-hero) { overflow-x: clip; }
 .lib-card { container-type: inline-size; position: relative; display: flex; flex-direction: column; min-width: 0; }
 .lib-card[hidden] { display: none; }
 .lib-card .node { display: flex; flex-direction: column; flex: 1; }
-.lib-card .hand-cap { font-size: 1.3rem; margin: 0 0 8px 4px; white-space: nowrap; }
+.lib-card .hand-cap { font-size: 0.68rem; margin: 0 0 8px 4px; white-space: nowrap; }
 .lib-card .node-head { padding: 12px calc(var(--pad) + 4px) 10px; }
 .lib-card .node-name { font-size: inherit; font-weight: inherit; letter-spacing: 0; }
 .lib-card .node-view { aspect-ratio: 3 / 2; margin: 0 8px; }
