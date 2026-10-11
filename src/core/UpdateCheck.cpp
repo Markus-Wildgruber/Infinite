@@ -182,7 +182,7 @@ namespace
       }
       if (release.contains("html_url") && release["html_url"].is_string())
          return release["html_url"].get<std::string>();
-      return "https://n1m21n.github.io/Infinite/#download";
+      return "https://infinitedevices.org/#download";
    }
 
    void WorkerMain()

@@ -977,7 +977,7 @@ void DrawMenuBar(FrameCtx& fc)
                dl->AddLine(ImVec2(c.x - 5.5f, c.y + 7.0f), ImVec2(c.x + 5.5f, c.y + 7.0f), fg, 1.8f);
                StatusDot::OnLastItem(StatusDot::State::Error);
                if (clicked)
-                  Platform::OpenExternalUrl("https://n1m21n.github.io/Infinite/#download");
+                  Platform::OpenExternalUrl("https://infinitedevices.org/#download");
                if (hov)
                {
                   const std::string& lv = UpdateCheck::LatestVersion();

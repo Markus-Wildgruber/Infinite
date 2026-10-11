@@ -241,7 +241,7 @@ int DrawFloating(FrameCtx& fc)
             ImGui::CloseCurrentPopup();
          }
          if (pick == 1)
-            Platform::OpenExternalUrl("https://n1m21n.github.io/Infinite/");
+            Platform::OpenExternalUrl("https://infinitedevices.org/");
          if (pick == 2 || ImGui::IsKeyPressed(ImGuiKey_Escape))
             ImGui::CloseCurrentPopup();
          DialogParts::End();
