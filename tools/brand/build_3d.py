@@ -1088,21 +1088,26 @@ def main():
         if o.parent is None:
             o.location.y += 6000
     export(wide, "node_audio_filter_wide", (0, 6000))
-    # website: two filters in a row, the second patched from the first's output; cables run off both ends
+    # website: the filter patched into a Field Pixel (audio into visuals); cables run off both ends
     ca, (CW, CH) = build_node(MT, reach=3200, name="chain_a", sides=("in",))
     ja, za = LAST["jy"], LAST["zc"]
-    cb, _ = build_node(MT, reach=3200, name="chain_b", sides=("out",))
-    GAP = 520
-    for o in cb.objects:
+    GAP, FW = 520, 340
+    FXc = CW / 2 + GAP + FW / 2
+    for o in ca.objects:
         if o.parent is None:
-            o.location.x += CW + GAP
-    for coll in (ca, cb):
-        for o in coll.objects:
-            if o.parent is None:
-                o.location.y += 12000
+            o.location.y += 12000
+    cb, (FW, FH), fj = build_field_pixel(MT, (FXc, 12000))
+    # glTF drops the preview's gradient node tree, so the web copy gets a plain emissive tint instead of a white panel
+    flat = mat("field_preview_flat", mix_hex(M["deep"], mix_hex(SIGNAL, MOD, 0.5), 0.4), 0.5, emit=0.2)
+    for o in cb.objects:
+        if o.name.startswith("preview"):
+            o.data.materials.clear()
+            o.data.materials.append(flat)
     link_c = new_coll("chain_link")
-    patch_cable(link_c, MT, (CW / 2 + 1.2, ja + 12000, za), (CW + GAP - CW / 2 - 1.2, ja + 12000, za), MT["cat_fx"], name="chain")
-    export([ca, cb, link_c], "node_chain_wide", ((CW + GAP) / 2, 12000))
+    patch_cable(link_c, MT, (CW / 2 + 1.2, ja + 12000, za), (FXc - FW / 2 - 1.2, fj + 12000, TOP / 2), MT["cat_fx"], name="chain")
+    src = mat("cat_src_cable", CAT["Source"], 0.38)
+    plug_and_cable(link_c, MT, FXc + FW / 2 + 1.2, fj + 12000, TOP / 2, 1, src, ((FXc + FW / 2 + 330 + 1920, 40 + 12000, 2.5), (FXc + FW / 2 + 560 + 3200, 120 + 12000, 2.5)))
+    export([ca, cb, link_c], "node_chain_wide", (FXc / 2, 12000))
     export(lfo, "node_lfo", (LX, 0))
     export(fp, "node_field_pixel", (FX, 0))
     export([lfo, fp, pc], "patch_lfo_field_pixel", ((LX + FX) / 2, 0))
