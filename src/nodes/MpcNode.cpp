@@ -1,4 +1,5 @@
 #include "MpcNode.h"
+#include "nodes/NodeButtons.h"
 
 #include <algorithm>
 #include <atomic>
@@ -795,4 +796,62 @@ void MpcNode::SweepPrepare()
       mAudioNode->PushBuffer(p, copy);
    }
    delete buf;
+}
+
+std::vector<std::string> MpcNode::ButtonNames() const
+{
+   std::vector<std::string> names;
+   for (int p = 0; p < kPads; p++)
+      names.push_back("pad" + std::to_string(p + 1));
+   names.push_back("clear");
+   return names;
+}
+
+bool MpcNode::PressButton(const std::string& name, std::string& err)
+{
+   GetAudioNode();
+   if (name.size() > 3 && name.compare(0, 3, "pad") == 0)
+   {
+      int pad = -1;
+      try
+      {
+         size_t used = 0;
+         pad = std::stoi(name.substr(3), &used) - 1;
+         if (used != name.size() - 3)
+            pad = -1;
+      }
+      catch (...)
+      {
+         pad = -1;
+      }
+      if (pad >= 0 && pad < kPads)
+      {
+         if (!PadLoaded(pad))
+         {
+            err = "pad " + std::to_string(pad + 1) + " is empty";
+            return false;
+         }
+         if (mHeld[pad])
+         {
+            err = "pad " + std::to_string(pad + 1) + " is held right now (mouse or CV)";
+            return false;
+         }
+         selectedPad = pad; // a click selects the pad too
+         SetPadHeld(pad, true, 1.0f);
+         SetPadHeld(pad, false, 1.0f);
+         return true;
+      }
+   }
+   if (name == "clear")
+   {
+      const int cur = Clamp(selectedPad);
+      if (!PadLoaded(cur))
+      {
+         err = "the selected pad (" + std::to_string(cur + 1) + ") is empty";
+         return false;
+      }
+      ClearPad(cur);
+      return true;
+   }
+   return NodeButtons::Unknown(*this, "MPC", name, err);
 }

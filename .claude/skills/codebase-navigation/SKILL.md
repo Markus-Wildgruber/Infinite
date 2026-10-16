@@ -233,6 +233,74 @@ entry if a refactor makes it stale.
 
 - **Where an app/ declaration or include goes (include split).** `app/AppCommon.h` + `app/AppShared.h` are read by every app/ TU (~78), so they hold only core state; node classes they mention are forward-declared in `app/AppForward.h` (keep the `class`/`struct` keyword identical to the definition - MSVC mangles them differently). Topic state lives in `app/AppArrange.h`, `AppUndo.h`, `AppViewports.h`, `AppSelfTest.h`, `AppBench.h`; a `.cpp` includes the node/DSP/topic headers it uses in its "Non-core headers this file uses" block. Platform calls: include `platform/Platform<Topic>.h`, never the `Platform.h` umbrella outside `src/platform/`. `tools/check-include-split.py` (CI job "Include split guardrail") enforces this; `tools/include-fanin.py` measures it. Easy to miss: a new include in AppShared.h recompiles all 78 TUs on every edit of that header.
 
+- **A clip's `srcUid` may be a GroupNode** (group clips, `ArrangeTools.cpp`). Every
+  `FindNodeByUid(c.srcUid)` consumer must decide what a group means: the audio scheduler
+  (`RebuildAudioTopology`) and the video compositor (`CollectArrangeVideoLayers`) skip it
+  via `ArrangeIsGroupSource`/`ArrangeIsGroupNode`; drawing/inspector special-case it; the
+  gate itself is `GroupTimelineWindows`. A new srcUid consumer that assumes "a node with
+  output" will misread a group.
+- **Forced audio roots.** `RebuildAudioTopology` seeds `order` from Audio Out cables, note
+  nodes, `RequiresAudioProcessing()`, timeline terminals and `RenderToTrackForcedNodes()`.
+  A node outside all of these is never processed, so a probe/offline tap on it hears
+  nothing.
+
+- **Group membership / mute / solo / lock** (`app/graph/Groups.cpp`) fans out
+  to six places. Membership is `gGroupMembers` (by index) at runtime and
+  `GroupNode::membersText` (uids) on disk: `SyncGroupMembersText()` runs at the
+  top of `BuildPatchData`, `RestoreGroupMembership()` inside `ApplyPatchData`
+  just before its `RebuildAudioTopology`. Mute gates live in four different
+  layers: audio = `AudioTopologyEntry::inputGate[]` / `AudioTerminal::gateSlot`
+  set by `RebuildAudioTopology` (`BoundaryGate`), ramped per block by
+  `AudioEngine::AdvanceGroupGates` from the persistent `GroupGate` slots;
+  notes = `NoteWire::noteGate` -> `NoteEventQueue` per-cursor gate (held notes
+  released inside `Pop`); images = `ImageCable::SetGroupGate`, re-pointed every
+  frame by `UpdateGroupGates()` (top of `ApplyModulationAndPalette`);
+  modulators = `GroupHoldsModulation` in the apply loop; geometry =
+  `gGeometryGroupGate` hook in `Render3DNode::FlattenedGeometry`. Lock is
+  `NodeEditLocked()` at each hand-edit site (see Groups.cpp's header comment
+  for the list) plus `EnforceGroupLocks()` pinning positions before nodes draw.
+  A new edit path (a new way to wire, delete, move or change a value) must ask
+  `NodeEditLocked`/`LinkEditLocked` too.
+
+- **A note consumer's inbox may be a timeline merger, not its cable's producer.** For an
+  instrument on a MIDI lane, `ArrangeMidiAugmentTopology` (ArrangeMidi.cpp, called from
+  `RebuildAudioTopology` after the note-wire pass) rewrites that instrument's `NoteWire` to
+  read a `TimelineNoteMerger`'s outbox and hands the original producer/cursor/gate to the
+  merger. Code that walks `noteWires` or asks "who feeds this node's notes" must allow for an
+  `AudioNode` that has no `GraphNode` (mergers and the capture tap live only in `order`).
+
+- **Node buttons for code (`INode::ButtonNames`/`PressButton`, the assistant's press_button).**
+  Each implementer must run the same path as its card button, so when you add or change a
+  card button (grep `ImGui::Button(`/`DrawGateControl(` in `src/app/bodies/` and
+  `StageNodeBodies.cpp`), update the node's `PressButton` too. Shared bodies:
+  `src/nodes/NodeButtons.h`. Two need app code and reach it through static hooks installed by
+  static initializers in the body files: `OutputNode::sExportImageHook` /
+  `sStartOfflineRenderHook` (StageNodeBodies.cpp) and `AudioOutputNode::sRecordingNamer`
+  (AudioNodeBodies.cpp). The card's `PushUndoCheckpoint()` is the caller's job.
+
+- **Every audio-only offline render is an `OfflineTake`** (`app/graph/OfflineTake.cpp`):
+  render to track/file, the assistant's offline capture (`AudioProbeJobs.cpp`), note capture
+  (`ArrangeMidi.cpp`) and the timeline WAV render (`ArrangeRender.cpp`). Begin/Prepare/Render/
+  Restore own the device stop, transport park, `gHeadlessAudioRate` (the rate
+  `RebuildAudioTopology` prepares at while no device is open - 0 means NOTHING is
+  re-prepared), `ForceAudioRepare`, forced taps (`OfflineTakeForceNodes` ->
+  `RenderToTrackForcedNodes`) and the modulation lockstep (`OfflineTakeModulationStep`:
+  `ApplyModulationAndPalette` + cook of audio/note/modulator nodes every 1/60 s of rendered
+  audio). Modulation is otherwise applied once per UI frame, so a new offline pump that calls
+  `ProcessOffline` directly renders seconds of audio on one frozen parameter set. Also easy to
+  miss: `Modulation::FrameParams()` is cleared in `DrawLayout` and refilled while node bodies
+  draw, so modulation applied from `DrawFrameTestsA` sees no parameters (the pumps run in
+  `DrawFramePump`, where last frame's are still registered). The video render keeps its own
+  per-video-frame lockstep in `StageFramePump.cpp`.
+- **Transport-locked step clocks reset on `Transport::ResetEpoch()`** (seek, stop, loop lap):
+  `TransportStepGate` in `NoteNodes.cpp` (Note Sequencer, Arpeggiator, Random Note Generator,
+  Chorder) and the epoch re-seat in `DrumSequencerNode.cpp`. A new generator that dedupes "step
+  changed" against its last step must do the same, or a run that starts on the index the last
+  one stopped on never fires it. The reset is applied on the first playing block (a stop or a
+  seek while stopped must not sound the step); a node prepared while stopped still fires its
+  first step once, which AUDIOPARAMSWEEPTEST's clockless rigs (`SweepNeedsClock() == false`,
+  transport paused) depend on.
+
 ## Adding to this map
 
 At the end of a task that touched `src/`, if you found a cross-file wiring

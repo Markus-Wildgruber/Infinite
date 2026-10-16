@@ -1374,16 +1374,19 @@ namespace
    // Depth-first expansion of Group 3D containers into the sources they hold.
    // Bounded twice over - the count cap and the depth cap - so a cycle (a group
    // somehow patched into itself) cannot spin.
-   void FlattenGeometry(IGeometrySource* source, int depth, int maxCount,
+   void FlattenGeometry(const INode* consumer, IGeometrySource* source, int depth, int maxCount,
                         std::vector<IGeometrySource*>& out)
    {
       if (source == nullptr || (int)out.size() >= maxCount)
+         return;
+      // A muted group's geometry, seen from outside the group: not drawn.
+      if (gGeometryGroupGate != nullptr && gGeometryGroupGate(consumer, source))
          return;
       const int children = source->GroupChildCount();
       if (children > 0 && depth < 8)
       {
          for (int i = 0; i < children; i++)
-            FlattenGeometry(source->GroupChild(i), depth + 1, maxCount, out);
+            FlattenGeometry(consumer, source->GroupChild(i), depth + 1, maxCount, out);
          return;
       }
       out.push_back(source);
@@ -1394,7 +1397,7 @@ std::vector<IGeometrySource*> Render3DNode::FlattenedGeometry() const
 {
    std::vector<IGeometrySource*> out;
    for (int i = 0; i < kSlots; i++)
-      FlattenGeometry(geometry[i], 0, kMaxDraw, out);
+      FlattenGeometry(this, geometry[i], 0, kMaxDraw, out);
    return out;
 }
 

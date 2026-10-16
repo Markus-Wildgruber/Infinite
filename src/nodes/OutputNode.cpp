@@ -5,6 +5,7 @@
 #include "AnalyzeNodes.h"
 
 #include "audio/AudioEngine.h"
+#include "platform/AppPaths.h"
 
 #include <algorithm>
 #include <cmath>
@@ -68,6 +69,82 @@ OutputNode::~OutputNode()
    GLUtil::DestroyFbo(mOut);
    if (mProgram != 0)
       glDeleteProgram(mProgram);
+}
+
+bool (*OutputNode::sExportImageHook)(OutputNode* n, std::string& err) = nullptr;
+bool (*OutputNode::sStartOfflineRenderHook)(OutputNode* n, std::string& err) = nullptr;
+
+void OutputNode::EnsureDefaultPaths()
+{
+   if (exportImagePath.empty())
+      exportImagePath = AppPaths::DesktopDir() + "/infinite_output." + (imageFormat == 1 ? "jpg" : "png");
+   if (recordVideoPath.empty())
+      recordVideoPath = AppPaths::DesktopDir() + "/infinite_output." + (videoFormat == 1 ? "mov" : "mp4");
+}
+
+std::vector<std::string> OutputNode::ButtonNames() const
+{
+   return { "export_image", "record", "stop", "render" };
+}
+
+bool OutputNode::PressButton(const std::string& name, std::string& err)
+{
+   EnsureDefaultPaths();
+   if (name == "export_image")
+   {
+      if (sExportImageHook == nullptr)
+      {
+         err = "image export is not available in this build";
+         return false;
+      }
+      return sExportImageHook(this, err);
+   }
+   if (name == "record")
+   {
+      // The card offers Record only when nothing is recording or finalizing.
+      if (IsRecording() || StopRequested() || IsFinalizing())
+      {
+         err = IsRecording() && !StopRequested() ? "already recording" : "the last recording is still finalizing";
+         return false;
+      }
+      if (IsOfflineRendering())
+      {
+         err = "an offline render is running";
+         return false;
+      }
+      if (!StartRecording(recordVideoPath))
+      {
+         err = mRecordStatus.empty() ? "could not start recording to " + recordVideoPath : mRecordStatus;
+         return false;
+      }
+      return true;
+   }
+   if (name == "stop")
+   {
+      if (!IsRecording() || StopRequested())
+      {
+         err = "not recording";
+         return false;
+      }
+      RequestStopRecording(); // the frame pump stops and finalizes it
+      return true;
+   }
+   if (name == "render")
+   {
+      if (IsRecording() || IsFinalizing() || IsOfflineRendering())
+      {
+         err = IsOfflineRendering() ? "already rendering" : "a live recording is running or finalizing";
+         return false;
+      }
+      if (sStartOfflineRenderHook == nullptr)
+      {
+         err = "offline render is not available in this build";
+         return false;
+      }
+      return sStartOfflineRenderHook(this, err);
+   }
+   err = "unknown button '" + name + "' (Output has: export_image, record, stop, render)";
+   return false;
 }
 
 bool OutputNode::EnsureShader()

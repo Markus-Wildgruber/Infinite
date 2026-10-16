@@ -552,6 +552,24 @@ namespace Platform
       return path;
    }
 
+   std::string SaveWavDialog(const std::string& suggestedName)
+   {
+      std::string err;
+      std::string path = RunSaveDialog(L"Save Audio File",
+                                       {
+                                          { L"WAV audio (*.wav)", L"*.wav" },
+                                       },
+                                       suggestedName.empty() ? "Untitled.wav" : suggestedName, err);
+      if (!path.empty())
+      {
+         const size_t dot = path.find_last_of('.');
+         const size_t slash = path.find_last_of("/\\");
+         if (dot == std::string::npos || (slash != std::string::npos && dot < slash))
+            path += ".wav";
+      }
+      return path;
+   }
+
    std::string OpenFolderDialog(const char* title, const std::string& initialDir)
    {
       std::string err;

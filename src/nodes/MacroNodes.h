@@ -206,6 +206,21 @@ public:
       flash = 1.0f;
    }
 
+   // Generic button API (INode, the assistant's press_button): "trigger" is a
+   // click on the pad (one trigger, the card's activation).
+   std::vector<std::string> ButtonNames() const override { return { "trigger" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name != "trigger")
+      {
+         err = "unknown button '" + name + "' (Macro Trigger has: trigger)";
+         return false;
+      }
+      justTriggered = true;
+      flash = 1.0f;
+      return true;
+   }
+
    void VisitParams(ParamVisitor& v) override
    {
       v.Bool("pressed", pressed); v.Text("label", label);

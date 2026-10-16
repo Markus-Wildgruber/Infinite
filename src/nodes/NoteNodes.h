@@ -1006,6 +1006,48 @@ public:
    void StopPlayback();
    void ClearRecording();
 
+   // Generic button API (INode, the assistant's press_button), the card's four
+   // buttons: "record" and "play" toggle like the card's (a press while
+   // recording / playing stops it), "stop" stops both, "clear" empties it.
+   std::vector<std::string> ButtonNames() const override { return { "record", "play", "stop", "clear" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "record")
+      {
+         if (IsRecording())
+            StopRecording();
+         else
+            StartRecording();
+         return true;
+      }
+      if (name == "play")
+      {
+         if (IsPlaying())
+            StopPlayback();
+         else if (RecordedCount() == 0)
+         {
+            err = "nothing recorded to play";
+            return false;
+         }
+         else
+            StartPlayback();
+         return true;
+      }
+      if (name == "stop")
+      {
+         StopRecording();
+         StopPlayback();
+         return true;
+      }
+      if (name == "clear")
+      {
+         ClearRecording();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Note Capturer has: record, play, stop, clear)";
+      return false;
+   }
+
    bool IsRecording() const;
    bool IsPlaying() const;
    double RecordedLengthBeats() const;

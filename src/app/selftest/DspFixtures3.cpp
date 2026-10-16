@@ -3601,6 +3601,173 @@ static bool RunLooperFixture()
       std::filesystem::remove_all(std::filesystem::u8path(dir), ec);
    }
 
+   // 10) take menu: every stored take value survives the menu mapping, the
+   //     long takes are 8..64 bars, and the original numbering is unchanged.
+   {
+      for (int v = 0; v < LooperNode::TakeValueCount(); v++)
+         if (LooperNode::TakeFromMenu(LooperNode::TakeToMenu(v)) != v)
+            fail("take menu: a stored take does not round-trip through the menu");
+      if (LooperNode::TakeValueCount() != MusicTime::kNumRateDivisions + 5 ||
+          std::fabs(LooperNode::TakeBeats(MusicTime::kNumRateDivisions + 1) - MusicTime::BarsToBeats(8.0)) > 1e-9 ||
+          std::fabs(LooperNode::TakeBeats(MusicTime::kNumRateDivisions + 4) - MusicTime::BarsToBeats(64.0)) > 1e-9 ||
+          std::fabs(LooperNode::TakeBeats(MusicTime::k1Bar + 1) - MusicTime::BarsToBeats(1.0)) > 1e-9 ||
+          LooperNode::TakeMenu().size() != (size_t)LooperNode::TakeValueCount() || LooperNode::TakeMenu()[1] != "64 bars")
+         fail("take menu: long takes are not 8..64 bars after the original list");
+   }
+
+   // 11) long takes: the default cap is still 60 s; maxSeconds 120 sizes the
+   //     buffer for 120 s and a 70 s take (takeSeconds 70) completes on its
+   //     own, exactly 70 s long.
+   transport.SetPlaying(false);
+   {
+      std::error_code ec;
+      const std::string dir = TmpPath("infinite_looper_long");
+      std::filesystem::create_directories(std::filesystem::u8path(dir), ec);
+      auto def = MakeLooper(0, false, 0);
+      if (def->CapacityFrames() != 60 * kSr)
+         fail("long: the default cap is not 60 s");
+
+      auto n = std::make_unique<LooperNode>();
+      n->take = 0;
+      n->syncStart = false;
+      n->testLatencyFrames = 0;
+      n->thru = false;
+      n->fadeIn = 0.0f;
+      n->fadeOut = 0.0f;
+      n->maxSeconds = 120.0f;
+      n->takeSeconds = 70.0f;
+      n->testLoopDir = dir;
+      int id = 1;
+      n->CookIfNeeded(id++);
+      n->GetAudioNode()->PrepareToPlay((double)kSr, kBlock);
+      n->CookIfNeeded(id++);
+      if (n->CapacityFrames() != 120 * kSr)
+         fail("long: maxSeconds 120 did not size the buffer for 120 s");
+      Press(*n, LooperNode::kRec);
+      const int want = 70 * kSr;
+      Run(*n, 0, want + 3 * kBlock, tone(220.0f, 0.3f), false, &cook);
+      if (n->CurrentState() != LooperNode::kPlaying || n->LengthFrames() != want)
+      {
+         char what[128];
+         snprintf(what, sizeof(what), "long: a 70 s take with maxSeconds 120 held %d frames (want %d), state %s",
+                  n->LengthFrames(), want, LooperNode::StateName(n->CurrentState()));
+         fail(what);
+      }
+      std::filesystem::remove_all(std::filesystem::u8path(dir), ec);
+   }
+
+   // 12) takeSeconds ends the take on its own within one sample of the asked
+   //     length, with and without latency compensation; a fixed take never
+   //     needs a second Rec.
+   {
+      const float secs[2] = { 0.123457f, 0.5f };
+      const int comps[2] = { 0, 300 };
+      for (int k = 0; k < 2; k++)
+      {
+         auto n = MakeLooper(0, false, comps[k]);
+         n->takeSeconds = secs[k];
+         Press(*n, LooperNode::kRec);
+         const int want = (int)std::lround((double)secs[k] * kSr);
+         Run(*n, 0, want + comps[k] + 3 * kBlock, tone(220.0f, 0.3f), false, &cook);
+         if (n->CurrentState() != LooperNode::kPlaying || std::abs(n->LengthFrames() - want) > 1)
+            fail("takeSeconds: the take did not end on its own within 1 sample of the asked length");
+      }
+   }
+
+   // 13) one shot: the first CV Rec records one take, a second CV Rec edge is
+   //     ignored (the take is kept), Rec by hand re-arms without recording,
+   //     and the next CV Rec records again. rearm needs oneShot.
+   {
+      auto n = MakeLooper(0, false, 0);
+      n->oneShot = true;
+      n->takeSeconds = 0.05f;
+      const int want = (int)std::lround(0.05 * kSr);
+      Press(*n, LooperNode::kRec);
+      Run(*n, 0, want + 3 * kBlock, tone(220.0f, 0.3f), false, &cook);
+      if (n->CurrentState() != LooperNode::kPlaying || n->LengthFrames() != want || !n->OneShotSpent())
+         fail("one shot: the first Rec did not record one take");
+      Press(*n, LooperNode::kRec); // e.g. a Pattern firing again
+      Run(*n, 0, 4 * kBlock, tone(440.0f, 0.3f), false, &cook);
+      if (n->CurrentState() != LooperNode::kPlaying || n->IgnoredRecPresses() != 1 || n->LengthFrames() != want)
+         fail("one shot: a second Rec edge was not ignored");
+      n->Press(LooperNode::kRec, /*byHand=*/true);
+      Run(*n, 0, 2 * kBlock, tone(440.0f, 0.3f), false, &cook);
+      if (n->CurrentState() != LooperNode::kPlaying || n->OneShotSpent())
+         fail("one shot: Rec by hand did not re-arm (or recorded)");
+      Press(*n, LooperNode::kRec);
+      Run(*n, 0, kBlock, tone(440.0f, 0.3f), false, &cook);
+      if (n->CurrentState() != LooperNode::kRecording)
+         fail("one shot: after re-arming, Rec did not record");
+      std::string err;
+      Run(*n, 0, want + 3 * kBlock, tone(440.0f, 0.3f), false, &cook);
+      if (!n->PressButton("rearm", err) || n->OneShotSpent())
+         fail("one shot: PressButton(rearm) did not re-arm");
+      n->oneShot = false;
+      if (n->PressButton("rearm", err) || err.empty())
+         fail("one shot: rearm with oneShot off did not report an error");
+   }
+
+   // 14) recordDirectory: with no fixture folder, a take's WAV lands in the
+   //     chosen folder (created if missing), written by the background writer.
+   {
+      std::error_code ec;
+      const std::string dir = TmpPath("infinite_looper_recdir") + "/sub";
+      std::filesystem::remove_all(std::filesystem::u8path(dir), ec);
+      auto n = MakeLooper(0, false, 0);
+      n->recordDirectory = dir;
+      Press(*n, LooperNode::kRec);
+      Run(*n, 0, 4096, tone(220.0f, 0.3f), false, &cook);
+      Press(*n, LooperNode::kRec);
+      Run(*n, 0, 3 * kBlock, nullptr, false, &cook);
+      const std::filesystem::path written = std::filesystem::u8path(n->loopFile);
+      bool there = false;
+      for (int t = 0; t < 500 && !n->loopFile.empty(); t++)
+      {
+         if (std::filesystem::exists(written, ec)) // renamed into place once complete
+         {
+            there = true;
+            break;
+         }
+         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+      if (!there || !std::filesystem::equivalent(written.parent_path(), std::filesystem::u8path(dir), ec))
+         fail("recordDirectory: the loop WAV was not written to the chosen folder");
+      std::filesystem::remove_all(std::filesystem::u8path(TmpPath("infinite_looper_recdir")), ec);
+   }
+
+   // 15) a live maxSeconds change reallocates on the main thread and keeps
+   //     the held loop playing.
+   {
+      auto n = MakeLooper(0, false, 0);
+      Press(*n, LooperNode::kRec);
+      Run(*n, 0, 4096, tone(220.0f, 0.3f), false, &cook);
+      Press(*n, LooperNode::kRec);
+      Run(*n, 0, 3 * kBlock, nullptr, false, &cook);
+      n->maxSeconds = 90.0f;
+      Run(*n, 0, 16 * kBlock, nullptr, false, &cook);
+      if (n->CapacityFrames() != 90 * kSr || n->CurrentState() != LooperNode::kPlaying || n->LengthFrames() != 4096)
+         fail("maxSeconds: a live change did not resize the buffer while keeping the loop");
+   }
+
+   // 16) the generic button API: PressButton("rec") on a Looper (through
+   //     INode) starts recording; an unknown name fails with an error.
+   {
+      auto n = MakeLooper(0, false, 0);
+      INode* base = n.get();
+      std::string err;
+      const std::vector<std::string> names = base->ButtonNames();
+      if (std::find(names.begin(), names.end(), "rec") == names.end())
+         fail("buttons: ButtonNames has no rec");
+      if (!base->PressButton("rec", err))
+         fail("buttons: PressButton(rec) failed");
+      Run(*n, 0, 2 * kBlock, tone(220.0f, 0.3f), false, &cook);
+      if (n->CurrentState() != LooperNode::kRecording)
+         fail("buttons: PressButton(rec) did not start recording");
+      err.clear();
+      if (base->PressButton("no-such-button", err) || err.empty())
+         fail("buttons: an unknown button did not fail with an error");
+   }
+
    transport.SetTempo(savedBpm);
    transport.SetPlaying(savedPlaying);
    printf("LOOPERTEST %s\n", ok ? "OK" : "FAIL");

@@ -1,4 +1,5 @@
 #include "SamplerNode.h"
+#include "nodes/NodeButtons.h"
 
 #include <algorithm>
 #include <atomic>
@@ -155,6 +156,7 @@ public:
       mVoices.SetSampleRate(sampleRate);
       mVoices.SetADSR(2.0f, 0.0f, 1.0f, 15.0f);
       mSelfEnv.SetSampleRate(sampleRate);
+      mSelfEnv.Reset(); // a fresh start begins from silence (see Envelope::Reset)
       mSelfEnv.SetADSR(2.0f, 0.0f, 1.0f, 15.0f);
 
       if (mRecordBuffer.empty())
@@ -851,4 +853,20 @@ void SamplerNode::ReloadFromPath()
 void SamplerNode::SweepPrepare()
 {
    mAudioNode->PushBuffer(MakeSweepToneBuffer());
+}
+
+// Generic button API: the card's buttons (the caller pushes the undo
+// checkpoint the card pushes before Record/Stop).
+std::vector<std::string> SamplerNode::ButtonNames() const
+{
+   return { "record", "stop", "audition", "stop_audition" };
+}
+
+bool SamplerNode::PressButton(const std::string& name, std::string& err)
+{
+   bool ok = false;
+   if (NodeButtons::RecordToggle(*this, name, err, ok) ||
+       NodeButtons::AuditionToggle(*this, name, err, ok, [this]() { TriggerPreview(start); }))
+      return ok;
+   return NodeButtons::Unknown(*this, "Sampler", name, err);
 }

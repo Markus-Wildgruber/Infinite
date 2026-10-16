@@ -191,7 +191,11 @@ public:
       mSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
       mMailbox.PrepareToPlay(mSampleRate);
       for (int v = 0; v < kMaxVoices; v++)
+      {
          mVoices[v].Reset(mSampleRate, v);
+         mVoices[v].amp.Reset(); // a fresh start begins from silence (see Envelope::Reset)
+         mVoices[v].filt.Reset();
+      }
       mLastNoteHz = 0.0f;
       mHasLastNote = false;
 

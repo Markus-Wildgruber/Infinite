@@ -9,6 +9,8 @@
 #include "audio/AudioEngine.h"
 #include "audio/AudioNode.h"
 #include "audio/ClipPeakRing.h"
+#include "audio/NoteEventQueue.h"
+#include "core/ImageCable.h"
 #include "audio/NoteModel.h"
 #include "audio/dsp/GrainMolderDsp.h"
 #include "audio/dsp/SlicerDsp.h"
@@ -1173,6 +1175,548 @@ void FrameTest_COMMENTTEST_4(int frameId, GLFWwindow* window)
       }
 }
 
+namespace
+{
+   // GROUPTEST's audio-thread seam: a source that outputs a constant 1.0 and
+   // a consumer that records the last sample it was handed - enough to watch
+   // a group gate open, close and ramp without depending on any real DSP.
+   class GroupTestConstNode : public AudioNode
+   {
+   public:
+      void ProcessBlock(const AudioBuffer* const* inputs, int numInputs, AudioBuffer& output) override
+      {
+         (void)inputs;
+         (void)numInputs;
+         for (int ch = 0; ch < output.numChannels; ch++)
+            for (int i = 0; i < output.numFrames; i++)
+               output.channels[ch][i] = 1.0f;
+      }
+   };
+
+   class GroupTestProbeNode : public AudioNode
+   {
+   public:
+      float lastIn = -1.0f;
+      void ProcessBlock(const AudioBuffer* const* inputs, int numInputs, AudioBuffer& output) override
+      {
+         lastIn = (numInputs > 0 && inputs[0] != nullptr && inputs[0]->numFrames > 0)
+                     ? inputs[0]->channels[0][inputs[0]->numFrames - 1]
+                     : 0.0f;
+         for (int ch = 0; ch < output.numChannels; ch++)
+            for (int i = 0; i < output.numFrames; i++)
+               output.channels[ch][i] = 0.0f;
+      }
+   };
+
+   GroupNode* GroupTestGroupAt(int which)
+   {
+      int seen = 0;
+      for (GraphNode& gn : gNodes)
+         if (auto* g = dynamic_cast<GroupNode*>(gn.node.get()))
+            if (seen++ == which)
+               return g;
+      return nullptr;
+   }
+
+   int GroupTestIndexOf(const GroupNode* g)
+   {
+      for (GraphNode& gn : gNodes)
+         if (gn.node.get() == g)
+            return gn.index;
+      return -1;
+   }
+
+   std::set<uint64_t> GroupTestMemberUids(GroupNode* g)
+   {
+      std::set<uint64_t> out;
+      if (g == nullptr)
+         return out;
+      for (int index : GroupMemberIndices(g))
+         if (GraphNode* gn = FindNodeByIndex(index))
+            out.insert(gn->uid);
+      return out;
+   }
+
+   // Pure NoteEventQueue seam: a gated cursor releases what it holds the
+   // moment its gate closes, drops everything while closed, and its held
+   // record follows it across a re-adopt (a topology rebuild).
+   bool GroupTestNoteGate()
+   {
+      static NoteEventQueue q;
+      static std::atomic<bool> open { true };
+      open.store(true);
+      size_t heads[NoteEventQueue::kMaxConsumers];
+      int oldCursor[NoteEventQueue::kMaxConsumers];
+      const std::atomic<bool>* gates[NoteEventQueue::kMaxConsumers];
+      for (int i = 0; i < NoteEventQueue::kMaxConsumers; i++)
+      {
+         heads[i] = q.Tail();
+         oldCursor[i] = -1;
+         gates[i] = nullptr;
+      }
+      gates[0] = &open; // cursor 0 crosses a group boundary, cursor 1 does not
+      q.AdoptConsumers(2, heads, oldCursor, gates);
+
+      NoteEvent out[16];
+      NoteEvent on;
+      on.note = 60;
+      on.velocity = 1.0f;
+      on.isNoteOn = true;
+      on.voiceId = 7001;
+      q.Push(on);
+      const bool bothGotOn = q.Pop(0, out, 16) == 1 && out[0].isNoteOn && q.Pop(1, out, 16) == 1;
+
+      open.store(false);
+      const int released = q.Pop(0, out, 16);
+      const bool releasedOk = released == 1 && !out[0].isNoteOn && out[0].note == 60 && out[0].voiceId == 7001;
+
+      NoteEvent on2 = on;
+      on2.note = 62;
+      on2.voiceId = 7002;
+      q.Push(on2);
+      const bool droppedOk = q.Pop(0, out, 16) == 0 && q.Pop(1, out, 16) == 1 && out[0].note == 62;
+
+      // Open again, hold a note, rebuild (same cursors carried), close.
+      open.store(true);
+      NoteEvent on3 = on;
+      on3.note = 64;
+      on3.voiceId = 7003;
+      q.Push(on3);
+      const bool heldAgain = q.Pop(0, out, 16) == 1 && out[0].note == 64;
+      q.Pop(1, out, 16);
+      for (int i = 0; i < 2; i++)
+      {
+         heads[i] = q.CursorHead(i);
+         oldCursor[i] = i;
+      }
+      q.AdoptConsumers(2, heads, oldCursor, gates);
+      open.store(false);
+      const bool carriedOk = q.Pop(0, out, 16) == 1 && !out[0].isNoteOn && out[0].note == 64;
+      open.store(true);
+
+      printf("group note gate: on to both %d, released on mute %d, dropped while muted %d, held after rebuild %d  %s\n",
+             (int)bothGotOn, (int)releasedOk, (int)droppedOk, (int)(heldAgain && carriedOk),
+             (bothGotOn && releasedOk && droppedOk && heldAgain && carriedOk) ? "OK" : "FAIL");
+      return bothGotOn && releasedOk && droppedOk && heldAgain && carriedOk;
+   }
+
+   // Audio-thread seam: a hand-built topology, source -> {member probe
+   // (ungated), outside probe (gated)} plus a gated terminal, with the gate's
+   // timeline window at beats [4, 8). Exercises AdvanceGroupGates and the pin
+   // and terminal gain exactly as RunTopology runs them, with windows passed
+   // explicitly rather than read from the arrangement.
+   bool GroupTestAudioSeam()
+   {
+      static GroupTestConstNode src;
+      static GroupTestProbeNode inside;
+      static GroupTestProbeNode outside;
+      const int slot = kMaxGroupGates - 1;
+      GroupGate& gate = AudioEngine::Instance().GroupGateAt(slot);
+      gate.target.store(1.0f);
+      gate.snap.store(true);
+
+      AudioTopology topo;
+      AudioTopologyEntry e0;
+      e0.node = &src;
+      e0.numInputs = 0;
+      e0.numOutputs = 1;
+      e0.outputBufferIndex = 0;
+      e0.outputBufferIndices[0] = 0;
+      AudioTopologyEntry e1;
+      e1.node = &inside;
+      e1.numInputs = 1;
+      e1.inputBufferIndices[0] = 0;
+      e1.numOutputs = 1;
+      e1.outputBufferIndex = 1;
+      e1.outputBufferIndices[0] = 1;
+      AudioTopologyEntry e2 = e1;
+      e2.node = &outside;
+      e2.outputBufferIndex = 2;
+      e2.outputBufferIndices[0] = 2;
+      e2.inputGate[0] = slot;
+      topo.order = { e0, e1, e2 };
+      AudioTerminal terminal;
+      terminal.bufferIndex = 0;
+      terminal.gateSlot = slot;
+      topo.terminalBufferIndices.push_back(terminal);
+      GroupGateTopo gt;
+      gt.slot = slot;
+      gt.windowOffset = 0;
+      gt.numWindows = 1;
+      gt.hasClips = true;
+      topo.groupGates.push_back(gt);
+      topo.groupWindows.push_back({ 4.0, 8.0 });
+      topo.numBuffers = 3;
+      AudioEngine::Instance().SetTopology(std::move(topo));
+
+      Transport& tr = Transport::Instance();
+      const double rate = 48000.0;
+      tr.Seek(0.0);
+      tr.SetOfflineMode(true, rate);
+      tr.SetPlaying(true);
+      static float sL[kAudioMaxBlockFrames];
+      static float sR[kAudioMaxBlockFrames];
+      static float* sCh[2] = { sL, sR };
+      AudioBuffer buf;
+      buf.channels = sCh;
+      buf.numChannels = 2;
+      buf.numFrames = 512;
+
+      bool before = true, during = true, after = true;
+      int sawBefore = 0, sawDuring = 0, sawAfter = 0;
+      for (int b = 0; b < 2000; b++)
+      {
+         AudioEngine::Instance().ProcessOffline(buf);
+         const double beat = tr.BlockStartBeats();
+         if (beat >= 9.0)
+            break;
+         const float dev = sL[511];
+         if (beat < 3.9)
+         {
+            sawBefore++;
+            before = before && dev == 0.0f && outside.lastIn == 0.0f && inside.lastIn == 1.0f;
+         }
+         else if (beat > 4.1 && beat < 7.9)
+         {
+            sawDuring++;
+            during = during && dev > 0.999f && outside.lastIn > 0.999f && inside.lastIn == 1.0f;
+         }
+         else if (beat > 8.1)
+         {
+            sawAfter++;
+            after = after && dev == 0.0f && outside.lastIn == 0.0f && inside.lastIn == 1.0f;
+         }
+      }
+      const bool windowOk = before && during && after && sawBefore > 0 && sawDuring > 0 && sawAfter > 0;
+
+      // Mute inside the window: fades within one 10 ms ramp, member unaffected.
+      tr.SeekBeats(5.0);
+      for (int b = 0; b < 4; b++)
+         AudioEngine::Instance().ProcessOffline(buf);
+      const bool openAgain = sL[511] > 0.999f;
+      gate.target.store(0.0f);
+      AudioEngine::Instance().ProcessOffline(buf); // the ramp (480 frames at 48k)
+      const bool rampedDown = sL[0] > 0.9f && sL[511] == 0.0f;
+      AudioEngine::Instance().ProcessOffline(buf);
+      const bool muteOk = openAgain && rampedDown && sL[0] == 0.0f && outside.lastIn == 0.0f && inside.lastIn == 1.0f;
+
+      gate.target.store(1.0f);
+      gate.snap.store(true);
+      tr.SetPlaying(false);
+      tr.SetOfflineMode(false);
+      RebuildAudioTopology(); // back to the real graph's topology
+
+      printf("group audio seam: timeline window (before %d/%d, inside %d/%d, after %d/%d)  %s\n",
+             (int)before, sawBefore, (int)during, sawDuring, (int)after, sawAfter, windowOk ? "OK" : "FAIL");
+      printf("group audio seam: mute ramps the boundary to silence, member keeps its input  %s\n",
+             muteOk ? "OK" : "FAIL");
+      return windowOk && muteOk;
+   }
+
+   int GroupTestSpawn(const char* type, const char* category, float x, float y)
+   {
+      GraphNode* gn = SpawnNode(type, category, x, y);
+      return gn != nullptr ? gn->index : -1;
+   }
+
+   void GroupTestStatePhases(int frameId, GLFWwindow* window)
+   {
+      static bool sOk = true;
+      static std::set<uint64_t> sBefore;
+      auto report = [&](const char* what, bool pass) {
+         printf("group %s  %s\n", what, pass ? "OK" : "FAIL");
+         sOk = sOk && pass;
+      };
+
+      if (frameId == 28)
+      {
+         // ---- explicit membership through a file round trip, undo, legacy ----
+         GroupNode* g = GroupTestGroupAt(0);
+         sBefore = GroupTestMemberUids(g);
+         std::string err;
+         const std::string path =
+            (std::filesystem::temp_directory_path() / "infinite_grouptest.inf").string();
+         Patch::Data back;
+         const bool io = Patch::Write(path, BuildPatchData(), err) && Patch::Read(path, back, err);
+         if (io)
+            ApplyPatchData(back);
+         g = GroupTestGroupAt(0);
+         report("membership survives save/load", io && sBefore.size() == 2 && GroupTestMemberUids(g) == sBefore);
+
+         std::vector<int> members = GroupMemberIndices(g);
+         PushUndoCheckpoint();
+         std::string removeErr;
+         const bool removed = !members.empty() && RemoveNodesFromGroup(g, { members[0] }, removeErr) &&
+                              GroupMemberIndices(g).size() == 1;
+         Undo();
+         g = GroupTestGroupAt(0);
+         report("membership survives undo", removed && GroupTestMemberUids(g) == sBefore);
+
+         // A patch from before membership was saved: no "members" key. It
+         // must come back adopting what is inside its box - once.
+         Patch::Data legacy = BuildPatchData();
+         // Adoption by geometry takes whatever lies inside the box, so the
+         // node ungrouped at frame 22 (it stayed where it was, inside the box)
+         // is moved well clear first - the old patch must mean "these two".
+         for (Patch::NodeRecord& rec : legacy.nodes)
+         {
+            // The editor's positions, not the per-frame cache BuildPatchData
+            // reads (this fixture never draws a full canvas pass to fill it):
+            // the old patch must carry the layout the box is checked against.
+            if (GraphNode* live = FindNodeByUid(rec.uid))
+            {
+               const ImVec2 p = ed::GetNodePosition(live->NodeId());
+               rec.x = p.x;
+               rec.y = p.y;
+            }
+            if (rec.typeName != "Group" && rec.uid != 0 && sBefore.count(rec.uid) == 0)
+               rec.x += 4000.0f;
+         }
+         for (Patch::NodeRecord& rec : legacy.nodes)
+         {
+            if (rec.typeName != "Group")
+               continue;
+            rec.params.erase(std::remove_if(rec.params.begin(), rec.params.end(),
+                                            [](const std::pair<std::string, std::string>& p) {
+                                               return p.first == "s members";
+                                            }),
+                             rec.params.end());
+         }
+         ApplyPatchData(legacy);
+         g = GroupTestGroupAt(0);
+         report("legacy group armed for one geometric adoption",
+                g != nullptr && g->legacyAdoptFrames > 0 && GroupMemberIndices(g).empty());
+      }
+      else if (frameId == 34)
+      {
+         GroupNode* g = GroupTestGroupAt(0);
+         if (GroupTestMemberUids(g) != sBefore && g != nullptr)
+         {
+            // Diagnostics for a failed adoption: the box and every node's rect.
+            GraphNode* ggn = nullptr;
+            for (GraphNode& gn : gNodes)
+               if (gn.node.get() == g)
+                  ggn = &gn;
+            const ImVec2 gp = ggn ? ed::GetNodePosition(ggn->NodeId()) : ImVec2(0, 0);
+            printf("group legacy diag: members %zu want %zu, adoptFrames %d, box (%.0f,%.0f)+(%.0f x %.0f) headerH %.0f\n",
+                   GroupTestMemberUids(g).size(), sBefore.size(), g->legacyAdoptFrames, gp.x, gp.y, g->width, g->height, g->headerH);
+            for (GraphNode& gn : gNodes)
+            {
+               const ImVec2 p = ed::GetNodePosition(gn.NodeId());
+               const ImVec2 s = ed::GetNodeSize(gn.NodeId());
+               printf("group legacy diag:   node %d %s uid %llu at (%.0f,%.0f) size (%.0f x %.0f)%s\n", gn.index, gn.typeName.c_str(),
+                      (unsigned long long)gn.uid, p.x, p.y, s.x, s.y, sBefore.count(gn.uid) ? " [want member]" : "");
+            }
+         }
+         report("legacy group adopted its members by geometry", GroupTestMemberUids(g) == sBefore);
+
+         // Drag the one non-member (the shape detached at frame 22) right
+         // into the box, over a member.
+         GraphNode* outsider = nullptr;
+         GraphNode* member = nullptr;
+         for (GraphNode& gn : gNodes)
+         {
+            if (dynamic_cast<GroupNode*>(gn.node.get()) != nullptr)
+               continue;
+            if (GroupOwning(gn.index) == nullptr)
+               outsider = &gn;
+            else if (member == nullptr)
+               member = &gn;
+         }
+         if (outsider != nullptr && member != nullptr)
+         {
+            const ImVec2 mp = ed::GetNodePosition(member->NodeId());
+            ed::SetNodePosition(outsider->NodeId(), ImVec2(mp.x + 5.0f, mp.y + 5.0f));
+         }
+         else
+            report("found a non-member to drag", false);
+      }
+      else if (frameId == 38)
+      {
+         GroupNode* g = GroupTestGroupAt(0);
+         int loose = 0;
+         for (GraphNode& gn : gNodes)
+            if (dynamic_cast<GroupNode*>(gn.node.get()) == nullptr && GroupOwning(gn.index) == nullptr)
+               loose++;
+         report("dragging a node over the box does not adopt it",
+                loose == 1 && GroupTestMemberUids(g) == sBefore);
+      }
+      else if (frameId == 40)
+      {
+         report("note gate (held notes released on mute)", GroupTestNoteGate());
+
+         const bool deviceOpen = AudioEngine::Instance().SampleRate() > 0.0;
+         if (deviceOpen)
+            printf("group audio checks: SKIP (a live audio device owns the audio thread)\n");
+         else
+            report("audio gate seam", GroupTestAudioSeam());
+
+         // ---- real nodes: a synth group feeding an outside Audio Out ----
+         const int oscIdx = GroupTestSpawn("Oscillator", "Synths", 1400.0f, 100.0f);
+         const int gainIdx = GroupTestSpawn("Gain", "Utility", 1700.0f, 100.0f);
+         const int lfoIdx = GroupTestSpawn("LFO", "Modulators", 1400.0f, 420.0f);
+         const int cubeIdx = GroupTestSpawn("Cube", "3D", 1700.0f, 420.0f);
+         const int outIdx = GroupTestSpawn("Audio Out", "Utility", 2100.0f, 100.0f);
+         const int renderIdx = GroupTestSpawn("Render 3D", "3D", 2100.0f, 420.0f);
+         const int nullIdx = GroupTestSpawn("Null", "Compositing", 2100.0f, 900.0f);
+         const bool spawned = oscIdx >= 0 && gainIdx >= 0 && lfoIdx >= 0 && cubeIdx >= 0 && outIdx >= 0 &&
+                              renderIdx >= 0 && nullIdx >= 0;
+         report("spawned the fixture nodes", spawned);
+         GroupNode* g1 = GroupTestGroupAt(0);
+         if (!spawned || g1 == nullptr)
+         {
+            printf("GROUP STATE FAIL\n");
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            return;
+         }
+         // All spawning done: pointers below stay valid.
+         GraphNode* osc = FindNodeByIndex(oscIdx);
+         GraphNode* gain = FindNodeByIndex(gainIdx);
+         GraphNode* out = FindNodeByIndex(outIdx);
+         if (AudioCable* in = gain->node->AudioInputSlot(0))
+            in->Connect(osc->node.get());
+         if (AudioCable* in = out->node->AudioInputSlot(0))
+            in->Connect(gain->node.get());
+         auto* render = dynamic_cast<Render3DNode*>(FindNodeByIndex(renderIdx)->node.get());
+         auto* cube = dynamic_cast<IGeometrySource*>(FindNodeByIndex(cubeIdx)->node.get());
+         if (render != nullptr)
+            render->geometry[0] = cube;
+         auto* nul = dynamic_cast<NullNode*>(FindNodeByIndex(nullIdx)->node.get());
+         const std::vector<int> g1Members = GroupMemberIndices(g1);
+         if (nul != nullptr && !g1Members.empty())
+            nul->Input().Connect(FindNodeByIndex(g1Members[0])->node.get());
+
+         std::string err;
+         GroupNode* g2 = CreateGroupForNodes({ oscIdx, gainIdx, lfoIdx, cubeIdx }, "Synth", err);
+         report("CreateGroupForNodes", g2 != nullptr && GroupMemberIndices(g2).size() == 4);
+         std::string again;
+         report("a node already grouped is refused",
+                CreateGroupForNodes({ oscIdx }, "x", again) == nullptr && !again.empty());
+         if (g2 == nullptr)
+         {
+            printf("GROUP STATE FAIL\n");
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            return;
+         }
+         RebuildAudioTopology();
+
+         // ---- mute: the outside Audio Out goes silent, the member chain runs ----
+         if (!deviceOpen)
+         {
+            const double rate = 48000.0;
+            static int sCookFrame = 3000000;
+            sCookFrame++;
+            for (GraphNode& gn : gNodes)
+               gn.node->CookIfNeeded(sCookFrame);
+            for (GraphNode& gn : gNodes)
+               if (AudioNode* an = AudioNodeOfAny(gn.node.get()))
+                  if (an->preparedForSampleRate != rate)
+                  {
+                     an->PrepareToPlay(rate, kAudioMaxBlockFrames);
+                     an->preparedForSampleRate = rate;
+                  }
+            Transport& tr = Transport::Instance();
+            tr.Seek(0.0);
+            tr.SetOfflineMode(true, rate);
+            tr.SetPlaying(true);
+            std::vector<AudioEngine::OfflineTap> taps(1);
+            taps[0].node = AudioNodeOfAny(gain->node.get());
+            taps[0].output = 0;
+            AudioEngine::Instance().SetOfflineTaps(&taps);
+            static float sL[kAudioMaxBlockFrames];
+            static float sR[kAudioMaxBlockFrames];
+            static float* sCh[2] = { sL, sR };
+            auto renderBlocks = [&](int blocks) {
+               float peak = 0.0f;
+               for (int b = 0; b < blocks; b++)
+               {
+                  AudioBuffer buf;
+                  buf.channels = sCh;
+                  buf.numChannels = 2;
+                  buf.numFrames = 512;
+                  AudioEngine::Instance().ProcessOffline(buf);
+                  for (int i = 0; i < 512; i++)
+                     peak = std::max(peak, std::max(std::fabs(sL[i]), std::fabs(sR[i])));
+               }
+               return peak;
+            };
+            const float loud = renderBlocks(8);
+            g2->mute = true;
+            ApplyGroupState();
+            renderBlocks(1); // the 10 ms fade
+            taps[0].left.clear();
+            const float silent = renderBlocks(6);
+            float tapPeak = 0.0f;
+            for (float v : taps[0].left)
+               tapPeak = std::max(tapPeak, std::fabs(v));
+            AudioEngine::Instance().SetOfflineTaps(nullptr);
+            tr.SetPlaying(false);
+            tr.SetOfflineMode(false);
+            printf("group mute audio: before %.4f, muted %.6f, member chain %.4f\n", loud, silent, tapPeak);
+            report("mute silences an Audio Out fed by a member", loud > 1e-3f && silent < 1e-6f);
+            report("member-to-member chain keeps processing while muted", tapPeak > 1e-3f);
+         }
+         else
+         {
+            g2->mute = true;
+            ApplyGroupState();
+         }
+
+         // ---- modulation and geometry while the synth group is muted ----
+         report("modulation leaving a muted group holds", GroupHoldsModulation(lfoIdx, outIdx));
+         report("modulation inside the group keeps flowing", !GroupHoldsModulation(lfoIdx, gainIdx));
+         report("Render 3D outside skips a muted group's geometry",
+                render != nullptr && render->FlattenedGeometry().empty());
+         report("a muted member reads dimmed", NodeGroupSilenced(oscIdx) && !NodeGroupSilenced(outIdx));
+         g2->mute = false;
+         ApplyGroupState();
+         report("unmuted: geometry and modulation flow again",
+                render != nullptr && render->FlattenedGeometry().size() == 1 &&
+                   !GroupHoldsModulation(lfoIdx, outIdx));
+
+         // ---- images: a member's texture read from outside ----
+         g1->mute = true;
+         ApplyGroupState();
+         const bool imageGated = nul != nullptr && nul->Input().GroupGateClosed() &&
+                                 nul->Input().Texture() == gImageCableMutedTexture;
+         g1->mute = false;
+         ApplyGroupState();
+         report("an outside consumer sees black from a muted group",
+                imageGated && nul != nullptr && !nul->Input().GroupGateClosed());
+
+         // ---- solo: groups only ----
+         g1->solo = true;
+         ApplyGroupState();
+         const int slot2 = GroupGateSlot(g2);
+         const bool soloOk = GroupIsClosed(g2) && !GroupIsClosed(g1) && !NodeGroupSilenced(outIdx) &&
+                             AudioEngine::Instance().GroupGateAt(slot2).target.load() == 0.0f;
+         g1->solo = false;
+         ApplyGroupState();
+         report("solo of one group mutes the other, not an ungrouped node",
+                soloOk && !GroupIsClosed(g2) && AudioEngine::Instance().GroupGateAt(slot2).target.load() == 1.0f);
+
+         // ---- lock ----
+         g2->locked = true;
+         ApplyGroupState();
+         std::string why;
+         const bool memberLocked = NodeEditLocked(oscIdx, &why) && why == "Group 'Synth' is locked";
+         const bool groupLocked = NodeEditLocked(GroupTestIndexOf(g2), nullptr);
+         const bool outsideFree = !NodeEditLocked(outIdx, nullptr);
+         std::string addErr, removeErr;
+         const bool refusesAdd = !AddNodesToGroup(g2, { outIdx }, addErr) && !addErr.empty();
+         const bool refusesRemove = !RemoveNodesFromGroup(g2, { oscIdx }, removeErr) && !removeErr.empty();
+         g2->locked = false;
+         ApplyGroupState();
+         report("lock: members and the group are edit-locked, outsiders are not",
+                memberLocked && groupLocked && outsideFree && !NodeEditLocked(oscIdx, nullptr));
+         report("lock: a locked group refuses adding and removing members", refusesAdd && refusesRemove);
+
+         printf("GROUP STATE %s\n", sOk ? "PASS" : "FAIL");
+         glfwSetWindowShouldClose(window, GLFW_TRUE);
+      }
+   }
+}
+
 void FrameTest_GROUPTEST(int frameId, GLFWwindow* window)
 {
    if (getenv("INFINITE_GROUPTEST") != nullptr && gNodes.size() >= 3)
@@ -1261,18 +1805,28 @@ void FrameTest_GROUPTEST(int frameId, GLFWwindow* window)
          else if (frameId == 26)
          {
             size_t groupsLeft = 0;
+            GroupNode* remaining = nullptr;
             for (GraphNode& g : gNodes)
             {
-               if (dynamic_cast<GroupNode*>(g.node.get()) != nullptr)
+               if (auto* asGroup = dynamic_cast<GroupNode*>(g.node.get()))
+               {
                   groupsLeft++;
+                  remaining = asGroup;
+               }
             }
-            // The group is gone, its three member nodes are untouched, and
-            // they are unowned again rather than still bound to a dead group.
+            // Ungroup with a MEMBER selected is member-scoped: that member is
+            // freed, the group and its other two members stay. (This used to
+            // expect the whole group gone, which the member-scoped rule never
+            // did - the long-baselined "member freed" failure.)
             const bool freed = GroupOwning(gNodes[0].index) == nullptr;
-            printf("after ungroup: %zu groups left, %zu nodes, member freed=%d  %s\n",
-                   groupsLeft, gNodes.size(), (int)freed,
-                   (groupsLeft == 0 && gNodes.size() == 3 && freed) ? "UNGROUP OK" : "FAIL");
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            const bool restKept = remaining != nullptr && gGroupMembers[remaining].size() == 2;
+            printf("after ungroup: %zu groups left, %zu nodes, member freed=%d, others kept=%d  %s\n",
+                   groupsLeft, gNodes.size(), (int)freed, (int)restKept,
+                   (groupsLeft == 1 && gNodes.size() == 4 && freed && restKept) ? "UNGROUP OK" : "FAIL");
+         }
+         else if (frameId >= 28)
+         {
+            GroupTestStatePhases(frameId, window);
          }
       }
 }

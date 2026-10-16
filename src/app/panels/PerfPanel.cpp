@@ -1905,6 +1905,9 @@ namespace app
    // "low" from the CC would be a feedback trap the user did not ask for).
    bool ParamMidiLearnable(int nodeIndex, int paramIndex)
    {
+      // A locked group's member takes no new binding by hand (Groups.cpp).
+      if (NodeEditLocked(nodeIndex, nullptr))
+         return false;
       Modulation& mod = Modulation::Instance();
       if (mod.HasExpression(nodeIndex, paramIndex))
          return false;

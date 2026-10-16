@@ -230,17 +230,20 @@ namespace PatchExplain
       }
       for (const Patch::StreamRecord& s : data.streams)
       {
-         const char* lane = s.type == Patch::kStreamAudio ? "audio" : "video";
+         const char* lane = s.type == Patch::kStreamAudio ? "audio" : (s.type == Patch::kStreamMidi ? "midi" : "video");
          for (const Patch::ClipRecord& c : s.clips)
          {
             std::string t = std::string("clip ") + lane + " lane " + std::to_string(s.id) + " \"" + c.name + "\" at beat " +
                             Num((float)c.startTick / 960.0f + 1.0f) + ", " +
                             Num((float)c.lengthTick / 960.0f) + " beats";
             std::string src = "unassigned";
+            // A MIDI clip has no source of its own: its lane's instrument plays it.
+            const uint64_t srcUid = s.type == Patch::kStreamMidi ? s.instrumentUid : c.srcUid;
             for (const Patch::NodeRecord& n : data.nodes)
-               if (c.srcUid != 0 && n.uid == c.srcUid)
+               if (srcUid != 0 && n.uid == srcUid)
                   src = label(n.index);
-            t += ", source " + src;
+            t += s.type == Patch::kStreamMidi ? ", instrument " + src + ", " + std::to_string(c.notes.size()) + " notes"
+                                              : ", source " + src;
             if (c.srcOutput != 0)
                t += " out " + std::to_string(c.srcOutput);
             if (c.gainDb != 0.0f)

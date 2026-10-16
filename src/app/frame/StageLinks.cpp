@@ -428,6 +428,18 @@ void DrawLinks(FrameCtx& fc)
                   }
                }
 
+               // Lock: no cable into or out of a locked group's member, and no
+               // modulation/palette binding onto one (Groups.cpp).
+               if (valid && srcNode != nullptr && dstNode != nullptr)
+               {
+                  static std::string sLockedWhy;
+                  if (NodeEditLocked(dstNode->index, &sLockedWhy) || NodeEditLocked(srcNode->index, &sLockedWhy))
+                  {
+                     valid = false;
+                     rejectReason = sLockedWhy.c_str();
+                  }
+               }
+
                if (valid && ed::AcceptNewItem())
                {
                   PushUndoCheckpoint();
@@ -480,7 +492,14 @@ void DrawLinks(FrameCtx& fc)
          }
 
          ed::PinId newNodePin;
-         if (ed::QueryNewNode(&newNodePin) && ed::AcceptNewItem())
+         // Lock: dragging a cable off a locked group's member onto empty
+         // canvas (spawn-and-wire) is a rewire too.
+         const bool queriedNewNode = ed::QueryNewNode(&newNodePin);
+         const bool newNodePinLocked =
+            queriedNewNode && NodeEditLocked(GraphNode::NodeIndexFromPin((int)newNodePin.Get()), nullptr);
+         if (newNodePinLocked)
+            ed::RejectNewItem(ImColor(255, 80, 80), 2.0f);
+         else if (queriedNewNode && ed::AcceptNewItem())
          {
             gLinkDragSourcePin = (int)newNodePin.Get();
             gLinkDragSuggestions.clear();
@@ -645,6 +664,10 @@ void DrawLinks(FrameCtx& fc)
                         ed::NavigateToSelection(false, 0.2f);
                   }
                }
+               else if (gKbFocusNode >= 0 && NodeEditLocked(gKbFocusNode, nullptr))
+               {
+                  // A locked group's member: no keyboard nudge either.
+               }
                else if (gKbFocusNode >= 0)
                {
                   // ---- arrows on a focused param: nudge its value ----
@@ -668,6 +691,9 @@ void DrawLinks(FrameCtx& fc)
                      selIdx.insert((int)selNodes[i].Get());
                   for (int i = 0; i < nSel; ++i)
                   {
+                     // A locked group (or its member) does not move.
+                     if (NodeEditLocked((int)selNodes[i].Get() / GraphNode::kStride, nullptr))
+                        continue;
                      const ImVec2 p = ed::GetNodePosition(selNodes[i]);
                      const ImVec2 np(dx != 0.0f ? snapStep(p.x, dx) : p.x, dy != 0.0f ? snapStep(p.y, dy) : p.y);
                      ed::SetNodePosition(selNodes[i], np);
@@ -697,7 +723,7 @@ void DrawLinks(FrameCtx& fc)
             }
             // Arrow keys on a focused param with Alt held: coarse nudge.
          }
-         else if (kbFree && io.KeyAlt && gKbFocusNode >= 0 && !io.KeyShift)
+         else if (kbFree && io.KeyAlt && gKbFocusNode >= 0 && !io.KeyShift && !NodeEditLocked(gKbFocusNode, nullptr))
          {
             float dx = 0.0f, dy = 0.0f;
             if (dirKey(dx, dy))
@@ -739,6 +765,10 @@ void DrawLinks(FrameCtx& fc)
          }
          if (plain && ImGui::IsKeyPressed(ImGuiKey_F, false))
             gRequestFitView = true;
+         // M mutes/unmutes the selected group(s) - a selected group header, or
+         // the group a selected member is in (Shift+M stays the mod matrix).
+         if (plain && ImGui::IsKeyPressed(ImGuiKey_M, false))
+            ToggleMuteOnSelectedGroups();
          // Cmd/Ctrl+U ungroups (kbFree excludes Cmd/Ctrl, so it is gated on its own).
          if (!typing && !gArrangeFocused && cmdOrCtrl && !io.KeyShift && !io.KeyAlt && !gComputerKeyboardHot &&
              gKbFocusNode < 0 && ImGui::IsKeyPressed(ImGuiKey_U, false))

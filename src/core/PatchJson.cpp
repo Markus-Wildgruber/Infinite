@@ -116,6 +116,10 @@ namespace PatchJson
          json clips = json::array();
          for (const auto& c : s.clips)
          {
+            json notes = json::array();
+            for (const Patch::NoteRecord& n : c.notes)
+               notes.push_back({ {"startTick", n.startTick}, {"lengthTick", n.lengthTick}, {"note", n.note},
+                                 {"velocity", n.velocity} });
             clips.push_back({
                {"id", c.id},
                {"startTick", c.startTick},
@@ -145,7 +149,8 @@ namespace PatchJson
                {"origBpm", c.origBpm},
                {"sourceDurationSeconds", c.sourceDurationSeconds},
                {"sourceOffsetSeconds", c.sourceOffsetSeconds},
-               {"bypassedModParams", c.bypassedModParams}
+               {"bypassedModParams", c.bypassedModParams},
+               {"notes", notes}
             });
          }
          out["streams"].push_back({
@@ -163,6 +168,7 @@ namespace PatchJson
             {"colorG", s.colorG},
             {"colorB", s.colorB},
             {"rowHeight", s.rowHeight},
+            {"instrumentUid", s.instrumentUid},
             {"name", s.name},
             {"clips", clips}
          });

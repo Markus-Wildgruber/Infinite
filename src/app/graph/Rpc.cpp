@@ -10,6 +10,7 @@
 #include "nodes/DrumPatterns.h"
 #include "nodes/NoteNodes.h"
 #include "nodes/SoundAnalyzeNode.h"
+#include "nodes/UtilityNodes.h"
 #include "nodes/Geometry3DNodes.h"
 #include "nodes/OutputNode.h"
 
@@ -214,6 +215,63 @@ namespace app
          return out;
       }
 
+      // A locked group refuses every edit to its members, from the assistant
+      // too (NodeEditLocked, panels/PreviewBodies.cpp). One call per touched node.
+      // A refused timeline edit changed nothing, so the checkpoint pushed for it
+      // would be an empty undo step; drop it again. Only when this call added
+      // one (inside a batch checkpoints are suppressed and nothing was pushed).
+      void DropUnusedCheckpoint(size_t undoDepthBefore)
+      {
+         if (gUndoStack.size() > undoDepthBefore)
+            gUndoStack.pop_back();
+      }
+
+      bool RefuseIfLocked(int nodeIndex, std::string& outError)
+      {
+         std::string why;
+         if (!NodeEditLocked(nodeIndex, &why))
+            return false;
+         outError = why + " - unlock it first (set_group locked:false)";
+         return true;
+      }
+
+      GroupNode* GroupAt(int index, std::string& outError)
+      {
+         GraphNode* gn = FindNodeByIndex(index);
+         auto* g = gn != nullptr ? dynamic_cast<GroupNode*>(gn->node.get()) : nullptr;
+         if (g == nullptr)
+            outError = "node " + std::to_string(index) + " is not a Group";
+         return g;
+      }
+
+      json GroupJson(const GraphNode& gn, const GroupNode& g)
+      {
+         json members = json::array();
+         for (int m : GroupMemberIndices(&g))
+            members.push_back(m);
+         return { {"index", gn.index}, {"uid", "u" + std::to_string(gn.uid)}, {"label", g.label}, {"members", members},
+                  {"mute", g.mute}, {"solo", g.solo}, {"locked", g.locked} };
+      }
+
+      bool ReadIndexList(const json& params, const char* key, std::vector<int>& out, std::string& outError)
+      {
+         if (!params.contains(key) || !params[key].is_array() || params[key].empty())
+         {
+            outError = std::string("'") + key + "' must be a non-empty array of node indices";
+            return false;
+         }
+         for (const json& v : params[key])
+         {
+            if (!v.is_number_integer() || FindNodeByIndex(v.get<int>()) == nullptr)
+            {
+               outError = "unknown node index in '" + std::string(key) + "': " + v.dump();
+               return false;
+            }
+            out.push_back(v.get<int>());
+         }
+         return true;
+      }
+
       // The saved key and on-screen label of a parameter index, when known.
       void DescribeParam(const GraphNode& gn, int param, json& rec)
       {
@@ -229,6 +287,10 @@ namespace app
             rec["dstLabel"] = ref->name;
             rec["min"] = ref->minValue;
             rec["max"] = ref->maxValue;
+            // The value this frame, after modulation/expressions - so a client
+            // can see a modulator actually moving the parameter.
+            if (ref->value != nullptr)
+               rec["current"] = *ref->value;
          }
       }
 
@@ -392,8 +454,69 @@ namespace app
    // touch gNodes/gEditor/etc exactly as the normal UI code does. Returns
    // false with outError set on any failure; RemoteControl wraps that into a
    // JSON-RPC error reply.
+   namespace
+   {
+      // Stable node ids: every node has a uid that survives undo, redo, reload
+      // and other nodes being deleted (indices do not). Any parameter that
+      // names a node also takes "u<uid>" (get_graph lists uids); this turns
+      // those into the node's current index before the method runs, so every
+      // method - and every call inside a batch - accepts both.
+      bool ResolveUidRefs(nlohmann::json& v, const std::string& key, std::string& err)
+      {
+         static const char* const kNodeKeys[] = { "index", "src", "dst", "srcIndex", "dstIndex", "node", "group",
+                                                  "instrument", "target", "synth", "nodes" };
+         bool nodeKey = false;
+         for (const char* k : kNodeKeys)
+            nodeKey = nodeKey || key == k;
+         if (v.is_object())
+         {
+            for (auto it = v.begin(); it != v.end(); ++it)
+               if (!ResolveUidRefs(it.value(), it.key(), err))
+                  return false;
+            return true;
+         }
+         if (v.is_array())
+         {
+            for (auto& item : v)
+               if (!ResolveUidRefs(item, nodeKey ? key : std::string(), err))
+                  return false;
+            return true;
+         }
+         if (!nodeKey || !v.is_string())
+            return true;
+         const std::string s = v.get<std::string>();
+         if (s.size() < 2 || s[0] != 'u' || s.find_first_not_of("0123456789", 1) != std::string::npos)
+            return true;
+         const uint64_t uid = std::stoull(s.substr(1));
+         GraphNode* gn = FindNodeByUid(uid);
+         if (gn == nullptr)
+         {
+            err = "no node with uid " + s.substr(1) + " ('" + key + "')";
+            return false;
+         }
+         v = gn->index;
+         return true;
+      }
+   }
+
+   bool HandleRpcCommandImpl(const std::string& method, const nlohmann::json& params,
+                             nlohmann::json& outResult, std::string& outError);
+
    bool HandleRpcCommand(const std::string& method, const nlohmann::json& params,
                          nlohmann::json& outResult, std::string& outError)
+   {
+      // "calls" of a batch are resolved as each call runs (an earlier call may
+      // create the node a later one names), so only the top level here.
+      if (method == "batch")
+         return HandleRpcCommandImpl(method, params, outResult, outError);
+      nlohmann::json resolved = params;
+      if (!ResolveUidRefs(resolved, std::string(), outError))
+         return false;
+      return HandleRpcCommandImpl(method, resolved, outResult, outError);
+   }
+
+   bool HandleRpcCommandImpl(const std::string& method, const nlohmann::json& params,
+                             nlohmann::json& outResult, std::string& outError)
    {
       using json = nlohmann::json;
 
@@ -430,7 +553,7 @@ namespace app
                        (near.empty() ? std::string() : " (did you mean: " + JoinNames(near) + ")");
             return false;
          }
-         outResult = { {"index", gn->index} };
+         outResult = { {"index", gn->index}, {"uid", "u" + std::to_string(gn->uid)} };
          // Have it register its controls on this frame's draw even though it
          // starts collapsed, so its parameter keys resolve from the next request.
          gRpcParamProbe.insert(gn->index);
@@ -447,6 +570,8 @@ namespace app
             outError = "unknown node index";
             return false;
          }
+         if (RefuseIfLocked(index, outError))
+            return false;
          RemoveNodeByIndex(index);
          outResult = json::object();
          return true;
@@ -461,6 +586,8 @@ namespace app
             return false;
          if (params.contains("dstSlot") && !ReadSlot(params["dstSlot"], *FindNodeByIndex(dstIndex), dstSlot, outError))
             return false;
+         if (RefuseIfLocked(srcIndex, outError) || RefuseIfLocked(dstIndex, outError))
+            return false;
          if (!ConnectNodes(srcIndex, srcOutput, dstIndex, dstSlot, outError))
             return false;
          outResult = json::object();
@@ -469,11 +596,15 @@ namespace app
       else if (method == "disconnect")
       {
          const int linkId = params.value("linkId", -1);
-         if (FindLink(linkId) == nullptr)
+         const LinkInfo* link = FindLink(linkId);
+         if (link == nullptr)
          {
             outError = "unknown link id";
             return false;
          }
+         if (RefuseIfLocked(GraphNode::NodeIndexFromPin(link->srcPin), outError) ||
+             RefuseIfLocked(GraphNode::NodeIndexFromPin(link->dstPin), outError))
+            return false;
          PushUndoCheckpoint();
          DisconnectLinkById(linkId);
          outResult = json::object();
@@ -535,6 +666,33 @@ namespace app
          const json options = EnumOptionsOf(*gn, raw);
          if (!options.empty())
             out["_options"] = options;
+         // Parameters a modulator or an expression drives: their value this
+         // frame (the plain value above is the same live number; this says
+         // which ones move and from what).
+         {
+            json modulated = json::object();
+            auto join = gParamJoin.find(gn->typeName);
+            for (const auto& kv : Modulation::Instance().AllKnownParams())
+            {
+               const ParamRef& ref = kv.second;
+               if (ref.nodeIndex != gn->index || ref.value == nullptr)
+                  continue;
+               const bool mod = Modulation::Instance().IsModulated(gn->index, ref.paramIndex);
+               const bool expr = Modulation::Instance().HasExpression(gn->index, ref.paramIndex);
+               if (!mod && !expr)
+                  continue;
+               std::string key = ref.name;
+               if (join != gParamJoin.end())
+               {
+                  auto k = join->second.keyOfParam.find(ref.paramIndex);
+                  if (k != join->second.keyOfParam.end())
+                     key = k->second;
+               }
+               modulated[key] = { {"current", *ref.value}, {"by", mod ? "modulator" : "expression"}, {"param", ref.paramIndex} };
+            }
+            if (!modulated.empty())
+               out["_modulated"] = modulated;
+         }
          if (gn->label.size())
             out["_label"] = gn->label;
          outResult = out;
@@ -550,6 +708,8 @@ namespace app
             outError = "unknown node index";
             return false;
          }
+         if (RefuseIfLocked(index, outError))
+            return false;
          // Params are keyed "<type letter> <name>" (Patch.h's f/i/b/c/s
          // convention) - find the existing key for `name` so we replay it
          // with the right type letter rather than guessing one.
@@ -631,6 +791,11 @@ namespace app
          ed::SetCurrentEditor(gEditor);
          if (method == "set_node_position" || method == "move_node")
          {
+            if (RefuseIfLocked(index, outError))
+            {
+               ed::SetCurrentEditor(prevEditor);
+               return false;
+            }
             // x/y place it; dx/dy move it from where it is. Canvas units,
             // the same numbers get_graph reports.
             const ImVec2 at = ed::GetNodePosition(gn->NodeId());
@@ -670,6 +835,8 @@ namespace app
             outError = "unknown node index";
             return false;
          }
+         if (RefuseIfLocked(index, outError))
+            return false;
          bool want = !gn->node->bypassed;
          if (params.contains("bypassed"))
          {
@@ -707,6 +874,8 @@ namespace app
             outError = "'name' must be a string (\"\" removes the rename)";
             return false;
          }
+         if (RefuseIfLocked(index, outError))
+            return false;
          std::string label = params["name"].get<std::string>();
          for (char& ch : label)
             if (ch == '\n' || ch == '\r' || ch == '\t')
@@ -817,6 +986,474 @@ namespace app
          if (total > (int)notes.size())
             outResult["truncated"] = "showing the first " + std::to_string(notes.size()) + " of " + std::to_string(total) +
                                      " - narrow from/to/low/high or raise limit";
+         return true;
+      }
+      else if (method == "duplicate_node")
+      {
+         // A copy of one node: same type, parameters, label and (by default)
+         // the same inputs, placed beside it (dx/dy, default 40/40). Modulation
+         // bindings onto it and its outgoing cables are not copied.
+         const int index = params.value("index", -1);
+         GraphNode* orig = FindNodeByIndex(index);
+         if (orig == nullptr || orig->node == nullptr)
+         {
+            outError = "unknown node index";
+            return false;
+         }
+         if (dynamic_cast<GroupNode*>(orig->node.get()) != nullptr)
+         {
+            outError = "duplicate_node copies single nodes; to copy a group, duplicate its members and create_group them";
+            return false;
+         }
+         const std::string type = orig->typeName, category = orig->category, label = orig->label;
+         const ImVec2 at(orig->liveX + params.value("dx", 40.0f), orig->liveY + params.value("dy", 40.0f));
+         const bool connectInputs = params.value("connectInputs", true);
+         const uint64_t origUid = orig->uid;
+         PushUndoCheckpoint();
+         const bool wasSuppressed = gSuppressUndoCheckpoints;
+         gSuppressUndoCheckpoints = true;
+         GraphNode* copy = SpawnNode(type, category, at.x, at.y);
+         gSuppressUndoCheckpoints = wasSuppressed;
+         orig = FindNodeByUid(origUid); // SpawnNode may have moved gNodes
+         if (copy == nullptr || orig == nullptr)
+         {
+            outError = "could not create the copy";
+            return false;
+         }
+         CopyParams(copy->node.get(), orig->node.get());
+         copy->label = label.empty() ? std::string() : label + " copy";
+         ReloadDerivedState(copy->node.get());
+         int inputs = 0;
+         if (connectInputs)
+         {
+            // Same sources, same slots - the cables the original already has,
+            // so no compatibility question arises.
+            for (int slot = 0; slot < InputCountFor(*orig); slot++)
+               if (ImageCable* c = CableFor(*orig, slot))
+                  if (c->IsConnected())
+                     if (ImageCable* d = CableFor(*copy, slot))
+                     {
+                        d->Connect(c->GetSource(), c->GetSourceOutput());
+                        inputs++;
+                     }
+            for (int slot = 0; slot < kMaxAudioSlots; slot++)
+               if (AudioCable* c = orig->node->AudioInputSlot(slot))
+                  if (c->IsConnected())
+                     if (AudioCable* d = copy->node->AudioInputSlot(slot))
+                     {
+                        d->Connect(c->GetSource(), c->GetOutputSlot());
+                        inputs++;
+                     }
+            for (int slot = 0; slot < kMaxNoteSlots; slot++)
+               if (NoteCable* c = orig->node->NoteInputSlot(slot))
+                  if (c->IsConnected())
+                     if (NoteCable* d = copy->node->NoteInputSlot(slot))
+                     {
+                        d->Connect(c->GetSource(), c->GetOutputSlot());
+                        inputs++;
+                     }
+         }
+         RebuildAudioTopology();
+         gRpcParamProbe.insert(copy->index);
+         gPatchDirty = true;
+         outResult = { {"index", copy->index}, {"uid", "u" + std::to_string(copy->uid)}, {"inputsConnected", inputs} };
+         if (params.contains("id"))
+            outResult["id"] = params["id"];
+         return true;
+      }
+      else if (method == "create_group")
+      {
+         std::vector<int> nodes;
+         if (!ReadIndexList(params, "nodes", nodes, outError))
+            return false;
+         for (int i : nodes)
+            if (RefuseIfLocked(i, outError))
+               return false;
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         GroupNode* g = CreateGroupForNodes(nodes, params.value("label", std::string("Group")), outError);
+         if (g == nullptr)
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         for (GraphNode& gn : gNodes)
+            if (gn.node.get() == g)
+               outResult = GroupJson(gn, *g);
+         gPatchDirty = true;
+         return true;
+      }
+      else if (method == "group_add" || method == "group_remove")
+      {
+         int index = -1;
+         if (!ReadNodeIndex(params, "group", "index", index, outError))
+            return false;
+         GroupNode* g = GroupAt(index, outError);
+         std::vector<int> nodes;
+         if (g == nullptr || !ReadIndexList(params, "nodes", nodes, outError))
+            return false;
+         if (RefuseIfLocked(index, outError))
+            return false;
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         const bool ok = method == "group_add" ? AddNodesToGroup(g, nodes, outError) : RemoveNodesFromGroup(g, nodes, outError);
+         if (!ok)
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         outResult = GroupJson(*FindNodeByIndex(index), *g);
+         gPatchDirty = true;
+         return true;
+      }
+      else if (method == "set_group")
+      {
+         // mute / solo / locked / label of one group; omitted fields stay.
+         // Mute and solo work on a locked group, as in the UI.
+         int index = -1;
+         if (!ReadNodeIndex(params, "group", "index", index, outError))
+            return false;
+         GroupNode* g = GroupAt(index, outError);
+         if (g == nullptr)
+            return false;
+         for (const char* key : { "mute", "solo", "locked" })
+            if (params.contains(key) && !params[key].is_boolean())
+            {
+               outError = std::string("'") + key + "' must be true or false";
+               return false;
+            }
+         if (params.contains("label") && (!params["label"].is_string() || g->locked))
+         {
+            outError = g->locked ? "Group '" + g->label + "' is locked - unlock it to rename it" : "'label' must be a string";
+            return false;
+         }
+         PushUndoCheckpoint();
+         if (params.contains("mute"))
+            g->mute = params["mute"].get<bool>();
+         if (params.contains("solo"))
+            g->solo = params["solo"].get<bool>();
+         if (params.contains("locked"))
+            g->locked = params["locked"].get<bool>();
+         if (params.contains("label"))
+            g->label = params["label"].get<std::string>();
+         ApplyGroupState();
+         gPatchDirty = true;
+         outResult = GroupJson(*FindNodeByIndex(index), *g);
+         return true;
+      }
+      else if (method == "list_groups")
+      {
+         json groups = json::array();
+         for (GraphNode& gn : gNodes)
+            if (auto* g = dynamic_cast<GroupNode*>(gn.node.get()))
+               groups.push_back(GroupJson(gn, *g));
+         outResult = { {"groups", groups} };
+         return true;
+      }
+      else if (method == "apply_sound_profile")
+      {
+         // Sound Analyze's Apply button: its last profile onto a synth.
+         int index = -1, target = -1;
+         if (!ReadNodeIndex(params, "index", "node", index, outError) || !ReadNodeIndex(params, "target", "synth", target, outError))
+            return false;
+         GraphNode* gn = FindNodeByIndex(index);
+         auto* sa = gn != nullptr ? dynamic_cast<SoundAnalyzeNode*>(gn->node.get()) : nullptr;
+         if (sa == nullptr)
+         {
+            outError = "node " + std::to_string(index) + " is not a Sound Analyze node";
+            return false;
+         }
+         if (RefuseIfLocked(target, outError))
+            return false;
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         std::string message;
+         if (!ApplySoundProfile(sa, target, message))
+         {
+            DropUnusedCheckpoint(undoDepth);
+            outError = message;
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = { {"applied", message} };
+         return true;
+      }
+      else if (method == "list_clips")
+      {
+         outResult = ArrangeClipsJson();
+         return true;
+      }
+      else if (method == "add_clip")
+      {
+         // Places a node or group on the timeline: it plays during the clip.
+         int index = -1;
+         if (!ReadNodeIndex(params, "node", "index", index, outError))
+            return false;
+         GraphNode* gn = FindNodeByIndex(index);
+         const double start = params.value("startBeats", -1.0), length = params.value("lengthBeats", -1.0);
+         if (!(start >= 0.0) || !(length > 0.0))
+         {
+            outError = "give startBeats >= 0 and lengthBeats > 0";
+            return false;
+         }
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         uint64_t clipId = 0;
+         if (!ArrangeAddClip(gn->uid, params.value("output", 0), params.value("lane", -1), start, length, clipId, outError))
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = { {"clipId", clipId} };
+         return true;
+      }
+      else if (method == "move_clip" || method == "set_clip" || method == "delete_clip")
+      {
+         if (!params.contains("clipId") || !params["clipId"].is_number_integer())
+         {
+            outError = "give the integer clipId (list_clips lists them)";
+            return false;
+         }
+         const uint64_t clipId = params["clipId"].get<uint64_t>();
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         bool ok = false;
+         if (method == "delete_clip")
+            ok = ArrangeDeleteClip(clipId, outError);
+         else if (method == "move_clip")
+            ok = ArrangeMoveClip(clipId, params.value("lane", -1), params.value("startBeats", -1.0), params.value("lengthBeats", -1.0), outError);
+         else
+            ok = ArrangeSetClipProps(clipId, params, outError);
+         if (!ok)
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = json::object();
+         return true;
+      }
+      else if (method == "set_loop")
+      {
+         const bool enabled = params.value("enabled", true);
+         const double start = params.value("startBeats", 0.0), end = params.value("endBeats", 0.0);
+         if (enabled && !(end > start))
+         {
+            outError = "endBeats must be after startBeats (or enabled:false to clear the loop)";
+            return false;
+         }
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         if (!ArrangeSetLoop(enabled, start, end, outError))
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = { {"enabled", Transport::Instance().LoopEnabled()}, {"startBeats", Transport::Instance().LoopStartBeats()},
+                       {"endBeats", Transport::Instance().LoopEndBeats()} };
+         return true;
+      }
+      else if (method == "render_to_track" || method == "render_status")
+      {
+         // Bounce: renders a node offline over a range (+ tail) into a WAV on a
+         // new track. Start-then-poll like the measurements; the MCP bridge waits.
+         if (method == "render_to_track")
+         {
+            int index = -1;
+            if (!ReadNodeIndex(params, "node", "index", index, outError))
+               return false;
+            Transport& tr = Transport::Instance();
+            double start = params.value("startBeats", -1.0), end = params.value("endBeats", -1.0);
+            if (start < 0.0 || end <= start)
+            {
+               // Default: the loop when there is one, else 4 bars from the playhead.
+               if (tr.LoopEnabled())
+               {
+                  start = tr.LoopStartBeats();
+                  end = tr.LoopEndBeats();
+               }
+               else
+               {
+                  start = std::max(0.0, tr.Beats());
+                  end = start + 4.0 * tr.BeatsPerBar();
+               }
+            }
+            if (!StartRenderNodeToTrack(index, start, end, std::clamp(params.value("tailSeconds", 2.0), 0.0, 30.0),
+                                        params.value("normalize", false), outError))
+               return false;
+         }
+         const RenderToTrackStatus& st = RenderToTrackState();
+         outResult = { {"active", st.active}, {"done", st.done}, {"ok", st.ok}, {"progress", std::round(st.progress * 100.0f) / 100.0f},
+                       {"message", st.message}, {"path", st.path}, {"lane", st.laneIndex}, {"clipId", st.clipId} };
+         return true;
+      }
+      else if (method == "add_midi_track")
+      {
+         // A MIDI lane playing into one instrument node (anything with a note input).
+         int index = -1;
+         if (!ReadNodeIndex(params, "instrument", "index", index, outError))
+            return false;
+         GraphNode* inst = FindNodeByIndex(index);
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         int lane = -1;
+         if (!ArrangeAddMidiLane(inst->uid, params.value("name", std::string()), lane, outError))
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = { {"lane", lane} };
+         return true;
+      }
+      else if (method == "set_midi_notes" || method == "get_midi_notes")
+      {
+         if (!params.contains("clipId") || !params["clipId"].is_number_integer())
+         {
+            outError = "give the integer clipId of a MIDI clip (list_clips lists them)";
+            return false;
+         }
+         const uint64_t clipId = params["clipId"].get<uint64_t>();
+         if (method == "get_midi_notes")
+         {
+            outResult = ArrangeMidiNotesJson(clipId);
+            if (outResult.is_null() || (outResult.is_object() && outResult.contains("error")))
+            {
+               outError = outResult.is_object() ? outResult.value("error", std::string("not a MIDI clip")) : "not a MIDI clip";
+               return false;
+            }
+            return true;
+         }
+         if (!params.contains("notes") || !params["notes"].is_array())
+         {
+            outError = "'notes' must be an array of {t, dur, midi, vel}";
+            return false;
+         }
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         if (!ArrangeSetMidiNotes(clipId, params["notes"], outError))
+         {
+            DropUnusedCheckpoint(undoDepth);
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = { {"notes", params["notes"].size()} };
+         return true;
+      }
+      else if (method == "capture_notes" || method == "capture_status")
+      {
+         // A note source's output over a range, captured offline into a MIDI
+         // clip on a new MIDI lane. Start-then-poll; the MCP tool waits.
+         if (method == "capture_notes")
+         {
+            int index = -1;
+            if (!ReadNodeIndex(params, "node", "index", index, outError))
+               return false;
+            uint64_t instrumentUid = 0;
+            if (params.contains("instrument"))
+            {
+               int inst = -1;
+               if (!ReadNodeIndex(params, "instrument", nullptr, inst, outError))
+                  return false;
+               instrumentUid = FindNodeByIndex(inst)->uid;
+            }
+            Transport& tr = Transport::Instance();
+            double start = params.value("startBeats", -1.0), end = params.value("endBeats", -1.0);
+            if (start < 0.0 || end <= start)
+            {
+               if (tr.LoopEnabled())
+               {
+                  start = tr.LoopStartBeats();
+                  end = tr.LoopEndBeats();
+               }
+               else
+               {
+                  start = std::max(0.0, tr.Beats());
+                  end = start + 4.0 * tr.BeatsPerBar();
+               }
+            }
+            // The result lands later; the checkpoint taken now is the state it undoes to.
+            const size_t undoDepth = gUndoStack.size();
+            PushUndoCheckpoint();
+            if (!StartCaptureNotesToTimeline(index, instrumentUid, start, end, outError))
+            {
+               DropUnusedCheckpoint(undoDepth);
+               return false;
+            }
+            gPatchDirty = true;
+         }
+         const CaptureNotesStatus& st = CaptureNotesState();
+         outResult = { {"active", st.active}, {"done", st.done}, {"ok", st.ok}, {"progress", std::round(st.progress * 100.0f) / 100.0f},
+                       {"message", st.message}, {"lane", st.laneIndex}, {"clipId", st.clipId}, {"noteCount", st.noteCount} };
+         return true;
+      }
+      else if (method == "render_audio_to_file" || method == "render_file_status")
+      {
+         // A node's sound, rendered offline (faster than real time, sample-
+         // accurate, from a clean start) into a WAV. Start-then-poll.
+         if (method == "render_audio_to_file")
+         {
+            int index = -1;
+            if (!ReadNodeIndex(params, "node", "index", index, outError))
+               return false;
+            const double start = params.value("start", 0.0), seconds = params.value("seconds", 0.0);
+            if (start < 0.0 || !(seconds > 0.0))
+            {
+               outError = "give start >= 0 and seconds > 0";
+               return false;
+            }
+            const int bits = params.value("bitDepth", 24);
+            if (bits != 16 && bits != 24 && bits != 32)
+            {
+               outError = "bitDepth must be 16, 24 or 32 (32 = float)";
+               return false;
+            }
+            if (!StartRenderToFile(index, start, seconds, std::clamp(params.value("tail", 0.0), 0.0, 60.0),
+                                   params.value("path", std::string()), bits, params.value("sampleRate", 0.0), outError))
+               return false;
+         }
+         const RenderToFileStatus& st = RenderToFileState();
+         outResult = { {"active", st.active}, {"done", st.done}, {"ok", st.ok}, {"progress", std::round(st.progress * 100.0f) / 100.0f},
+                       {"message", st.message}, {"path", st.path}, {"seconds", st.seconds}, {"sampleRate", st.sampleRate},
+                       {"channels", st.channels}, {"peakDb", std::round(st.peakDb * 10.0f) / 10.0f}, {"rmsDb", std::round(st.rmsDb * 10.0f) / 10.0f} };
+         return true;
+      }
+      else if (method == "press_button")
+      {
+         // A node's own momentary button (Looper rec, Audio Out record, ...),
+         // exactly as clicking it. Without "button": the node's button names.
+         int index = -1;
+         if (!ReadNodeIndex(params, "node", "index", index, outError))
+            return false;
+         GraphNode* gn = FindNodeByIndex(index);
+         json names = json::array();
+         for (const std::string& b : gn->node->ButtonNames())
+            names.push_back(b);
+         const std::string button = params.value("button", std::string());
+         if (button.empty())
+         {
+            outResult = { {"buttons", names} };
+            return true;
+         }
+         if (RefuseIfLocked(index, outError))
+            return false;
+         // Several buttons change the patch (record into a sampler, Molder's
+         // roll, Drum Sequencer randomize): one undo step, dropped again when
+         // the press is refused.
+         const size_t undoDepth = gUndoStack.size();
+         PushUndoCheckpoint();
+         std::string err;
+         if (!gn->node->PressButton(button, err))
+         {
+            DropUnusedCheckpoint(undoDepth);
+            outError = (err.empty() ? std::string("could not press '") + button + "'" : err) +
+                       (names.empty() ? std::string(" (this node has no buttons)") : " (buttons: " + names.dump() + ")");
+            return false;
+         }
+         gPatchDirty = true;
+         outResult = { {"pressed", button} };
          return true;
       }
       else if (method == "get_sound_profile")
@@ -1090,7 +1727,7 @@ namespace app
             // transport and the measuring calls act outside the patch, so a
             // failed batch's undo could not take them back.
             if (m.empty() || m == "batch" || m == "undo" || m == "redo" || m == "new_patch" || m == "load_patch" ||
-                m == "load_patch_text" || m == "transport" || IsAudioProbeRpc(m))
+                m == "load_patch_text" || m == "transport" || m == "render_to_track" || m == "capture_notes" || m == "render_audio_to_file" || m == "press_button" || IsAudioProbeRpc(m))
             {
                failMsg = "method '" + m + "' is not allowed inside a batch";
                failAt = (int)i;
@@ -1225,6 +1862,8 @@ namespace app
          if (!ReadNodeIndex(params, "dst", "dstIndex", dst, outError) ||
              !ReadNodeIndex(params, "src", "srcIndex", src, outError))
             return false;
+         if (RefuseIfLocked(dst, outError))
+            return false;
          if (dst == src)
          {
             outError = "a node cannot modulate its own parameter";
@@ -1280,6 +1919,8 @@ namespace app
          int dst = -1, param = -1;
          if (!ReadNodeIndex(params, "dst", "dstIndex", dst, outError))
             return false;
+         if (RefuseIfLocked(dst, outError))
+            return false;
          if (!params.contains("param"))
          {
             outError = "missing 'param'";
@@ -1303,6 +1944,8 @@ namespace app
          // modulator on the same parameter wins over it (reported, not refused).
          int dst = -1, param = -1;
          if (!ReadNodeIndex(params, "dst", "dstIndex", dst, outError))
+            return false;
+         if (RefuseIfLocked(dst, outError))
             return false;
          if (!params.contains("param"))
          {

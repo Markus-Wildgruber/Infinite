@@ -283,6 +283,15 @@ public:
    virtual unsigned long long CurveStamp() { return 0; }
 };
 
+// Group mute for geometry (set by the app, app/graph/Groups.cpp): true when
+// `consumer` (a Render 3D) must not draw `source` because the geometry comes
+// from a muted group the consumer is not a member of. Geometry is wired by
+// raw pointer, with no cable object to gate, so the mute lands where geometry
+// becomes pixels: Render 3D skips the draw (the scene behaves as if that
+// source were empty). nullptr = no groups, nothing gated.
+using GeometryGroupGateFn = bool (*)(const INode* consumer, IGeometrySource* source);
+inline GeometryGroupGateFn gGeometryGroupGate = nullptr;
+
 // What a consumer pin actually needs from an upstream IGeometrySource,
 // mirroring the four requirement categories in the phase 2 rule matrix
 // (docs/reference/geometry-domains.md, "Satisfaction rule").

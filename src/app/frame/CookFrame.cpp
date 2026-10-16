@@ -176,6 +176,9 @@ void RefreshParamDriverFlags()
 
 void ApplyModulationAndPalette(int frameId, bool isNormalFrame)
 {
+   // Group mute/solo/timeline gates for this frame, before any binding below
+   // reads them and before anything cooks (image cables, Render 3D).
+   UpdateGroupGates();
    UpdatePerformanceMatrixMIDI();
    // Before any binding is read: which clip is under the playhead decides
    // which modulations are bypassed this frame.
@@ -307,6 +310,11 @@ void ApplyModulationAndPalette(int frameId, bool isNormalFrame)
          if (modNode == nullptr)
             continue;
          if (modNode->node != nullptr && modNode->node->bypassed && modNode->node->BypassSource() == nullptr)
+            continue;
+         // The modulator sits in a muted (soloed-out, timeline-closed) group
+         // and this destination is outside it: the destination holds the
+         // value it last received, like a disabled binding.
+         if (GroupHoldsModulation(src.nodeIndex, ref.nodeIndex))
             continue;
          auto* modulator = ModulatorForOutput(modNode->node.get(), src.outputIndex);
          if (modulator == nullptr)

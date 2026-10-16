@@ -80,6 +80,22 @@ void DrawFrameTestsA(FrameCtx& fc)
 
       FrameTest_ARRANGETEST(frameId, window);
 
+      // Group clips, the timeline helper API and render-to-track end to end
+      // (src/app/panels/ArrangeTools.cpp). A frame test, not a Startup.cpp
+      // hook: it needs a live graph, PatchIO and the frame pump.
+      FrameTest_ARRANGEGROUPTEST(frameId, window);
+
+      // MIDI lanes: sample-accurate note playback through the topology, no
+      // stuck notes, save/load, split, helper API and note capture
+      // (src/app/panels/ArrangeMidi.cpp).
+      FrameTest_ARRANGEMIDITEST(frameId, window);
+
+      // Render to file end to end: WAV headers, repeatability, match with an
+      // offline capture, rate conversion, and the offline-render fixes (fresh
+      // start, step 0 after a rewind, modulation lockstep) -
+      // src/app/panels/ArrangeRenderToFile.cpp.
+      FrameTest_RENDERFILETEST(frameId, window);
+
       // Overhaul WP2 (docs/plans/arrangement/overhaul-prompt.md): the transport
       // clock's three new contracts - a tempo change doesn't move the
       // playhead, Beats() is seekable, and the loop wraps at a block boundary

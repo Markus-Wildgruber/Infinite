@@ -92,6 +92,7 @@ namespace app
          s.colorG = lane.colorG;
          s.colorB = lane.colorB;
          s.rowHeight = lane.rowHeight;
+         s.instrumentUid = lane.type == Arrange::kLaneMidi ? lane.instrumentUid : 0;
          for (const Arrange::Clip& c : lane.clips)
          {
             Patch::ClipRecord r;
@@ -124,6 +125,9 @@ namespace app
             r.sourceDurationSeconds = c.sourceDurationSeconds;
             r.sourceOffsetSeconds = c.sourceOffsetSeconds;
             r.bypassedModParams = c.bypassedModParams;
+            r.notes.reserve(c.notes.size());
+            for (const Arrange::MidiNote& n : c.notes)
+               r.notes.push_back(Patch::NoteRecord{ n.start, n.length, n.note, n.velocity });
             s.clips.push_back(std::move(r));
          }
          data.streams.push_back(std::move(s));
@@ -196,7 +200,9 @@ namespace app
       {
          Arrange::Lane lane;
          lane.id = s.id;
-         lane.type = (s.type == Patch::kStreamAudio) ? Arrange::kLaneAudio : Arrange::kLaneVideo;
+         lane.type = (s.type == Patch::kStreamAudio) ? Arrange::kLaneAudio
+                     : (s.type == Patch::kStreamMidi ? Arrange::kLaneMidi : Arrange::kLaneVideo);
+         lane.instrumentUid = lane.type == Arrange::kLaneMidi ? s.instrumentUid : 0;
          lane.blendMode = 0; // legacy lane-wide mode migrates onto each clip below
          lane.opacity = s.opacity;
          lane.gainDb = s.gainDb;
@@ -248,6 +254,20 @@ namespace app
             clip.sourceDurationSeconds = c.sourceDurationSeconds;
             clip.sourceOffsetSeconds = c.sourceOffsetSeconds;
             clip.bypassedModParams = c.bypassedModParams;
+            if (lane.type == Arrange::kLaneMidi)
+            {
+               clip.notes.reserve(c.notes.size());
+               for (const Patch::NoteRecord& n : c.notes)
+               {
+                  Arrange::MidiNote mn;
+                  mn.start = n.startTick;
+                  mn.length = n.lengthTick;
+                  mn.note = n.note;
+                  mn.velocity = n.velocity;
+                  clip.notes.push_back(mn);
+               }
+               Arrange::SanitizeMidiNotes(clip.notes);
+            }
             lane.clips.push_back(std::move(clip));
          }
          m.lanes.push_back(std::move(lane));

@@ -288,4 +288,14 @@ public:
    // output (Audio File's `monitor` picks which Audio Out terminals hear it),
    // so no PCM signature can see it. The sweep reports it like a uiOnly param.
    virtual bool SweepParamIsRouting(const std::string& /*paramName*/) const { return false; }
+
+   // Momentary buttons this node exposes to code (the assistant's press_button), by name.
+   virtual std::vector<std::string> ButtonNames() const { return {}; }
+   // Presses one; false + err when unknown or not possible right now. Main thread.
+   // A press runs the same code path as clicking the button on the node's card.
+   virtual bool PressButton(const std::string& /*name*/, std::string& err)
+   {
+      err = "this node has no buttons";
+      return false;
+   }
 };

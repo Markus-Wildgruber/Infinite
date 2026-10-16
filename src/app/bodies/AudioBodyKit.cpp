@@ -673,10 +673,12 @@ namespace app
    // drives it, else the mouse held on it); the node turns level changes into
    // edges. style: 0 plain, 1 red (a stop/active action), 2 blue toggle, `lit`
    // being its on state.
-   bool DrawGateControl(const char* id, const char* label, float btnW, int style, bool lit)
+   bool DrawGateControl(const char* id, const char* label, float btnW, int style, bool lit, bool* driven)
    {
       const DiscreteParamHandle h = RegisterDiscreteParam(id, 0.0f, 1.0f, /*isBool=*/true, nullptr,
                                                           /*momentary=*/true);
+      if (driven != nullptr)
+         *driven = h.driven;
       if (h.registered && !h.draw)
          return h.driven && h.value >= 0.5f;
       const float pinW = 16.0f;

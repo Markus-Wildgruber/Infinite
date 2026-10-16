@@ -237,7 +237,11 @@ public:
       mFreeGlide.SetTimeConstant(0.0f, mSampleRate);
 
       for (auto& v : mVoices)
+      {
          v.Reset(mSampleRate);
+         v.active = false;
+         v.ampEnv.Reset(); // a fresh start begins from silence (see Envelope::Reset)
+      }
 
       mFreeLadder.Reset();
       mFreeLadderR.Reset();

@@ -1,4 +1,5 @@
 #include "AudioFileWriter.h"
+#include "WavFormat.h"
 #include "shine.h"
 
 #include <algorithm>
@@ -15,9 +16,6 @@
 
 namespace
 {
-   void WriteU32(FILE* f, uint32_t v) { fwrite(&v, 4, 1, f); }
-   void WriteU16(FILE* f, uint16_t v) { fwrite(&v, 2, 1, f); }
-
    int16_t FloatToPcm16(float v)
    {
       const float clamped = std::clamp(v, -1.0f, 1.0f);
@@ -69,13 +67,16 @@ const char* AudioFileWriter::ExtensionForFormat(Format format)
 int64_t AudioFileWriter::BytesWritten() const
 {
    if (mFormat == Format::Wav)
-      return mFramesWritten * mNumChannels * 2;
+      return mFramesWritten * mNumChannels * WavFormat::BytesPerSample((int)mWavEncoding);
    return mBytesWrittenDirect;
 }
 
-bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numChannels, Format format)
+bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numChannels, Format format,
+                           WavEncoding wavEncoding)
 {
    Close();
+   mWavEncoding = wavEncoding;
+   mWriteOk = true;
 
    if (sampleRate <= 0.0 || numChannels <= 0)
       return false;
@@ -167,27 +168,15 @@ bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numCh
    if (mFile == nullptr)
       return false;
 
-   const uint32_t sr = (uint32_t)std::lround(sampleRate);
-   const uint16_t bitsPerSample = 16;
-   const uint16_t blockAlign = (uint16_t)(mNumChannels * (bitsPerSample / 8));
-   const uint32_t byteRate = sr * blockAlign;
-
-   fwrite("RIFF", 1, 4, mFile);
-   WriteU32(mFile, 0);
-   fwrite("WAVE", 1, 4, mFile);
-
-   fwrite("fmt ", 1, 4, mFile);
-   WriteU32(mFile, 16); // PCM fmt chunk size
-   WriteU16(mFile, 1);  // PCM
-   WriteU16(mFile, (uint16_t)mNumChannels);
-   WriteU32(mFile, sr);
-   WriteU32(mFile, byteRate);
-   WriteU16(mFile, blockAlign);
-   WriteU16(mFile, bitsPerSample);
-
-   fwrite("data", 1, 4, mFile);
-   WriteU32(mFile, 0);
-
+   // Sizes are placeholders until CloseWav rewrites the header (WavFormat.h).
+   const std::vector<uint8_t> header =
+      WavFormat::BuildHeader((int)mWavEncoding, (uint32_t)std::lround(sampleRate), mNumChannels, 0);
+   if (fwrite(header.data(), 1, header.size(), mFile) != header.size())
+   {
+      fclose(mFile);
+      mFile = nullptr;
+      return false;
+   }
    return true;
 }
 
@@ -252,13 +241,13 @@ void AudioFileWriter::Append(const float* interleaved, int frames)
 
    if (mFormat == Format::Wav && mFile != nullptr)
    {
-      const int numSamples = frames * mNumChannels;
-      static thread_local std::vector<int16_t> scratch;
-      scratch.resize((size_t)numSamples);
-      for (int i = 0; i < numSamples; i++)
-         scratch[i] = FloatToPcm16(interleaved[i]);
-
-      fwrite(scratch.data(), sizeof(int16_t), (size_t)numSamples, mFile);
+      const size_t numSamples = (size_t)frames * (size_t)mNumChannels;
+      const int enc = (int)mWavEncoding;
+      static thread_local std::vector<uint8_t> scratch;
+      scratch.resize(numSamples * (size_t)WavFormat::BytesPerSample(enc));
+      WavFormat::Encode(enc, interleaved, numSamples, scratch.data());
+      if (fwrite(scratch.data(), 1, scratch.size(), mFile) != scratch.size())
+         mWriteOk = false;
       mFramesWritten += frames;
    }
 }
@@ -309,15 +298,22 @@ void AudioFileWriter::CloseWav()
    if (mFile == nullptr)
       return;
 
-   const uint32_t dataBytes = (uint32_t)(mFramesWritten * mNumChannels * 2);
-   const uint32_t riffSize = 36 + dataBytes;
-
-   fseek(mFile, 4, SEEK_SET);
-   WriteU32(mFile, riffSize);
-   fseek(mFile, 40, SEEK_SET);
-   WriteU32(mFile, dataBytes);
-
-   fclose(mFile);
+   // Same close as AudioFileWriter.cpp: pad an odd data chunk, then rewrite
+   // the whole header with the real sizes.
+   const int enc = (int)mWavEncoding;
+   const uint64_t dataBytes = (uint64_t)mFramesWritten * (uint64_t)mNumChannels * (uint64_t)WavFormat::BytesPerSample(enc);
+   if ((dataBytes & 1u) != 0)
+   {
+      const uint8_t zero = 0;
+      if (fwrite(&zero, 1, 1, mFile) != 1)
+         mWriteOk = false;
+   }
+   const std::vector<uint8_t> header =
+      WavFormat::BuildHeader(enc, (uint32_t)std::lround(mSampleRate), mNumChannels, (uint64_t)mFramesWritten);
+   if (fseek(mFile, 0, SEEK_SET) != 0 || fwrite(header.data(), 1, header.size(), mFile) != header.size())
+      mWriteOk = false;
+   if (fclose(mFile) != 0)
+      mWriteOk = false;
    mFile = nullptr;
 }
 

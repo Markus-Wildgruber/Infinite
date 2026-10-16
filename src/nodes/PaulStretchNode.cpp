@@ -1,4 +1,5 @@
 #include "PaulStretchNode.h"
+#include "nodes/NodeButtons.h"
 
 #if defined(__APPLE__)
 #include <Accelerate/Accelerate.h>
@@ -163,6 +164,7 @@ public:
    {
       mSampleRate = sampleRate;
       mSelfEnv.SetSampleRate(sampleRate);
+      mSelfEnv.Reset(); // a fresh start begins from silence (see Envelope::Reset)
       mSelfEnv.SetADSR(2.0f, 0.0f, 1.0f, 20.0f);
 
       mOutputBuffers[0].Clear();
@@ -822,4 +824,20 @@ void PaulStretchNode::SweepPrepare()
    mAudioNode->TriggerPreview(0.0f);
    // Smallest window: the default 32768 needs ~16 blocks before its first hop, past the sweep's probe.
    windowSizeIndex = 0;
+}
+
+// Generic button API: the card's buttons (the caller pushes the undo
+// checkpoint the card pushes before Record/Stop).
+std::vector<std::string> PaulStretchNode::ButtonNames() const
+{
+   return { "record", "stop", "audition", "stop_audition" };
+}
+
+bool PaulStretchNode::PressButton(const std::string& name, std::string& err)
+{
+   bool ok = false;
+   if (NodeButtons::RecordToggle(*this, name, err, ok) ||
+       NodeButtons::AuditionToggle(*this, name, err, ok, [this]() { TriggerPreview(start); }))
+      return ok;
+   return NodeButtons::Unknown(*this, "PaulStretch", name, err);
 }

@@ -1495,3 +1495,64 @@ void AudioFileNode::CookIfNeeded(int frameId)
 
    mLevels = mAudioNode->ReadLevels();
 }
+
+void AudioFileNode::PressPlay()
+{
+   if (followTransport)
+      Transport::Instance().SetPlaying(true);
+   else
+      Play();
+}
+
+void AudioFileNode::PressPause()
+{
+   if (followTransport)
+      Transport::Instance().SetPlaying(false);
+   else
+      Pause();
+}
+
+void AudioFileNode::PressRestart()
+{
+   if (followTransport)
+      Transport::Instance().Seek(std::max(0.0, (double)offset));
+   else
+      Restart();
+}
+
+bool AudioFileNode::PressButton(const std::string& name, std::string& err)
+{
+   const bool known = name == "play" || name == "pause" || name == "restart";
+   if (!known)
+   {
+      err = "unknown button '" + name + "' (Audio File has: play, pause, restart)";
+      return false;
+   }
+   if (!IsLoaded())
+   {
+      err = "no audio file loaded";
+      return false;
+   }
+   // The card shows Pause while playing and Play otherwise.
+   if (name == "play")
+   {
+      if (IsPlaying())
+      {
+         err = "already playing";
+         return false;
+      }
+      PressPlay();
+   }
+   else if (name == "pause")
+   {
+      if (!IsPlaying())
+      {
+         err = "not playing";
+         return false;
+      }
+      PressPause();
+   }
+   else
+      PressRestart();
+   return true;
+}

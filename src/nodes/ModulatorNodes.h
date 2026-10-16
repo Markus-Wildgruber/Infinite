@@ -293,6 +293,10 @@ public:
 private:
    float mLast = -1.0f;      // sentinel: not yet initialized
    double mLastBeats = -1.0; // beat at which mLast was last updated
+   // Transport::ResetEpoch at the last update: a seek/stop/loop lap restarts
+   // the smoother on its target, so an offline take from `start` does not
+   // inherit whatever the live run left in mLast (two takes match).
+   unsigned long long mLastEpoch = ~0ull;
 };
 
 // Records whatever modulator is patched into "in" (or its own `in` knob when
@@ -338,6 +342,13 @@ public:
    void StartPlayback();
    void StopPlayback();
    void Clear();
+   // The card's "record" button: recording runs on the beat clock, so a
+   // stopped transport is started first, then StartRecording().
+   void PressRecord();
+   // Generic button API (INode, the assistant's press_button): "record"
+   // (PressRecord), "stop" (StopRecording, which starts the loop at once).
+   std::vector<std::string> ButtonNames() const override { return { "record", "stop" }; }
+   bool PressButton(const std::string& name, std::string& err) override;
 
    bool IsRecording() const { return mRecording; }
    int SampleCount() const { return (int)mData.size(); }

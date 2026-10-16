@@ -529,6 +529,11 @@ namespace app
             if (c.enabled && c.srcUid != 0 && Arrange::LaneEffectivelyEnabled(gArrange, lane))
             {
                GraphNode* gn = FindNodeByUid(c.srcUid);
+               // A group clip on a video lane draws nothing itself - it
+               // gates the group's pictures (GroupTimelineWindows) - so it
+               // is no layer, and the lanes below show through.
+               if (gn != nullptr && ArrangeIsGroupNode(*gn))
+                  gn = nullptr;
                int srcOutput = c.srcOutput;
                // A clip plays what its node gives the canvas: bypassed
                // effect -> the picture feeding it, bypassed source -> nothing.
@@ -1736,11 +1741,15 @@ namespace app
       GraphNode* gn = FindNodeByIndex(nodeIndex);
       if (gn == nullptr || gn->node == nullptr)
          return 0;
+      // A group fits any lane (it gates, it does not play): its natural lane
+      // follows what its members make - ArrangeNaturalLaneType.
       if (laneType < 0)
-         laneType = ArrangeLaneTypeForNode(*gn);
-      if (laneType == Arrange::kLaneAudio ? !IsNodeAudioCompatible(*gn) : !IsNodeVideoCompatible(*gn))
+         laneType = ArrangeNaturalLaneType(*gn);
+      if (!ArrangeClipSourceFits(*gn, laneType))
          return 0;
-      if (srcOutput < 0)
+      if (ArrangeIsGroupNode(*gn))
+         srcOutput = 0;
+      else if (srcOutput < 0)
          srcOutput = ArrangeDefaultOutput(*gn, laneType);
 
       uint64_t made = 0;
@@ -1912,9 +1921,11 @@ namespace app
       if (!loc.Valid() || gn == nullptr || gn->node == nullptr)
          return false;
       const int laneType = gArrange.lanes[loc.lane].type;
-      if (laneType == Arrange::kLaneAudio ? !IsNodeAudioCompatible(*gn) : !IsNodeVideoCompatible(*gn))
+      // A group is a valid source on any lane: the clip then gates the group
+      // (GroupTimelineWindows) instead of playing a node.
+      if (!ArrangeClipSourceFits(*gn, laneType))
          return false;
-      const int out = ArrangeDefaultOutput(*gn, laneType);
+      const int out = ArrangeIsGroupNode(*gn) ? 0 : ArrangeDefaultOutput(*gn, laneType);
       return ArrangeEdit([&]()
       {
          Arrange::Clip* c = Arrange::FindClip(gArrange, clipId);

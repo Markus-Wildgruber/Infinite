@@ -62,6 +62,18 @@ public:
    ImageCable& Input() { return mInput; }
    INode* BypassSource() override { return mInput.GetSource(); }
    void Clear() { mNeedsClear = true; }
+   // Generic button API (INode): "clear", the card's Clear.
+   std::vector<std::string> ButtonNames() const override { return { "clear" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "clear")
+      {
+         Clear();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Trails has: clear)";
+      return false;
+   }
 
    float decay = 0.92f;
    float zoom = 1.0f;
@@ -110,6 +122,18 @@ public:
    ImageCable& Input() { return mInput; }
    INode* BypassSource() override { return mInput.GetSource(); }
    void Reseed() { mNeedsSeed = true; }
+   // Generic button API (INode): "reseed", the card's Reseed.
+   std::vector<std::string> ButtonNames() const override { return { "reseed" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "reseed")
+      {
+         Reseed();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Reaction Diffusion has: reseed)";
+      return false;
+   }
    void ApplyPreset(int index);
 
    int preset = 0;

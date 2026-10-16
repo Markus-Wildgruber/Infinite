@@ -2,6 +2,11 @@
 
 #include "INode.h"
 
+// What a cable reads while its source's group is muted (app/graph/Groups.cpp):
+// a shared 1x1 transparent-black texture the app creates on the GL thread the
+// first time any group closes. 0 until then (reads as "no input").
+inline unsigned int gImageCableMutedTexture = 0;
+
 // Typed patch cable carrying a texture handle between two nodes.
 //
 // The cable is typed at compile time: it only ever holds an INode*, so an
@@ -29,6 +34,14 @@ public:
       return (node != nullptr && node->bypassed) ? nullptr : node;
    }
 
+   // Group mute gate, main thread only. Set every frame by the app
+   // (UpdateGroupGates) on a cable whose source sits in a group the consumer
+   // does not belong to: while *closed is true the source still cooks (a
+   // muted group keeps running, so unmuting is instant), but the consumer
+   // sees gImageCableMutedTexture instead of its pixels. nullptr = ungated.
+   void SetGroupGate(const bool* closed) { mGateClosed = closed; }
+   bool GroupGateClosed() const { return mGateClosed != nullptr && *mGateClosed; }
+
    // Pulls the upstream node's output for this frame, cooking it if needed.
    unsigned int Pull(int frameId)
    {
@@ -36,6 +49,8 @@ public:
       if (node == nullptr)
          return 0;
       node->CookIfNeeded(frameId);
+      if (GroupGateClosed())
+         return gImageCableMutedTexture;
       return node->GetOutputTexture(ResolvedOutput(node));
    }
 
@@ -46,6 +61,8 @@ public:
    unsigned int Texture() const
    {
       INode* node = Resolved();
+      if (node != nullptr && GroupGateClosed())
+         return gImageCableMutedTexture;
       return node ? node->GetOutputTexture(ResolvedOutput(node)) : 0;
    }
 
@@ -66,6 +83,11 @@ public:
    unsigned long long Revision() const
    {
       INode* node = Resolved();
+      // A constant while gated, distinct from any real stamp, so a consumer
+      // that caches on its input revision re-renders once on mute and once
+      // on unmute, and not every frame in between.
+      if (node != nullptr && GroupGateClosed())
+         return 0x6D7574656400000Full;
       return node ? node->TextureRevision() : 0;
    }
 
@@ -77,4 +99,5 @@ private:
 
    INode* mSource = nullptr;
    int mSourceOutput = 0;
+   const bool* mGateClosed = nullptr;
 };

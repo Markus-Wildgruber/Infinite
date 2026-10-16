@@ -72,6 +72,7 @@ public:
       if (n >= kMaxConsumers)
          return -1;
       mCursorHeads[n].store(mTail.load(std::memory_order_relaxed), std::memory_order_relaxed);
+      mGates[n] = CursorGate();
       mNumCursors = n + 1;
       return n;
    }
@@ -90,6 +91,31 @@ public:
    // a freshly wired one).
    void AdoptConsumers(int count, const size_t heads[kMaxConsumers])
    {
+      AdoptConsumers(count, heads, nullptr, nullptr);
+   }
+
+   // Same, plus the group-mute gate each new cursor reads through (nullptr =
+   // ungated) and, per new cursor, which OLD cursor id it continues (-1 =
+   // fresh), so the held-note record that lets a mute release every held note
+   // follows the consumer across a rebuild instead of being forgotten - a
+   // forgotten held note would be a stuck note the moment its group mutes.
+   void AdoptConsumers(int count, const size_t heads[kMaxConsumers],
+                       const int oldCursor[kMaxConsumers],
+                       const std::atomic<bool>* const gates[kMaxConsumers])
+   {
+      count = std::clamp(count, 0, (int)kMaxConsumers);
+      CursorGate previous[kMaxConsumers];
+      for (int i = 0; i < kMaxConsumers; i++)
+         previous[i] = mGates[i];
+      const int previousCount = mNumCursors;
+      for (int i = 0; i < count; i++)
+      {
+         const int from = oldCursor != nullptr ? oldCursor[i] : -1;
+         mGates[i] = (from >= 0 && from < previousCount) ? previous[from] : CursorGate();
+         mGates[i].open = gates != nullptr ? gates[i] : nullptr;
+      }
+      for (int i = count; i < kMaxConsumers; i++)
+         mGates[i] = CursorGate();
       for (int i = 0; i < count; i++)
          mCursorHeads[i].store(heads[i], std::memory_order_relaxed);
       mNumCursors = count;
@@ -156,11 +182,36 @@ public:
 
       size_t head = mCursorHeads[cursor].load(std::memory_order_relaxed);
       const size_t tail = mTail.load(std::memory_order_acquire);
+      CursorGate& gate = mGates[cursor];
 
       int n = 0;
+      // Group mute (the cable leaves a muted group): every note this consumer
+      // is still holding gets its note-off now, then everything queued for it
+      // is dropped - note-ons would sound, and the producer's own note-offs
+      // for the notes just released would be duplicates.
+      if (gate.open != nullptr && !gate.open->load(std::memory_order_relaxed))
+      {
+         while (gate.numHeld > 0 && n < maxCount)
+         {
+            const HeldNote& h = gate.held[--gate.numHeld];
+            NoteEvent off;
+            off.note = h.note;
+            off.voiceId = h.voiceId;
+            off.source = h.source;
+            off.isNoteOn = false;
+            off.velocity = 0.0f;
+            off.frameOffset = 0;
+            out[n++] = off;
+         }
+         mCursorHeads[cursor].store(tail, std::memory_order_release);
+         return n;
+      }
+
       while (head != tail && n < maxCount)
       {
-         out[n++] = mEntries[head];
+         const NoteEvent& e = mEntries[head];
+         TrackHeld(gate, e);
+         out[n++] = e;
          head = (head + 1) % kCapacity;
       }
       mCursorHeads[cursor].store(head, std::memory_order_release);
@@ -187,6 +238,55 @@ public:
    uint64_t OverflowCount() const { return mOverflowCount.load(std::memory_order_relaxed); }
 
 private:
+   // Per-cursor group-mute state - owning-thread-only, like the cursor table.
+   // `held` records what this consumer has been sent note-ons for and not yet
+   // note-offs (tracked on every cursor, gated or not, so a cable that becomes
+   // a group boundary while notes are down still knows what to release).
+   // Bounded: past kMaxHeldTracked the oldest record is forgotten.
+   struct HeldNote
+   {
+      int note = 0;
+      int voiceId = 0;
+      const void* source = nullptr;
+   };
+   static constexpr int kMaxHeldTracked = 32;
+   struct CursorGate
+   {
+      const std::atomic<bool>* open = nullptr;
+      int numHeld = 0;
+      HeldNote held[kMaxHeldTracked];
+   };
+
+   static void TrackHeld(CursorGate& gate, const NoteEvent& e)
+   {
+      if (e.bendUpdate)
+         return;
+      if (e.isNoteOn)
+      {
+         if (gate.numHeld == kMaxHeldTracked)
+         {
+            for (int i = 1; i < kMaxHeldTracked; i++)
+               gate.held[i - 1] = gate.held[i];
+            gate.numHeld--;
+         }
+         gate.held[gate.numHeld++] = HeldNote{ e.note, e.voiceId, e.source };
+         return;
+      }
+      for (int i = gate.numHeld - 1; i >= 0; i--)
+      {
+         const HeldNote& h = gate.held[i];
+         const bool match = (e.voiceId != 0 && h.voiceId != 0) ? h.voiceId == e.voiceId
+                                                                : (h.note == e.note && h.source == e.source);
+         if (match)
+         {
+            for (int k = i + 1; k < gate.numHeld; k++)
+               gate.held[k - 1] = gate.held[k];
+            gate.numHeld--;
+            return;
+         }
+      }
+   }
+
    // The cursor blocking the ring the most: the one with the largest backlog
    // `(tail + kCapacity - head) % kCapacity`, not the numerically smallest
    // raw ring index. Picking the smallest index used to pick the wrong
@@ -229,6 +329,7 @@ private:
    }
 
    NoteEvent mEntries[kCapacity];
+   CursorGate mGates[kMaxConsumers];
    std::atomic<size_t> mCursorHeads[kMaxConsumers];
    int mNumCursors = 0;
    std::atomic<size_t> mTail { 0 };

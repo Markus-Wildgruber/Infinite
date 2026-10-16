@@ -336,11 +336,10 @@ namespace app
    //
    // Edge/corner resizing no longer exists (imgui-node-editor's c_Regions
    // list was narrowed to Header+Center - see the comment at its
-   // definition), so the box's size is purely a function of its members: the
-   // only way to grow it is to drag a loose node in, and the only way to
-   // shrink it is to drag a member out. That still reads as "reach out and
-   // grab that one too", it just happens by moving the node instead of
-   // dragging the box's edge over it.
+   // definition), so the box's size is purely a function of its members:
+   // dragging a member outward grows it, dragging it back shrinks it. Joining
+   // and leaving are explicit (Ctrl+G, the context menu, the API) - a loose
+   // node dragged over the box is not adopted.
    //
    // Runs before the group draws itself, using last frame's box (this node's
    // position plus the width/height/headerH already synced onto n) against
@@ -349,27 +348,22 @@ namespace app
    // this frame's live one.
    void AutoFitGroupToMembers(GraphNode& gn, GroupNode* n)
    {
-      const ImVec2 nodePos = ed::GetNodePosition(gn.NodeId());
-      const ImVec2 boxMin(nodePos.x, nodePos.y + n->headerH);
-      const ImVec2 boxMax(boxMin.x + n->width, boxMin.y + n->height);
+      // Membership is explicit (Ctrl+G, "Add to group", the API - see
+      // app/graph/Groups.cpp): dragging a node over the box never adopts it.
+      // The one exception is a group from a patch saved before membership was
+      // saved at all, which adopts what lies inside it exactly once, after
+      // its nodes have been laid out (RestoreGroupMembership arms the count).
+      if (n->legacyAdoptFrames > 0)
+      {
+         n->legacyAdoptFrames--;
+      }
+      else if (n->legacyAdoptFrames == 0)
+      {
+         LegacyAdoptByGeometry(gn, n);
+         n->legacyAdoptFrames = -1;
+      }
 
       std::set<int>& members = gGroupMembers[n];
-
-      // Adopt anything now fully inside the box. A group never adopts another
-      // group (nesting is not supported), nor a node another group already
-      // owns.
-      for (GraphNode& other : gNodes)
-      {
-         if (other.index == gn.index || dynamic_cast<GroupNode*>(other.node.get()) != nullptr)
-            continue;
-         GroupNode* owner = GroupOwning(other.index);
-         if (owner != nullptr && owner != n)
-            continue;
-         const ImVec2 p = ed::GetNodePosition(other.NodeId());
-         const ImVec2 s = ed::GetNodeSize(other.NodeId());
-         if (p.x >= boxMin.x && p.y >= boxMin.y && p.x + s.x <= boxMax.x && p.y + s.y <= boxMax.y)
-            members.insert(other.index);
-      }
 
       // Union the members' bounds, dropping any whose node has been deleted.
       ImVec2 fitMin(0.0f, 0.0f), fitMax(0.0f, 0.0f);
@@ -451,8 +445,11 @@ namespace app
       AutoFitGroupToMembers(gn, n);
 
       const bool isLight = IsThemeLight();
-      const float bgAlpha = isLight ? 0.08f : 0.13f;
-      const float borderAlpha = isLight ? 0.65f : 0.80f;
+      // A muted (or soloed-out, or timeline-closed) group reads dimmed, like
+      // a bypassed node; its members dim with it (StageNodeBodies).
+      const bool closed = GroupIsClosed(n);
+      const float bgAlpha = (isLight ? 0.08f : 0.13f) * (closed ? 0.45f : 1.0f);
+      const float borderAlpha = (isLight ? 0.65f : 0.80f) * (closed ? 0.45f : 1.0f);
       ed::PushStyleColor(ed::StyleColor_NodeBg, ImColor(0, 0, 0, 0));
       ed::PushStyleColor(ed::StyleColor_NodeBorder, ImColor(0, 0, 0, 0));
       ed::PushStyleColor(ed::StyleColor_GroupBg,
@@ -465,7 +462,8 @@ namespace app
       ImGui::BeginGroup();
       if (ImGui::ColorButton("##groupcolor", ImVec4(n->color[0], n->color[1], n->color[2], 1.0f),
                              ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder,
-                             ImVec2(14, 14)))
+                             ImVec2(14, 14)) &&
+          !n->locked) // a locked group's structure (name, colour) is fixed
       {
          PushUndoCheckpoint();
          gColor.target = n->color;
@@ -482,6 +480,8 @@ namespace app
          ImGui::PushStyleColor(ImGuiCol_Text,
                                ImVec4(n->color[0] * 0.4f + 0.6f, n->color[1] * 0.4f + 0.6f,
                                       n->color[2] * 0.4f + 0.6f, 1.0f));
+      if (n->renaming && n->locked)
+         n->renaming = false; // locked while a rename was open (API, undo)
       if (n->renaming)
       {
          if (n->renameJustStarted)
@@ -490,7 +490,8 @@ namespace app
             n->renameJustStarted = false;
          }
          ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0.35f));
-         ImGui::SetNextItemWidth(std::max(60.0f, n->width - 40.0f));
+         // Leaves room for the mute/solo/lock buttons to its right.
+         ImGui::SetNextItemWidth(std::max(60.0f, n->width - 120.0f));
          if (ImGui::InputText("##grouprename", &n->label, ImGuiInputTextFlags_EnterReturnsTrue) ||
              ImGui::IsItemDeactivated())
             n->renaming = false;
@@ -499,7 +500,7 @@ namespace app
       else
       {
          ImGui::TextUnformatted(n->label.c_str());
-         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !n->locked)
          {
             PushUndoCheckpoint();
             n->renaming = true;
@@ -507,6 +508,9 @@ namespace app
          }
       }
       ImGui::PopStyleColor();
+      // Mute (speaker), solo (S) and lock - one undo step each, and all three
+      // stay live on a locked group (lock only refuses hand edits).
+      DrawGroupHeaderButtons(gn, n);
       ImGui::EndGroup();
       const ImVec2 headerSize = ImGui::GetItemRectSize();
       ed::Group(ImVec2(n->width, n->height));

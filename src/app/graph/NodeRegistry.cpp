@@ -526,7 +526,7 @@ namespace app
          if (la.id != lb.id || la.type != lb.type || la.blendMode != lb.blendMode || la.opacity != lb.opacity ||
              la.gainDb != lb.gainDb || la.pan != lb.pan || la.enabled != lb.enabled || la.groupId != lb.groupId ||
              la.mute != lb.mute || la.solo != lb.solo || la.rowHeight != lb.rowHeight ||
-             la.name != lb.name || la.clips.size() != lb.clips.size())
+             la.name != lb.name || la.instrumentUid != lb.instrumentUid || la.clips.size() != lb.clips.size())
             return false;
          for (size_t k = 0; k < la.clips.size(); k++)
          {
@@ -553,7 +553,9 @@ namespace app
                 // compares equal and ArrangeGestureEnd drops it as "no
                 // change", so it would never reach the undo stack - the same
                 // trap the Sample BPM fields above fell into.
-                ca.bypassedModParams != cb.bypassedModParams)
+                ca.bypassedModParams != cb.bypassedModParams ||
+                // MIDI clip notes: a piano-roll gesture changes nothing else.
+                ca.notes != cb.notes)
                return false;
          }
       }

@@ -29,6 +29,11 @@ namespace app
       ScopedPerfTimer perfTimer("BuildPatchData");
       Patch::Data data;
 
+      // Group membership lives in gGroupMembers (by index); each GroupNode
+      // carries it through this serialization as member uids - save, undo,
+      // redo and copy all come through here (see Groups.cpp).
+      SyncGroupMembersText();
+
       // Reverse-lookup tables built once (a single O(N) pass, one dynamic_cast
       // per node per interface) so every per-cable scan below is a map lookup
       // instead of an O(N) linear search - this function used to be O(N^2)
@@ -842,6 +847,9 @@ namespace app
       gNodes.clear();
       InvalidateNodeByUid();
       gLinks.clear();
+      // Every group just went to the retire list; its membership goes with it
+      // (a load/undo rebuilds it from each group's saved member uids).
+      gGroupMembers.clear();
       gModHistory.clear();
       Modulation::Instance().Clear();
       // Same reason as Modulation::Clear() above: gNextIndex restarts at 1,

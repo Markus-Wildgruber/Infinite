@@ -24,7 +24,7 @@ ASSERT=(
   "UNDOTEST:8"
   # Group boxes: they resize to members, do not steal an overlapping group's
   # members, and ungroup frees members without freeing nodes.
-  "GROUPTEST:28"
+  "GROUPTEST:46"
   # Drag-and-drop from the browser onto a node. These wait on an asynchronous
   # media/plugin scan before their first phase, so the budget is deliberately
   # generous - they exit as soon as their verdict prints.

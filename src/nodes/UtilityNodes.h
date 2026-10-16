@@ -74,11 +74,40 @@ public:
    bool renameJustStarted = false;
    float headerH = 28.0f;
 
+   // Group state (saved, undoable through the normal PushUndoCheckpoint
+   // path). mute silences what LEAVES the group - audio fades to silence,
+   // notes are released and dropped, images read black, modulator outputs
+   // hold, geometry is not drawn by a Render 3D outside the group - while the
+   // members keep cooking, so unmuting is instant and in time. solo is
+   // groups-only: while any group is soloed, every other group behaves as
+   // muted. locked refuses hand edits to the members (and to the group's own
+   // structure) - see app/graph/Groups.cpp, which owns all three.
+   bool mute = false;
+   bool solo = false;
+   bool locked = false;
+
+   // Explicit membership, saved as space-separated member uids. The live
+   // list is gGroupMembers (keyed by node index, which changes on every
+   // load/undo); this text is written from it just before every
+   // serialization (SyncGroupMembersText) and read back after every load
+   // (RestoreGroupMembership). kMembersUnset marks a group whose patch had no
+   // "members" key at all - a patch saved before membership was explicit -
+   // which is adopted by geometry once, after its first layout.
+   static constexpr const char* kMembersUnset = "\x01unset";
+   std::string membersText = kMembersUnset;
+   // Runtime only: frames to wait before the one-off legacy geometric
+   // adoption (node sizes are only known after a node has been drawn).
+   int legacyAdoptFrames = -1;
+
    void VisitParams(ParamVisitor& v) override
    {
       v.Text("label", label);
       v.Float("width", width); v.Float("height", height);
       v.Color("color", color);
+      v.Bool("mute", mute);
+      v.Bool("solo", solo);
+      v.Bool("locked", locked);
+      v.Text("members", membersText);
    }
 };
 

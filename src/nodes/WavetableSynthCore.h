@@ -278,7 +278,16 @@ public:
       for (int e = 0; e < kEngines; e++)
          mFreeEngine[e].Reset(sampleRate);
       for (Voice& v : mVoices)
+      {
          v.Reset(sampleRate);
+         for (int e = 0; e < kEngines; e++)
+         {
+            // A fresh start begins from silence (see Envelope::Reset).
+            v.amp[e].Reset();
+            v.pitch[e].Reset();
+            v.filt[e].Reset();
+         }
+      }
       mLastNotePitch = 60.0f;
       mHasLastNote = false;
    }

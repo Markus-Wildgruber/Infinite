@@ -72,6 +72,24 @@ public:
    float Playhead() const;
    void PushParams();
    void TriggerScan();
+   // Generic button API (INode): "trigger", the card's Trig (one-shot scan
+   // mode only; the card shows it only then).
+   std::vector<std::string> ButtonNames() const override { return { "trigger" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name != "trigger")
+      {
+         err = "unknown button '" + name + "' (Spectral Synth has: trigger)";
+         return false;
+      }
+      if (scanMode != SpectralAdditiveDsp::kScanOneShot)
+      {
+         err = "trigger only applies in one-shot scan mode";
+         return false;
+      }
+      TriggerScan();
+      return true;
+   }
 
    // ------------------------------------------------ Parameters
    // Scanning & Playhead

@@ -1,0 +1,142 @@
+```
+=== Infinite – settings gaps found by assistant test run (2026-10-16) ===
+
+GENERAL (all nodes / tool API)
+- Buttons/actions can't be pressed from tools at all. Add a key or a "trigger" call for:
+  Looper Rec/Play/Dub/Clear/Undo, Molder Roll/Iterate/Reset, Note Capturer Record/Play/Clear,
+  CV Recorder Rec, Audio to MIDI Record/Stop/Export MIDI, Predictive Notes/Rhythm/Modulator Learn/Stop,
+  Moves Learn, Resynthesize Randomise/record path, Resynthesize 3D step/randomise, Cloth Reset,
+  Draw Record/Clear, Macro XY record, MIDI CC/Trigger Learn, Sound Analyze Apply,
+  Field Graph Regenerate, Output Export PNG/Record, Drum Sequencer randomise / lane R,
+  Audio Analyze "Start listening", MPC pad hits (pad1..16).
+- Macro Trigger: set_param pressed=true returns OK but reads back 0 straight away. Its press has no usable, verifiable semantics.
+- Many dropdowns are stored as floats/ints, and get_params gives no _options for them, so
+  set_param by option name fails ("expects a number"). Seen on: Audio Filter type, Key-Snap scale/root,
+  MPC padN_mode/sync/div, every effect's sync/rateDiv, glitch uKind, crop uMode ...
+  The option names only show up in get_bindings. Put them in get_params _options too.
+- Modulatable dropdowns/toggles have no dstKey and use hash-like param numbers (422, 439, 682 ...),
+  listed in random order (MPC, Looper, LFO, Draw, Delay, Stutter ...). Every
+  modulatable param should have a dstKey, in a stable order.
+- LFO, Draw and all shader effects (convolve, blur ...) list modulatable params with no dstKey at all.
+- Labels are ambiguous: Drum Sequencer lane params all say "transient/decay/pitch" (no lane number);
+  Arpeggiator has two params labelled "rate".
+- Empty input labels on Math, Compare, Blend, Layer Stack, Switcher, displace, lut, lookup,
+  Image Analyze, Audio Texture, Audio Ribbon, Draw, Image to Points, all shader effects.
+  Use "A/B", "base/top", "map" etc.
+- Phantom "image out" pin on Audio Out, OSC Send, Field Graph, Group (help says there's no output).
+- canBypass=false on nodes that should be bypassable: Dynamics, Spectrum Slide, Shape Resonator,
+  displace, Audio Displacement, Displacement, Material.
+- Inconsistent keys: path vs filePath (Granular), snake_case (PaulStretch), rateBeats vs
+  rateDiv vs interval/unit vs stepBeats. Check whether sync 0/1 means the same everywhere
+  (Delay sync=1 means synced, but the options lists say index 0="Synced").
+- macOS help text on Windows: Image Source, Audio In, Plugin (Audio Unit/.component/Finder),
+  Remove Background (needs macOS Vision, so probably non-functional on Windows), Text 3D default font Helvetica.
+  Rename "Syphon In" to "Spout In" on Windows. Group help shows a raw {mod} placeholder.
+- Undocumented params: "analog" (most audio FX), Drive "color", Frequency Shifter "range",
+  Random Note Generator "groove", Audio File "gain/attack/release", Audio Texture "windowSizeIndex".
+- No way to list devices/fonts/plugins/grooves from tools: MIDI devices (int index), Video In
+  deviceId, Audio In deviceId, Text fontName, Plugin id, NDI/Spout sources, Drum groove names.
+
+SYNTHS
+- Grain Molder: no path param. You can't load a file at all, only record.
+  Its saved key "key" shows as "gmKey" in bindings; descending shows as "gmOrder".
+- Drum Sequencer: setting patternName to any string is accepted silently and loads nothing.
+  Make it validate + load the groove, or add a groove index. rate has no dstKey; mute/solo aren't modulatable.
+- MPC: pad trigger pins have no key; pad mode/sync/div don't take option names; no Folder... load param.
+- Looper: Rec/Play/Dub/Clear/Undo exist only as unnamed modulation targets.
+- Sampler: no root-note param (always relative to C4), no attack (only decay), no separate loop points.
+- Metallic: no ADSR, no pan, no velocity-sensitivity amount.
+- Analog: oct/semi/voices stored as float (int on every other synth); no pw2.
+- Molder: seed/generation not modulatable.
+- Oscillator/Wavetable etc.: OK.
+
+AUDIO EFFECTS
+- Stutter: help mentions a "grain" param that doesn't exist (only steps/gateMask). gateMask is a
+  raw 65535 bitmask; mix and timeMs aren't modulatable.
+- Delay: timeMs isn't modulatable; no L/R times, no HP/LP on repeats, no modulation.
+- Audio Filter: help says 12 types, but options list 14 (comb +/-).
+- Dynamics: no knee, no lookahead, no gain-reduction modulator output; can't be bypassed.
+- Limiter: help is generic placeholder text; no gain-reduction output.
+- Reverb: no low/high cut, no freeze, no modulation.
+- Ring Mod / Resonator Bank / Formant / Shape Resonator: no note input to track pitch;
+  Resonator Bank "Chord" has no chord-type choice.
+- Transient Shaper: no output gain.  Pitch Shifter: no formant keep.
+- Plugin: with nothing loaded it never reports params (get_bindings says "ask again" forever);
+  can't load a plugin by path/name; the "open editor" action isn't exposed; has its own bypass param plus the node bypass.
+
+NOTES
+- Note Capturer: help mentions Quantize, but there's no quantize param; Record/Play/Clear missing;
+  the take isn't saved with the patch.
+- Arpeggiator: preset exists only as a modulation target (not a saved key); stepGates is a raw bitmask; 8 steps max.
+- Velocity Curve: the custom curve can't be saved or set (only one "curve" float).
+- Glide: only a chromatic glissando. Add real portamento (continuous pitch per note).
+- Keyboard: no way for tools to send a test note.
+- MIDI Notes: no input-device selection param.
+- Gate: only ms; add tempo-synced length / % of note.  Quantizer: no strength or swing.
+- Humanizer/Chorder/Bouncing Balls/Random Note Generator: no seed (except where listed);
+  Chorder has no voicing/inversion/progression; Note Strum has no up/down/alternate direction.
+- Note Transpose: add an octave param.  Note Router: one probability for all 4 outputs.
+- MIDI File: no track/channel selection.
+
+MODULATORS / MACROS / PREDICTION
+- Vibrato: only rateHz. Add depth, delay/fade-in, shape, tempo sync.
+- LFO: rate in beats only (add Hz/free mode), no retrigger/reset input, no bipolar output, no pulse width.
+- Envelope: can't be triggered from notes (needs a gate/note input); no curve shape; no out range.
+- Macro Knob: help mentions response curve + invert, but those params don't exist.
+- Macro Radio Selector: no option labels.  Macro Step Gate: 8 steps max, bitmask.
+- Image Analyze: help mentions ROI boxes, but there are no ROI params.
+- Audio Analyze: no band-edge config, no onset threshold, no device select.
+- Smoothing: amount has no time unit (add ms; separate rise/fall).
+- Note to CV: no priority (last/low/high).
+- Random: seed is a float.  Audio File: listed under Modulators but outputs audio.
+- Drift: follow-leader uses a node index, which breaks after undo/delete.
+- Predictive Quantize/Velocity: profile is global; no reset, no per-node option.
+
+VISUAL (SOURCE / EFFECTS / COMPOSITING)
+- Ramp: help + stopCount allow 8 stops, but only stop0-4 have keys (set_param stop7 gives
+  "unknown param"). Stops 5-7 can't be set.
+- Shape (and all named shapes): size, sizeX/sizeY and aspect overlap; unclear which wins.
+- Text: no background, rotation, bold/italic.
+- Formula: help mentions presets, but there's no preset param.
+- Video: no position/scrub param.
+- Draw: can't paint strokes programmatically; no Clear.
+- Audio Texture: no colour-map param.
+- Shader effects in general: no mix/opacity and no mask input on most (blur, glitch, liquify, kaleidoscope, bloom ...).
+- radialblur: help says zoom or spin, but there's no spin mode.  dropshadow: help says blurred, but there's no blur param.
+- addnoise: no seed/static/mono option.  vignette: no colour.  halftone: no dot colours.
+- convolve: keys are "uK[0]".."uK[8]" while labels say k11..k33.
+- Curves: help mentions shadow/mid/highlight lift + S-curve controls, but there are only curve strings.
+- lut: can't load a .cube file (needs a LUT image).  transform: no pivot, no wrap/tile mode.
+- Feedback/Reaction Diffusion: no reset/clear.  Blend/Layer Stack: no per-layer transform or mask.
+- Audio Color Ramp: no attack/release smoothing.
+
+3D
+- Particle System: no emitter position/rotation, no emit-from-geometry input, no burst trigger,
+  no colliders/attractors, no sprite texture.
+- Switcher 3D: has a "crossfade" param although help says it always hard-cuts. Remove it or implement it.
+- Transform/Array/Subdivide/... (shared modifier schema): each shows ~50 params unrelated to its op.
+  Expose only the relevant ones; Transform help doesn't document "op".
+- Render 3D: no fog, DOF or bloom; renderPass options undocumented; 4 geo / 3 lights (Group 3D helps).
+- Camera: no aperture/focus distance.  Light: no per-light shadow toggle.
+- Model 3D: no glTF/FBX, no animation playback.
+- Metaballs: manually placed balls can't be positioned.
+- Text 3D: no alignment, no multi-line.  Audio Ribbon: material params are a subset of the others.
+- Instance on Points: no per-instance random colour.
+
+UTILITY
+- Mixer: help says 4-8 slots and there are 8 inputs, but params go to gain11/pan11 (12 channels).
+  No master gain.
+- Audio Out: no device/master-volume param; has a phantom image output.
+- Audio Meter: no modulator outputs (level/peak); no LUFS.
+- Output: Export/Record can't be triggered.
+- OSC Receive: only one float argument; no multi-arg/bundles.
+- Projection: grid max 8x8; no edge blending / soft-edge / mask.
+- NDI In/Out: video only, no audio.
+```
+
+The biggest gaps:
+- **Actions:** none of the buttons (Rec, Learn, Reset, Apply, Export) can be pressed from tools.
+- **Grain Molder:** you can't load a file into it at all; there's no file path setting.
+- **Ramp:** colour stops 6–8 have no settings, even though the help and the stop count allow 8.
+- **Dropdowns:** many dropdown settings don't accept option names, only numbers.
+- **Drum Sequencer:** setting a pattern name is accepted without an error but loads nothing.

@@ -7,8 +7,14 @@ VoiceAllocator::VoiceAllocator(int maxVoices)
 
 void VoiceAllocator::SetSampleRate(double sr)
 {
+   // Only ever called from PrepareToPlay: every voice starts idle and silent.
    for (auto& voice : mVoices)
+   {
       voice.envelope.SetSampleRate(sr);
+      voice.envelope.Reset();
+      voice.note = -1;
+      voice.voiceId = 0;
+   }
 }
 
 void VoiceAllocator::SetADSR(float attackMs, float decayMs, float sustainLevel, float releaseMs)

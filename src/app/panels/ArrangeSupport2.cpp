@@ -619,12 +619,19 @@ namespace app
    {
       Arrange::Tick end = 0;
       for (const Arrange::Lane& l : gArrange.lanes)
+      {
+         // A MIDI clip has no source of its own: it renders when its lane's
+         // instrument exists.
+         const bool midiLive = l.type == Arrange::kLaneMidi && l.instrumentUid != 0 && FindNodeByUid(l.instrumentUid) != nullptr;
          for (const Arrange::Clip& c : l.clips)
          {
-            if (!c.enabled || c.srcUid == 0 || FindNodeByUid(c.srcUid) == nullptr)
+            if (!c.enabled)
+               continue;
+            if (l.type == Arrange::kLaneMidi ? !midiLive : (c.srcUid == 0 || FindNodeByUid(c.srcUid) == nullptr))
                continue;
             end = std::max(end, c.End());
          }
+      }
       return end;
    }
 
@@ -686,7 +693,8 @@ namespace app
          if (l.type != Arrange::kLaneVideo)
             continue;
          for (const Arrange::Clip& c : l.clips)
-            if (c.enabled && c.srcUid != 0 && c.End() > a && c.start < b && FindNodeByUid(c.srcUid) != nullptr)
+            if (c.enabled && c.srcUid != 0 && c.End() > a && c.start < b && FindNodeByUid(c.srcUid) != nullptr &&
+                !ArrangeIsGroupSource(c.srcUid)) // a group clip gates; it draws no picture of its own
                n++;
       }
       return n;
@@ -1035,8 +1043,8 @@ namespace app
 
       const bool isAudioKind = (kind == Arrange::ImportMediaKind::Audio);
       const bool isAudioLane = (gArrange.lanes[laneIdx].type == Arrange::kLaneAudio);
-      if (isAudioKind != isAudioLane)
-         return;
+      if (isAudioKind != isAudioLane || gArrange.lanes[laneIdx].type == Arrange::kLaneMidi)
+         return; // media never lands on a MIDI lane
 
       const char* typeName = isAudioKind ? "Audio File" : (kind == Arrange::ImportMediaKind::Video ? "Video" : "Image Source");
       const char* category = isAudioKind ? "Modulators" : "Source";
@@ -1394,6 +1402,11 @@ namespace app
                // a one-shot or free-time recording, which arrives at native
                // speed. Either way the box holds the whole file.
                c->syncToTempo = detected;
+               // A rendered-to-track bounce is already on the grid it was
+               // rendered against; stretching it would move it off the
+               // samples it was rendered at (see keepNativeSpeed).
+               if (pending.keepNativeSpeed)
+                  c->syncToTempo = false;
                c->length = Arrange::SampleClipLengthTicks(
                   c->sourceDurationSeconds,
                   Arrange::SampleSourceBpm(c->syncToTempo, c->sampleBpm, bpm));

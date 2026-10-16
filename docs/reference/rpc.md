@@ -63,7 +63,7 @@ request. `get_bindings {index}` lists a node's parameters with their numbers, ke
 | `list_node_types` | | `{<category>: [type, ...]}` |
 | `describe` | `type?` | without `type`: `{types}`. With it: `{type, category, params[{key, kind, default}], inputs[{slot, name, kind, label}], outputs[{label, kind, modulator}], canBypass, hardwareDriven, help}`. `help` is the node's reference text, with units and what each output's value means |
 | `get_graph` | | the patch as JSON (nodes with `label` when renamed, cables, `modulation`, `expressions`, `globals`) plus `links[{id, srcIndex, srcOutput, dstIndex, dstSlot \| dstParamPin \| dstColorPin}]` |
-| `get_params` | `index` | `{"<kind> <key>": "<value>", ...}`, every saved value of the node. Kinds: `f` float, `i` int, `b` bool (`"1"`/`"0"`), `c` colour (`"r g b"`), `s` text - returned literally (a Windows path has single backslashes), not in the patch file's escaped form. Numbered keys count from 0 (`mute0` is the Mixer channel labelled 1). Dropdowns also appear in `_options` (`{"i band1Type": ["low shelf", "peak", ...]}`, index order) once the node has drawn; `_label` is the node's custom name |
+| `get_params` | `index` | `{"<kind> <key>": "<value>", ...}`, every saved value of the node. Kinds: `f` float, `i` int, `b` bool (`"1"`/`"0"`), `c` colour (`"r g b"`), `s` text - returned literally (a Windows path has single backslashes), not in the patch file's escaped form. Numbered keys count from 0 (`mute0` is the Mixer channel labelled 1). Dropdowns also appear in `_options` (`{"i band1Type": ["low shelf", "peak", ...]}`, index order) once the node has drawn; `_label` is the node's custom name; `_modulated` (`{key: {current, by, param}}`) lists the parameters a modulator or expression drives |
 | `get_notes` | `index`, `from?`, `to?`, `low?`, `high?` (MIDI), `limit?` (200) | `{unit, count, range[lo, hi], pitchClasses{}, notes[{t, dur, note, midi, level, channel?}], durationSeconds?, truncated?, warning?}`: Audio to MIDI's transcription (seconds) or a MIDI File's notes (beats) |
 | `get_bindings` | `index?` | `{modulation[{dst, param, src, srcOutput, lo, hi, hasRange, enabled, curve, dstKey?, dstLabel?, min?, max?}], expressions[{dst, param, text, curve, error?, shadowedByModulator?}], globals[{name, expr, value, error?}]}`; with `index`, also `params[{param, dstKey?, dstLabel?, min?, max?, options?}]` for that node |
 | `explain` | `all?` | `{text, graph}`: the graph as `Infinite --explain` prints it |
@@ -91,6 +91,46 @@ request. `get_bindings {index}` lists a node's parameters with their numbers, ke
 
 Each building call is one undo step.
 
+### Groups
+
+A Group's members are an explicit, saved list (Ctrl+G, "Add to group", or these methods); dragging
+a node over a group's box does not make it a member. Groups do not nest; a node is in at most one.
+
+| Method | Params | Result |
+|---|---|---|
+| `duplicate_node` | `index`, `dx?`/`dy?` (40), `connectInputs?` (true), `id?` | `{index, inputsConnected, id?}`: same type, parameters and label, the same input cables; outgoing cables and modulation are not copied |
+| `create_group` | `nodes` (indices), `label?` | the group `{index, label, members[], mute, solo, locked}` |
+| `group_add` / `group_remove` | `group`, `nodes` | the group |
+| `set_group` | `group`, `mute?`, `solo?`, `locked?`, `label?` | the group. `mute` silences everything leaving the group (audio fades over ~10 ms, notes stop, images go black, modulators hold) while members keep running; `solo` mutes every other group, ungrouped nodes are unaffected; `locked` refuses edits to members |
+| `list_groups` | | `{groups[]}` |
+| `apply_sound_profile` | `index` (Sound Analyze), `target` (synth) | `{applied}`: what Apply wrote |
+
+While a group is locked, every editing method touching one of its members (`set_param`, `connect`,
+`disconnect`, `delete_node`, `set_bypass`, `rename_node`, `move_node`, `bind_modulator`,
+`unbind_modulator`, `set_expression`, `group_add`/`group_remove`, `apply_sound_profile`'s target)
+fails with `Group '<label>' is locked`. Mute, solo, modulation and the timeline keep working.
+
+### Timeline
+
+| Method | Params | Result |
+|---|---|---|
+| `list_clips` | | `{lanes[], clips[]}` (see the MCP tool description for fields) |
+| `add_clip` | `node` (a node or a group), `output?`, `lane?` (-1 = new lane), `startBeats`, `lengthBeats` | `{clipId}`. A node plays during its clips; a group that has clips is audible only inside them |
+| `move_clip` | `clipId`, `lane?`, `startBeats?`, `lengthBeats?` | `{}` |
+| `set_clip` | `clipId`, `enabled?`, `gainDb?`, `fadeInBeats?`, `fadeOutBeats?`, `name?` | `{}` |
+| `delete_clip` | `clipId` | `{}` |
+| `set_loop` | `enabled?` (true), `startBeats`, `endBeats` | `{enabled, startBeats, endBeats}` |
+| `render_to_track` | `node`, `startBeats?`, `endBeats?` (default: the loop, else 4 bars from the playhead), `tailSeconds?` (2), `normalize?` | `{active, done, ok, progress, message, path, lane, clipId}`; renders offline into a WAV and adds it as an audio clip on a new lane. Poll `render_status` (the MCP tool waits) |
+| `render_status` | | as above |
+| `render_audio_to_file` | `node`, `start` (s), `seconds`, `tail?` (s), `path?` (absolute, or relative = recordings folder), `bitDepth?` (16, 24 default, 32 = float), `sampleRate?` (48000) | `{active, done, ok, progress, message, path, seconds, sampleRate, channels, peakDb, rmsDb}`; offline from a clean start, sample-accurate, repeatable. Poll `render_file_status` (the MCP tool waits) |
+| `render_file_status` | | as above |
+| `press_button` | `node`, `button?` | `{pressed}`, or without `button` `{buttons[]}`: the node's own momentary buttons, as clicking them |
+| `add_midi_track` | `instrument` (a node with a note input), `name?` | `{lane}`; `add_clip` on it makes an empty MIDI clip |
+| `set_midi_notes` | `clipId`, `notes[{t, dur, midi, vel?}]` (beats from the clip start) | `{notes}`; replaces the clip's notes |
+| `get_midi_notes` | `clipId` | `{clipId, lane, startBeats, lengthBeats, instrumentIndex, noteCount, notes[]}` |
+| `capture_notes` | `node` (a note source), `instrument?`, `startBeats?`, `endBeats?` | `{active, done, ok, progress, message, lane, clipId, noteCount}`; renders the source offline over the range into a MIDI clip on a new MIDI lane. Poll `capture_status` |
+| `capture_status` | | as above |
+
 ### Transport
 
 | Method | Params | Result |
@@ -105,7 +145,7 @@ never block the UI thread, so measuring is start-then-poll; the MCP bridge's `an
 
 | Method | Params | Result |
 |---|---|---|
-| `capture_audio` | `node` or `nodes` (1-4 indices), `seconds?` (3, 0.2-30), `frameSeconds?` (0.1), `offline?`, `start?` (seconds, with `offline`) | `{id, seconds, offline?}`. Taps each node's audio output from the same block on, so several nodes are compared over exactly the same span. An Audio Out is measured through the node feeding it. Live, it fails when the engine is off or a node has no audio output. `offline: true` pauses the device and renders the graph itself from `start` (default: the current position) as an offline render does, so the result is sample-accurate and identical every run; the device and transport are restored afterwards. One capture at a time |
+| `capture_audio` | `node` or `nodes` (1-4 indices), `seconds?` (3, 0.2-30), `frameSeconds?` (0.1), `offline?`, `start?` (seconds, with `offline`) | `{id, seconds, offline?}`. Taps each node's audio output from the same block on, so several nodes are compared over exactly the same span. An Audio Out is measured through the node feeding it. Live, it fails when the engine is off or a node has no audio output. `offline: true` pauses the device (none needs to be open) and renders the graph itself from `start` (default: the current position) as an offline render does: from a clean start (every node re-prepared, sequencers on step 0 at their position), with modulation applied every 1/60 s of rendered audio, so the result is sample-accurate and identical every run; the measured nodes are processed even if nothing reaches an Audio Out; the device and transport are restored afterwards. One capture at a time |
 | `analyze_file` | `path` or `node` (a node with a `path`), `notes?` (false), `sound?` (false), `start?`, `length?`, `f0?`, `partials?` | `{id, seconds}`. Decodes the file and analyses it whole, with tempo and key; `notes: true` adds a Basic Pitch transcription summary (Windows/Linux); `sound: true` adds a `sound` profile (f0, inharmonicity, partials with level and T60, ADSR, spectral envelope, `transient`, `air`): of the region `start`/`length` by default, or with `soundMode: "notes"` merged over the file's isolated transcribed notes in `low`..`high` (MIDI) with `multiNote.keyTracking` (level and harmonic tilt per octave) |
 | `get_sound_profile` | `index` (a Sound Analyze node) | its last profile (as `sound` above, plus `file`), or `{status}` |
 | `analysis_result` | `id` | `{status: "capturing" \| "analyzing", progress}` while running; `{status: "done", result, note?}`; `{status: "error", error}` |

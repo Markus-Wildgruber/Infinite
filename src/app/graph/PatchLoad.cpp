@@ -314,6 +314,11 @@ namespace app
       Transport::Instance().SetScale(data.transport.scale);
       PublishArrangeLoop();
 
+      // Group membership back from each group's saved member uids (uids are
+      // restored above, indices are new), before the rebuild below so the
+      // audio topology is built with the right group gates.
+      RestoreGroupMembership();
+
       // Once, after every node and cable above is wired, not once per audio
       // cable while loading - a per-cable rebuild here could call
       // SetTopology with a half-wired graph, since load order (data.audio is

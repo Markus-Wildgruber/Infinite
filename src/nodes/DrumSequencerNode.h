@@ -115,6 +115,25 @@ public:
 
    void Randomize();
    void ClearPattern();
+   // Generic button API (INode): "randomize" and "clear", the card's
+   // Randomise and Clear (the caller pushes the undo checkpoint the card
+   // pushes). Run/Stop is the `run` param, not a button.
+   std::vector<std::string> ButtonNames() const override { return { "randomize", "clear" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "randomize" || name == "randomise")
+      {
+         Randomize();
+         return true;
+      }
+      if (name == "clear")
+      {
+         ClearPattern();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Drum Sequencer has: randomize, clear)";
+      return false;
+   }
 
    // Randomises one lane's fill + velocity (the "R" button on that row),
    // using the same seeding rules as Randomize() but scoped to a single

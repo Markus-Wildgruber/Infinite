@@ -2124,8 +2124,11 @@ namespace app
       const Transport& tr = Transport::Instance();
       const double bpm = std::max(1.0f, tr.Tempo());
       const double bar = std::max(1e-6, tr.BeatsPerBar());
-      const std::vector<std::string>& divs = MusicTime::RateDivisionList();
-      const char* takeName = (n->take > 0 && n->take - 1 < (int)divs.size()) ? divs[(size_t)(n->take - 1)].c_str() : "free";
+      char secName[32];
+      snprintf(secName, sizeof(secName), "%.2f s", n->takeSeconds);
+      const std::string takeStr = n->takeSeconds > 0.0f ? std::string(secName) : LooperNode::TakeName(n->take);
+      const char* takeName = takeStr.c_str();
+      const bool fixedTake = n->takeSeconds > 0.0f || n->take > 0;
       char len[48];
       const double bars = (double)n->LengthSeconds() * bpm / 60.0 / bar;
       if (std::fabs(bars - std::round(bars)) < 0.02 && bars >= 0.98)
@@ -2141,8 +2144,8 @@ namespace app
          case LooperNode::kArmed:
          {
             double grid = bar;
-            if (n->take > 0)
-               grid = std::min(bar, MusicTime::BeatsFor((MusicTime::RateDivision)std::clamp(n->take - 1, 0, MusicTime::kNumRateDivisions - 1)));
+            if (n->take > 0 && n->takeSeconds <= 0.0f)
+               grid = std::min(bar, LooperNode::TakeBeats(n->take));
             const double into = std::fmod(tr.Beats(), grid);
             snprintf(out, cap, "armed - starts in %.1f beats", grid - into);
             break;
@@ -2163,11 +2166,18 @@ namespace app
             snprintf(out, cap, "stopped - %s - Play resumes%s", len, drift);
             break;
          default:
-            if (n->take > 0)
+            if (fixedTake)
                snprintf(out, cap, "empty - Rec records %s (%s)", takeName, n->syncStart ? "on the grid" : "now");
             else
                snprintf(out, cap, "empty - Rec starts, Rec again ends the take");
             break;
+      }
+      if (n->OneShotSpent() && n->CurrentState() != LooperNode::kRecording && n->CurrentState() != LooperNode::kArmed)
+      {
+         // One shot used: CV Rec edges are ignored until re-armed.
+         const size_t used = strlen(out);
+         if (used + 1 < cap)
+            snprintf(out + used, cap - used, " - one shot used, Re-arm");
       }
       if (n->CurrentState() == LooperNode::kOverdubbing && !unity)
       {
@@ -2203,10 +2213,12 @@ namespace app
       const float len = n->LengthSeconds();
       const float tgt = n->TargetSeconds();
       float span = (st == LooperNode::kRecording && tgt > 0.0f) ? tgt : len;
-      if (span <= 0.0f && n->take > 0)
+      if (span <= 0.0f && n->takeSeconds > 0.0f)
+         span = std::min(n->takeSeconds, n->EffectiveMaxSeconds()); // the take window it would record
+      else if (span <= 0.0f && n->take > 0)
       {
-         const double beats = MusicTime::BeatsFor((MusicTime::RateDivision)std::clamp(n->take - 1, 0, MusicTime::kNumRateDivisions - 1));
-         span = (float)(beats * 60.0 / bpm); // the take window it would record
+         const double beats = LooperNode::TakeBeats(n->take);
+         span = std::min((float)(beats * 60.0 / bpm), n->EffectiveMaxSeconds()); // the take window it would record
       }
       const ImU32 recCol = isLight ? IM_COL32(205, 55, 55, 255) : IM_COL32(235, 90, 90, 255);
 
@@ -2295,16 +2307,21 @@ namespace app
          const float x0 = gAudioContentX;
          const float y0 = ImGui::GetCursorScreenPos().y;
          const float rowH = ImGui::GetFrameHeight();
+         // A spent one-shot shows Rec as "Re-arm": a click re-arms (records
+         // nothing), CV edges are ignored until then (LooperNode::Press).
+         const bool spent = n->OneShotSpent() && !recActive;
          for (int b = 0; b < LooperNode::kNumButtons; b++)
          {
             ImGui::SetCursorScreenPos(ImVec2(x0 + (float)b * cellW, y0));
-            const char* label = b == LooperNode::kRec ? (recActive ? "Stop" : "Rec")
+            const char* label = b == LooperNode::kRec ? (recActive ? "Stop" : spent ? "Re-arm" : "Rec")
                               : b == LooperNode::kPlay ? (playActive ? "Stop" : "Play")
                               : b == LooperNode::kDub ? "Dub" : b == LooperNode::kClear ? "Clear" : "Undo";
             const int style = b == LooperNode::kRec ? (recActive ? 1 : 0)
                             : b == LooperNode::kPlay ? 2 : b == LooperNode::kDub ? 2 : 0;
             const bool lit = b == LooperNode::kPlay ? playActive : b == LooperNode::kDub ? dubActive : false;
-            n->SetButtonLevel(b, DrawGateControl(kIds[b], label, btnW, style, lit));
+            bool driven = false;
+            const bool level = DrawGateControl(kIds[b], label, btnW, style, lit, &driven);
+            n->SetButtonLevel(b, level, /*byHand=*/!driven);
          }
          ImGui::SetCursorScreenPos(ImVec2(x0, y0));
          ImGui::Dummy(ImVec2(gAudioContentW, rowH));
@@ -2327,12 +2344,17 @@ namespace app
       AudioSlider("fade out", &n->fadeOut, 0.0f, 250.0f, "%.0f ms", AudioHalfWidth());
 
       {
-         AudioKnobRow row(3);
-         std::vector<std::string> takeOptions;
-         takeOptions.push_back("free");
-         for (const std::string& s : MusicTime::RateDivisionList())
-            takeOptions.push_back(s);
-         row.Dropdown("take", takeOptions, n->take, [n](int i) { PushUndoCheckpoint(); n->take = i; });
+         AudioKnobRow row(4);
+         // Menu shows the long takes first (free, 64 .. 8 bars, 4 bars .. 1/64);
+         // the stored value keeps its original numbering (LooperNode::TakeToMenu).
+         // A take length in seconds overrides it, so it is greyed out then.
+         const bool bySeconds = n->takeSeconds > 0.0f;
+         if (!gParamRegisterOnly)
+            ImGui::BeginDisabled(bySeconds);
+         row.Dropdown("take", LooperNode::TakeMenu(), LooperNode::TakeToMenu(n->take),
+                      [n](int i) { PushUndoCheckpoint(); n->take = LooperNode::TakeFromMenu(i); });
+         if (!gParamRegisterOnly)
+            ImGui::EndDisabled();
          bool changed = false;
          row.Checkbox("sync", &n->syncStart, &changed);
          if (changed)
@@ -2340,7 +2362,49 @@ namespace app
          row.Checkbox("thru", &n->thru, &changed);
          if (changed)
             PushUndoCheckpoint();
+         row.Checkbox("one shot", &n->oneShot, &changed);
+         if (changed)
+            PushUndoCheckpoint();
          row.End();
+      }
+
+      // Take length in seconds (0 = off: the take menu decides) and the cap on
+      // every take. Appended after the row above: draw order is pin order.
+      AudioSlider("take len", &n->takeSeconds, 0.0f, LooperNode::kTakeSecondsHi, n->takeSeconds > 0.0f ? "%.2f s" : "off",
+                  AudioHalfWidth());
+      ImGui::SameLine();
+      AudioSlider("max len", &n->maxSeconds, LooperNode::kMaxSecondsLo, LooperNode::kMaxSecondsHi, "%.0f s",
+                  AudioHalfWidth());
+
+      // Where the loop WAVs go: Audio Out's folder picker, with the app's
+      // Recordings folder as the default instead of the Desktop.
+      if (!gParamRegisterOnly)
+      {
+         const float btnW = (AudioFullWidth() - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+         if (ImGui::Button("Choose...##looperDir", ImVec2(btnW, 0)))
+         {
+            const std::string start = n->recordDirectory.empty() ? AudioRecordings::GetRecordingsDirectory() : n->recordDirectory;
+            const std::string chosen = Platform::OpenFolderDialog("Choose looper folder", start);
+            if (!chosen.empty() && chosen != n->recordDirectory)
+            {
+               PushUndoCheckpoint();
+               n->recordDirectory = chosen;
+               gPatchDirty = true;
+            }
+         }
+         ImGui::SameLine();
+         ImGui::BeginDisabled(n->recordDirectory.empty());
+         if (ImGui::Button("Recordings##looperDirReset", ImVec2(btnW, 0)))
+         {
+            PushUndoCheckpoint();
+            n->recordDirectory.clear();
+            gPatchDirty = true;
+         }
+         ImGui::EndDisabled();
+         const std::string dest = n->recordDirectory.empty() ? std::string("Recordings folder") : n->recordDirectory;
+         ImGui::TextColored(ImVec4(0.6f, 0.62f, 0.68f, 1.0f), "%s", dest.c_str());
+         if (!n->LoopStatus().empty())
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.35f, 1.0f), "%s", n->LoopStatus().c_str());
       }
       EndAudioBody();
    }

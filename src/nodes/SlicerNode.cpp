@@ -1,4 +1,5 @@
 #include "SlicerNode.h"
+#include "nodes/NodeButtons.h"
 
 #include <algorithm>
 #include <atomic>
@@ -1043,4 +1044,31 @@ void SlicerNode::SweepPrepare()
    mAudioNode->PushBuffer(MakeSweepToneBuffer());
    // Start the audition lane too: these nodes stay silent until something triggers them.
    mAudioNode->TriggerPreviewFromMainThread(-1);
+}
+
+// Generic button API: the card's buttons (the caller pushes the undo
+// checkpoint the card pushes before Record/Stop).
+std::vector<std::string> SlicerNode::ButtonNames() const
+{
+   return { "record", "stop", "audition", "stop_audition", "reslice" };
+}
+
+bool SlicerNode::PressButton(const std::string& name, std::string& err)
+{
+   bool ok = false;
+   if (NodeButtons::RecordToggle(*this, name, err, ok) ||
+       NodeButtons::AuditionToggle(*this, name, err, ok, [this]() { TriggerSlicePreview(-1); }))
+      return ok;
+   if (name == "reslice")
+   {
+      // The card greys re-slice out without a file, and in grid mode (grid slices need no analysis).
+      if (FileName().empty() || sliceBy != 0)
+      {
+         err = FileName().empty() ? "no sample loaded" : "re-slice only applies to onset slicing (sliceBy 0)";
+         return false;
+      }
+      ReSlice(); // runs the onset analysis on a worker; returns at once
+      return true;
+   }
+   return NodeButtons::Unknown(*this, "Slicer", name, err);
 }

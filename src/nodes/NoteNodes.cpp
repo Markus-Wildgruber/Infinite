@@ -36,6 +36,55 @@ namespace
       words[w].store(on ? (cur | bit) : (cur & ~bit), std::memory_order_relaxed);
    }
 
+   // Transport-locked step clocks (Note Sequencer, Arpeggiator, Random Note
+   // Generator, Chorder): a step fires when floor(Beats() / rate) differs from
+   // the step fired last. That dedupe alone has a hole, found from a user's
+   // 60 bpm patch: stop inside step 0, rewind, play - the new run starts on
+   // the step index the old run ended on, so step 0 never fires (silence for
+   // a whole step, ten beats there).
+   // Begin() is called once per block before the step test. A ResetEpoch bump
+   // (seek, rewind, stop, loop lap) marks a reset pending; on the first
+   // PLAYING block after it the last step is forgotten, so the step under the
+   // playhead fires there - a start, a rewind and a loop lap always begin
+   // with their current step. While a reset is pending and the transport is
+   // stopped nothing fires (a stop, or a seek while stopped, must not sound
+   // the step under the playhead - play does). Apart from that it is the old
+   // dedupe: a node prepared while stopped still fires its first step once,
+   // which is what the param sweep's clockless rigs observe. Returns true
+   // when this block may fire; `jumped` is set on the block that applied a
+   // reset (callers with their own run counters re-align there).
+   struct TransportStepGate
+   {
+      unsigned long long epoch = 0;
+      bool seeded = false;  // first block: adopt the epoch, PrepareToPlay already reset
+      bool pending = false; // a transport jump not yet applied
+
+      bool Begin(long long& lastStep, bool& jumped)
+      {
+         const Transport& tr = Transport::Instance();
+         const unsigned long long e = tr.ResetEpoch();
+         jumped = false;
+         if (!seeded)
+         {
+            seeded = true;
+            epoch = e;
+         }
+         else if (e != epoch)
+         {
+            epoch = e;
+            pending = true;
+         }
+         if (!pending)
+            return true;
+         if (!tr.IsPlaying())
+            return false;
+         pending = false;
+         lastStep = -1;
+         jumped = true;
+         return true;
+      }
+   };
+
    // Small fixed-capacity NoteEvent::voiceId -> Value map, real-time-safe (no
    // allocation, linear scan bounded by Capacity - fine at the handful of
    // concurrent voices any of these nodes actually carry). Consumers that
@@ -2491,8 +2540,12 @@ public:
       mSamplePos = 0;
       mHeldCount = 0;
       mLastStep = -1;
+      mRealign = false;
       mStepCounter = 0;
       mGridStep = 0;
+      // Same seed every (re)start, so the random mode plays the same notes in
+      // two offline takes of one patch (ForceAudioRepare re-prepares).
+      mRng = DspMath::WhiteNoise();
       mCurrentOutNote = -1;
       mCurrentOutVoiceId = 0;
       mPendingOffActive = false;
@@ -2571,11 +2624,24 @@ public:
          mCurrentOutNote = -1;
       }
 
+      bool jumped = false;
+      const bool running = mStepGate.Begin(mLastStep, jumped);
+      if (jumped)
+         mRealign = true;
       const double beats = Transport::Instance().Beats();
       const long long step = (long long)std::floor(beats / (double)rateBeats);
-      if (step != mLastStep)
+      if (running && step != mLastStep)
       {
          mLastStep = step;
+         // First step after a start/seek/loop lap: the gate grid and the
+         // pattern start over, so a take from beat 0 always plays the same
+         // first steps however the transport got there.
+         if (mRealign)
+         {
+            mRealign = false;
+            mGridStep = 0;
+            mStepCounter = 0;
+         }
 
          // The grid-gate clock advances on every step tick, unconditionally -
          // including when nothing is held and when the step is gated off.
@@ -2863,6 +2929,8 @@ private:
    int mHeldCount = 0;
 
    long long mLastStep = -1;
+   TransportStepGate mStepGate;
+   bool mRealign = false;
    uint64_t mStepCounter = 0;
    uint64_t mGridStep = 0;
    int mCurrentOutNote = -1;
@@ -3028,48 +3096,81 @@ public:
          mCurrentOutNote = -1;
       }
 
-      const double beats = Transport::Instance().Beats();
-      const long long step = (long long)std::floor(beats / (double)rateBeats);
-      if (step != mLastStep)
+      bool jumped = false;
+      const bool running = mStepGate.Begin(mLastStep, jumped);
+
+      // Sample-accurate steps. This block covers transport beats [b0, b1):
+      // b0 is where the clock stood when the block started (the clock is
+      // advanced before the graph runs, so Beats() alone is the block's END -
+      // reading it made every step fire up to one block early, and a capture
+      // ending on a bar line picked up the next bar's first step). Every step
+      // whose start falls in the block fires at its own frame; the step the
+      // block starts inside fires at frame 0 when it has not fired yet (after
+      // a start, seek, loop lap or reset).
+      Transport& tr = Transport::Instance();
+      const double beatsPerFrame = std::max(1.0, bpm) / (60.0 * std::max(1.0, mSampleRate));
+      // Stopped, the clock does not move: only the step under the playhead
+      // can fire (once - what a freshly prepared node with no clock plays).
+      const bool playing = tr.IsPlaying();
+      const double b0 = !playing ? tr.Beats()
+                      : tr.AudioSampleRate() > 0.0 ? tr.BlockStartBeats()
+                                                   : std::max(0.0, tr.Beats() - (double)numFrames * beatsPerFrame);
+      const double b1 = playing ? b0 + (double)numFrames * beatsPerFrame : b0;
+      const double samplesPerBeat = 1.0 / beatsPerFrame;
+      const double gateSamples = rateBeats * samplesPerBeat * (double)gatePercent / 100.0;
+
+      auto emitOff = [&](int frame)
+      {
+         NoteEvent off;
+         off.note = mCurrentOutNote;
+         off.velocity = 0.0f;
+         off.isNoteOn = false;
+         off.frameOffset = std::clamp(frame, 0, numFrames - 1);
+         off.source = this;
+         off.voiceId = mCurrentOutVoiceId;
+         mOutbox.Push(off);
+         mPendingOffActive = false;
+         mCurrentOutNote = -1;
+      };
+      auto fireStep = [&](long long step, int frame)
       {
          mLastStep = step;
          const int idx = (int)(((step % steps) + steps) % steps);
          mCurrentStepReadout.store(idx, std::memory_order_relaxed);
+         if (!mEnabled[idx].load(std::memory_order_relaxed))
+            return;
+         if (mCurrentOutNote >= 0)
+            emitOff(frame);
 
-         if (mEnabled[idx].load(std::memory_order_relaxed))
+         NoteEvent on;
+         int outNote = mNote[idx].load(std::memory_order_relaxed);
+         if (mUseGlobalScale.load(std::memory_order_relaxed))
+            outNote = MusicTime::SnapToScale(outNote, tr.Key(), tr.Scale(), MusicTime::kSnapNearest);
+         on.note = std::clamp(outNote, 0, 127);
+         on.velocity = std::clamp(mVelocity[idx].load(std::memory_order_relaxed), 0.0f, 1.0f);
+         on.isNoteOn = true;
+         on.frameOffset = std::clamp(frame, 0, numFrames - 1);
+         on.source = this;
+         on.voiceId = NextVoiceId();
+         mOutbox.Push(on);
+         mCurrentOutNote = on.note;
+         mCurrentOutVoiceId = on.voiceId;
+         mPendingOffSample = mSamplePos + (uint64_t)on.frameOffset + (uint64_t)std::max(1.0, gateSamples);
+         mPendingOffActive = true;
+         // A gate shorter than the rest of the block ends inside it.
+         if (mPendingOffSample < mSamplePos + (uint64_t)numFrames)
+            emitOff((int)(mPendingOffSample - mSamplePos));
+      };
+
+      if (running && numFrames > 0)
+      {
+         const long long first = (long long)std::floor(b0 / rateBeats);
+         if (first != mLastStep)
+            fireStep(first, 0);
+         for (long long k = first + 1; (double)k * rateBeats < b1; k++)
          {
-            if (mCurrentOutNote >= 0)
-            {
-               NoteEvent off;
-               off.note = mCurrentOutNote;
-               off.velocity = 0.0f;
-               off.isNoteOn = false;
-               off.frameOffset = 0;
-               off.source = this;
-               off.voiceId = mCurrentOutVoiceId;
-               mOutbox.Push(off);
-               mPendingOffActive = false;
-            }
-
-            NoteEvent on;
-            int outNote = mNote[idx].load(std::memory_order_relaxed);
-            if (mUseGlobalScale.load(std::memory_order_relaxed))
-               outNote = MusicTime::SnapToScale(outNote, Transport::Instance().Key(), Transport::Instance().Scale(), MusicTime::kSnapNearest);
-            on.note = std::clamp(outNote, 0, 127);
-            on.velocity = std::clamp(mVelocity[idx].load(std::memory_order_relaxed), 0.0f, 1.0f);
-            on.isNoteOn = true;
-            on.frameOffset = 0;
-            on.source = this;
-            on.voiceId = NextVoiceId();
-            mOutbox.Push(on);
-            mCurrentOutNote = on.note;
-            mCurrentOutVoiceId = on.voiceId;
-
-            const double samplesPerBeat = mSampleRate * 60.0 / std::max(1.0, bpm);
-            const double stepSamples = rateBeats * samplesPerBeat;
-            const double gateSamples = stepSamples * (double)gatePercent / 100.0;
-            mPendingOffSample = mSamplePos + (uint64_t)gateSamples;
-            mPendingOffActive = true;
+            const int frame = (int)std::llround(((double)k * rateBeats - b0) / beatsPerFrame);
+            fireStep(k, frame);
          }
       }
 
@@ -3103,6 +3204,7 @@ private:
    uint64_t mSamplePos = 0;
 
    long long mLastStep = -1;
+   TransportStepGate mStepGate; // see TransportStepGate: forgets mLastStep on a transport jump
    int mCurrentOutNote = -1;
    int mCurrentOutVoiceId = 0;
    bool mPendingOffActive = false;
@@ -3221,9 +3323,11 @@ public:
          mCurrentOutNote = -1;
       }
 
+      bool jumped = false;
+      const bool running = mStepGate.Begin(mLastStep, jumped);
       const double beats = Transport::Instance().Beats();
       const long long step = (long long)std::floor(beats / rateBeats);
-      if (step != mLastStep)
+      if (running && step != mLastStep)
       {
          mLastStep = step;
 
@@ -3321,6 +3425,7 @@ private:
    DspMath::WhiteNoise mRng;
 
    long long mLastStep = -1;
+   TransportStepGate mStepGate; // see TransportStepGate: forgets mLastStep on a transport jump
    int mCurrentOutNote = -1;
    int mCurrentOutVoiceId = 0;
    int mPrevNote = -1;
@@ -3395,6 +3500,9 @@ public:
       mPrevDegree = 0;
       mPrevVoicingN = 0;
       mStrumDown = true;
+      // Same seed every (re)start: two offline takes of one patch draw the
+      // same chords (ForceAudioRepare re-prepares before every take).
+      mRng = DspMath::WhiteNoise();
       for (int i = 0; i < kMaxPending; i++)
          mPending[i].active = false;
    }
@@ -3412,9 +3520,11 @@ public:
       const float humanizeVel = std::max(0.0f, mHumanizeVelocity.load(std::memory_order_relaxed));
       const float upperHarmonics = std::clamp(mUpperHarmonics.load(std::memory_order_relaxed), 0.0f, 100.0f);
 
+      bool jumped = false;
+      const bool running = mStepGate.Begin(mLastStep, jumped);
       const double beats = Transport::Instance().Beats();
       const long long step = (long long)std::floor(beats / (double)rateBeats);
-      if (step != mLastStep)
+      if (running && step != mLastStep)
       {
          mLastStep = step;
 
@@ -3547,6 +3657,7 @@ private:
    uint64_t mSamplePos = 0;
    DspMath::WhiteNoise mRng;
    long long mLastStep = -1;
+   TransportStepGate mStepGate; // see TransportStepGate: forgets mLastStep on a transport jump
    Pending mPending[kMaxPending];
    int mPrevDegree = 0;
    int mPrevVoicing[NoteTheory::kMaxVoicing] = {};

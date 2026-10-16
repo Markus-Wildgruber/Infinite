@@ -382,6 +382,10 @@ namespace app
                   continue; // stale - deleted node, undo/redo rewound past it
 
                ImGui::PushID(dstIndex * 1000 + dstParam);
+               // A locked group's member: its bindings show but cannot be
+               // edited, toggled or unbound here (app/graph/Groups.cpp).
+               const bool rowLocked = NodeEditLocked(dstIndex, nullptr);
+               ImGui::BeginDisabled(rowLocked);
                ImGui::TableNextRow();
 
                // "View in Modulation Matrix" landed here: scroll it into view once, and flash
@@ -612,6 +616,7 @@ namespace app
                   Tabler::DrawX(dl, center, iconSize, col);
                }
 
+               ImGui::EndDisabled();
                ImGui::PopID();
 
                if (unbound)
@@ -634,6 +639,8 @@ namespace app
                   continue; // stale - deleted node, undo/redo rewound past it
 
                ImGui::PushID(dstIndex * 1000 + dstParam + 2000000);
+               const bool exprRowLocked = NodeEditLocked(dstIndex, nullptr); // see the binding rows above
+               ImGui::BeginDisabled(exprRowLocked);
                ImGui::TableNextRow();
 
                // Enable dot: purple for expression
@@ -743,6 +750,7 @@ namespace app
                   Tabler::DrawX(dl, center, iconSize, col);
                }
 
+               ImGui::EndDisabled();
                ImGui::PopID();
                if (unboundExpr)
                   break; // just erased from the map this loop is iterating

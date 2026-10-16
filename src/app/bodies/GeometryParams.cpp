@@ -49,32 +49,17 @@ namespace app
 
          // Locked to the transport, these buttons ARE the transport: the
          // file's position always comes from the transport clock.
-         Transport& tr = Transport::Instance();
+         // (AudioFileNode::PressPlay/PressPause/PressRestart, shared with PressButton.)
          if (n->IsPlaying())
          {
             if (ImGui::Button("Pause", ImVec2(kPreviewSize * 0.48f, 0)))
-            {
-               if (n->followTransport)
-                  tr.SetPlaying(false);
-               else
-                  n->Pause();
-            }
+               n->PressPause();
          }
          else if (ImGui::Button("Play", ImVec2(kPreviewSize * 0.48f, 0)))
-         {
-            if (n->followTransport)
-               tr.SetPlaying(true);
-            else
-               n->Play();
-         }
+            n->PressPlay();
          ImGui::SameLine();
          if (ImGui::Button("Restart", ImVec2(kPreviewSize * 0.48f, 0)))
-         {
-            if (n->followTransport)
-               tr.Seek(std::max(0.0, (double)n->offset));
-            else
-               n->Restart();
-         }
+            n->PressRestart();
 
          ModCheckbox("follow transport", &n->followTransport);
          if (ImGui::IsItemHovered())

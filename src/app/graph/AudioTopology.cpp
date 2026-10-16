@@ -18,6 +18,41 @@
 
 namespace app
 {
+   // Group mute (Groups.cpp): turns the gate slots this rebuild named into the
+   // topology's per-group list, with each group's timeline windows. Declared
+   // here rather than in AppShared.h because its types live in AudioEngine.h.
+   void DescribeGroupGates(const std::set<int>& slots, std::vector<GroupGateTopo>& outGates,
+                           std::vector<GroupBeatWindow>& outWindows);
+   // Timeline MIDI (ArrangeMidi.cpp), declared here for the same reason.
+   void ArrangeMidiAugmentTopology(std::vector<AudioTopologyEntry>& order, std::set<INode*>& visited,
+                                   std::unordered_map<AudioNode*, int>& bufferIndexOf, int& nextBufferIndex,
+                                   std::vector<AudioTerminal>& terminals, std::vector<ClipWindow>& clipWindows,
+                                   std::vector<NoteOutboxPlan>& noteOutboxes, std::vector<NoteWire>& noteWires,
+                                   bool timelineRouting, int (*gateSlotOf)(const INode*));
+
+   // Member node -> its group's gate slot, for the rebuild in progress. Null
+   // outside RebuildAudioTopology, and empty for a patch without groups -
+   // then every lookup below is -1 and nothing is gated.
+   static const std::unordered_map<const INode*, int>* sGroupSlotOf = nullptr;
+
+   static int GroupSlotOfNode(const INode* n)
+   {
+      if (sGroupSlotOf == nullptr || n == nullptr || sGroupSlotOf->empty())
+         return -1;
+      auto it = sGroupSlotOf->find(n);
+      return it != sGroupSlotOf->end() ? it->second : -1;
+   }
+
+   // The gate a cable from `source` into `consumer` crosses: the source's
+   // group, when the consumer is not in that same group. -1 otherwise.
+   static int BoundaryGate(const INode* source, const INode* consumer)
+   {
+      const int s = GroupSlotOfNode(source);
+      if (s < 0)
+         return -1;
+      return GroupSlotOfNode(consumer) == s ? -1 : s;
+   }
+
    // Walks backward from `node` through its own audio inputs before adding
    // an entry for `node` itself, so sources land before their consumers -
    // AudioEngine::RunTopology walks `outOrder` front-to-back, so that order
@@ -62,6 +97,7 @@ namespace app
                CollectAudioChain(resolved, visited, outOrder, bufferIndexOf, nextBufferIndex);
                const int outputSlot = hopped ? 0 : cable->GetOutputSlot();
                entry.inputBufferIndices[slot] = AudioBufferIndexOf(resolved, outputSlot, bufferIndexOf);
+               entry.inputGate[slot] = BoundaryGate(resolved, node);
             }
          }
       }
@@ -272,6 +308,13 @@ namespace app
       std::vector<AudioTerminal> terminals;
       int nextBufferIndex = 0;
 
+      // Group mute/solo: which member nodes belong to which gate slot, for
+      // BoundaryGate below. Cleared again before this function returns.
+      std::unordered_map<const INode*, int> groupSlotOf;
+      BuildGroupGateSlotMap(groupSlotOf);
+      sGroupSlotOf = &groupSlotOf;
+      std::set<int> usedGateSlots;
+
       // Timeline routing: the arrangement's audio clips feed the device and
       // every canvas Audio Out is bypassed. Depends on the mode alone (plus
       // an arrangement-driven offline render, which is Timeline by
@@ -306,7 +349,7 @@ namespace app
          std::unordered_map<std::string, size_t> indexOfKey;
          bool anySolo = false;
          for (const Arrange::Lane& lane : gArrange.lanes)
-            anySolo = anySolo || (lane.type == Arrange::kLaneAudio && lane.solo);
+            anySolo = anySolo || (Arrange::LaneHasMixer(lane.type) && lane.solo); // audio + MIDI lanes
          for (const Arrange::Lane& lane : gArrange.lanes)
          {
             if (lane.type != Arrange::kLaneAudio)
@@ -331,6 +374,11 @@ namespace app
                // you could hear. A uid that no longer resolves is dropped at
                // terminal creation below.
                if (c.srcUid == 0 || !c.enabled || c.length <= 0)
+                  continue;
+               // A group clip (srcUid = a GroupNode) has no AudioNode of its
+               // own: it only gates the group (GroupTimelineWindows,
+               // ArrangeTools.cpp), so it never gets a terminal here.
+               if (ArrangeIsGroupSource(c.srcUid))
                   continue;
                char keyBuf[80];
                snprintf(keyBuf, sizeof(keyBuf), "%llu/%llu/%d",
@@ -487,6 +535,14 @@ namespace app
                      // the ring's own `enabled` flag - see AudioTerminal's comment.
                      terminals.push_back({ idx, ring });
                      terminals.back().live = audioOut != nullptr && audioOut->live;
+                     // A member's sound reaching the device leaves its group,
+                     // even through an Audio Out that sits inside the group.
+                     {
+                        int gate = GroupSlotOfNode(resolved);
+                        if (gate < 0)
+                           gate = GroupSlotOfNode(gn.node.get());
+                        terminals.back().gateSlot = gate;
+                     }
                      if (resolved->SilentAtAudioOut())
                      {
                         // Not heard from here; an Output still records it,
@@ -533,6 +589,7 @@ namespace app
          term.windowOffset = (int)clipWindows.size();
          term.numWindows = (int)st.windows.size();
          term.externalCompensation = &ArrangeTerminalCompensation(st.laneId, st.srcUid, st.srcOutput);
+         term.gateSlot = GroupSlotOfNode(resolved);
          clipWindows.insert(clipWindows.end(), st.windows.begin(), st.windows.end());
          terminals.push_back(term);
       }
@@ -576,6 +633,10 @@ namespace app
          if (gn.node->RequiresAudioProcessing())
             CollectAudioChain(gn.node.get(), visited, order, bufferIndexOf, nextBufferIndex);
       }
+      // A node being rendered to a track (ArrangeRenderToTrack.cpp) runs even
+      // with nothing downstream of it; empty unless that job is active.
+      for (INode* forced : RenderToTrackForcedNodes())
+         CollectAudioChain(forced, visited, order, bufferIndexOf, nextBufferIndex);
 
       // Describe each note-consuming node's inbox wiring to its producer's
       // outbox, now that every relevant node has an `order` entry. This used
@@ -631,9 +692,13 @@ namespace app
                   continue;
                NoteEventQueue* inbox = nullptr;
                int cursor = -1;
+               const std::atomic<bool>* noteGate = nullptr;
                if (cable->IsConnected())
                {
                   INode* resolved = ResolvedAudioSource(cable->GetSource());
+                  const int gate = BoundaryGate(resolved, gn.node.get());
+                  if (gate >= 0)
+                     noteGate = &AudioEngine::Instance().GroupGateAt(gate).notesOpen;
                   if (AudioNode* producer = AudioNodeOfAny(resolved))
                   {
                      inbox = producer->NoteOutbox(cable->GetOutputSlot());
@@ -649,13 +714,20 @@ namespace app
                      }
                   }
                }
-               noteWires.push_back(NoteWire{ consumer, slot, inbox, cursor });
+               noteWires.push_back(NoteWire{ consumer, slot, inbox, cursor, noteGate });
             }
          }
          noteOutboxes.reserve(consumerCounts.size());
          for (const auto& [queue, count] : consumerCounts)
             noteOutboxes.push_back(NoteOutboxPlan{ queue, count });
       }
+
+      // Timeline MIDI lanes (ArrangeMidi.cpp): a note merger in front of each
+      // lane's instrument (takes over its canvas note wire), the lane's
+      // instrument-to-device terminal under timeline routing, and the
+      // capture-notes tap. Before PrepareToPlay so the mergers get prepared.
+      ArrangeMidiAugmentTopology(order, visited, bufferIndexOf, nextBufferIndex, terminals, clipWindows,
+                                 noteOutboxes, noteWires, timelineRouting, &GroupSlotOfNode);
 
       const double sampleRate = AudioEngine::Instance().SampleRate() > 0.0
          ? AudioEngine::Instance().SampleRate()
@@ -799,6 +871,20 @@ namespace app
       // + Output) is mixed once, not twice (R477).
       MarkDuplicateDeviceTerminals(terminals);
 
+      // Every gate slot a pin or terminal names, each once, with its group's
+      // timeline windows - RunTopology advances exactly these per block.
+      for (const AudioTopologyEntry& entry : order)
+         for (int i = 0; i < entry.numInputs && i < kAudioMaxNodeInputs; i++)
+            if (entry.inputGate[i] >= 0)
+               usedGateSlots.insert(entry.inputGate[i]);
+      for (const AudioTerminal& terminal : terminals)
+         if (terminal.gateSlot >= 0)
+            usedGateSlots.insert(terminal.gateSlot);
+      std::vector<GroupGateTopo> groupGates;
+      std::vector<GroupBeatWindow> groupWindows;
+      DescribeGroupGates(usedGateSlots, groupGates, groupWindows);
+      sGroupSlotOf = nullptr;
+
       AudioTopology topology;
       topology.order = std::move(order);
       topology.terminalBufferIndices = std::move(terminals);
@@ -806,6 +892,8 @@ namespace app
       topology.numBuffers = nextBufferIndex;
       topology.noteOutboxes = std::move(noteOutboxes);
       topology.noteWires = std::move(noteWires);
+      topology.groupGates = std::move(groupGates);
+      topology.groupWindows = std::move(groupWindows);
       AudioEngine::Instance().SetTopology(std::move(topology));
       // No device running means no audio callback thread will ever apply
       // this generation's note wiring via RunTopology - and a number of

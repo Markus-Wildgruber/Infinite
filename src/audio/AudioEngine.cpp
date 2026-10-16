@@ -338,13 +338,21 @@ void AudioEngine::ApplyNoteWiringIfNew(ProcessList* list)
       const size_t tail = queue->Tail();
 
       size_t heads[NoteEventQueue::kMaxConsumers];
-      for (int i = 0; i < count; i++)
+      int oldCursor[NoteEventQueue::kMaxConsumers];
+      const std::atomic<bool>* gates[NoteEventQueue::kMaxConsumers];
+      for (int i = 0; i < NoteEventQueue::kMaxConsumers; i++)
+      {
          heads[i] = tail; // default: a freshly wired consumer sees only new events
+         oldCursor[i] = -1;
+         gates[i] = nullptr;
+      }
 
       for (const NoteWire& wire : topo.noteWires)
       {
          if (wire.inbox != queue || wire.cursor < 0 || wire.cursor >= count)
             continue;
+         // Group mute gate for this consumer's cursor, carried or not.
+         gates[wire.cursor] = wire.noteGate;
          AudioNode* consumer = wire.consumer;
          if (consumer == nullptr || wire.slot < 0 || wire.slot >= AudioNode::kMaxNoteSlots)
             continue;
@@ -355,10 +363,13 @@ void AudioEngine::ApplyNoteWiringIfNew(ProcessList* list)
          // SetTopology publishes inside one block) still carries over
          // correctly.
          if (consumer->appliedInbox[wire.slot] == wire.inbox && consumer->appliedCursor[wire.slot] >= 0)
+         {
             heads[wire.cursor] = queue->CursorHead(consumer->appliedCursor[wire.slot]);
+            oldCursor[wire.cursor] = consumer->appliedCursor[wire.slot];
+         }
       }
 
-      queue->AdoptConsumers(count, heads);
+      queue->AdoptConsumers(count, heads, oldCursor, gates);
    }
 
    // Every wire, including unconnected ones (inbox == nullptr, cursor == -1)
@@ -575,6 +586,11 @@ void AudioEngine::RunTopology(ProcessList* list, AudioBuffer& deviceBuffer, doub
       }
    }
 
+   // Group mute/solo/timeline gates: one ramp per group per block, decided
+   // before any node cooks so every boundary pin and terminal of one group
+   // fades on exactly the same curve.
+   AdvanceGroupGates(list, numFrames, runSampleRate);
+
    // PDC scratch: a delayed-copy landing spot per input pin, reused node to
    // node (only one node's inputs are ever "in flight" at a time - the
    // buffer a pin's CompensationDelay writes into is fully consumed by
@@ -602,7 +618,23 @@ void AudioEngine::RunTopology(ProcessList* list, AudioBuffer& deviceBuffer, doub
             delayed.numChannels = numChannels;
             delayed.numFrames = numFrames;
             entry.node->inputCompensation[i].ProcessBlock(src, delayed);
+            // Group mute on a boundary pin: in place on this pin's own
+            // scratch, never on the pooled buffer other consumers (the
+            // group's own members among them) still read.
+            if (!GroupGateIsUnity(entry.inputGate[i]))
+               ApplyGroupGate(entry.inputGate[i], delayed, delayed, numFrames, numChannels);
             inputViews[i] = delayed;
+            inputPtrs[i] = &inputViews[i];
+         }
+         else if (!GroupGateIsUnity(entry.inputGate[i]))
+         {
+            const AudioBuffer src = list->buffers[idx].View(numFrames, numChannels);
+            AudioBuffer gated;
+            gated.channels = mCompScratchChannels[i];
+            gated.numChannels = numChannels;
+            gated.numFrames = numFrames;
+            ApplyGroupGate(entry.inputGate[i], src, gated, numFrames, numChannels);
+            inputViews[i] = gated;
             inputPtrs[i] = &inputViews[i];
          }
          else
@@ -683,6 +715,18 @@ void AudioEngine::RunTopology(ProcessList* list, AudioBuffer& deviceBuffer, doub
          delayed.numFrames = numFrames;
          terminalComp.ProcessBlock(src, delayed);
          src = delayed;
+      }
+      // Group mute on a terminal whose source is a group member (an Audio
+      // Out, an Output's recording, or a timeline clip of that member).
+      // Before the capture below, so a muted group is not recorded either.
+      if (!GroupGateIsUnity(terminal.gateSlot))
+      {
+         AudioBuffer gated;
+         gated.channels = mTerminalScratchChannels;
+         gated.numChannels = numChannels;
+         gated.numFrames = numFrames;
+         ApplyGroupGate(terminal.gateSlot, src, gated, numFrames, numChannels);
+         src = gated;
       }
       const float gain = terminal.gain;
 
@@ -987,5 +1031,74 @@ void AudioEngine::Process(float** buffers, int numChannels, int numFrames)
          for (int s = 0; s < kAudioStageCount; s++)
             mStageLoadHistory[s].Push((float)(stageMs[s] / expectedGapMs));
       }
+   }
+}
+
+// Once per block, before any node cooks: each group gate this generation
+// names decides where it is heading (the main thread's mute/solo target,
+// closed outside the group's timeline windows) and where it starts, then
+// moves its persistent gain on by one block's worth of ramp. A stopped
+// transport closes a group that has clips - the timeline is what lets it
+// sound, and a stopped timeline plays nothing.
+void AudioEngine::AdvanceGroupGates(ProcessList* list, int numFrames, double sampleRate)
+{
+   mGateStepPerFrame = sampleRate > 0.0 ? (float)(1.0 / (kGroupGateRampSeconds * sampleRate)) : 1.0f;
+   if (list == nullptr || list->topology.groupGates.empty())
+      return;
+   const bool playing = Transport::Instance().IsPlaying();
+   const double blockStartBeat = Transport::Instance().BlockStartBeats();
+   const GroupBeatWindow* windows = list->topology.groupWindows.data();
+   const int totalWindows = (int)list->topology.groupWindows.size();
+   for (const GroupGateTopo& gt : list->topology.groupGates)
+   {
+      if (gt.slot < 0 || gt.slot >= kMaxGroupGates)
+         continue;
+      GroupGate& g = mGroupGates[gt.slot];
+      float target = std::clamp(g.target.load(std::memory_order_relaxed), 0.0f, 1.0f);
+      if (gt.hasClips)
+      {
+         bool inside = false;
+         if (playing)
+            for (int w = 0; w < gt.numWindows; w++)
+            {
+               const int k = gt.windowOffset + w;
+               if (k >= 0 && k < totalWindows && blockStartBeat >= windows[k].startBeat &&
+                   blockStartBeat < windows[k].endBeat)
+               {
+                  inside = true;
+                  break;
+               }
+            }
+         if (!inside)
+            target = 0.0f;
+      }
+      if (g.snap.exchange(false, std::memory_order_relaxed))
+         g.gain = target;
+      mGateStart[gt.slot] = g.gain;
+      mGateTarget[gt.slot] = target;
+      const float move = mGateStepPerFrame * (float)numFrames;
+      g.gain = g.gain < target ? std::min(target, g.gain + move) : std::max(target, g.gain - move);
+   }
+}
+
+void AudioEngine::ApplyGroupGate(int slot, const AudioBuffer& src, AudioBuffer& dst, int numFrames, int numChannels) const
+{
+   const float start = (slot >= 0 && slot < kMaxGroupGates) ? mGateStart[slot] : 1.0f;
+   const float target = (slot >= 0 && slot < kMaxGroupGates) ? mGateTarget[slot] : 1.0f;
+   const int channels = std::min(numChannels, std::min(src.numChannels, dst.numChannels));
+   if (start == target)
+   {
+      for (int ch = 0; ch < channels; ch++)
+         for (int i = 0; i < numFrames; i++)
+            dst.channels[ch][i] = src.channels[ch][i] * target;
+      return;
+   }
+   const float step = start < target ? mGateStepPerFrame : -mGateStepPerFrame;
+   for (int i = 0; i < numFrames; i++)
+   {
+      float g = start + step * (float)i;
+      g = start < target ? std::min(g, target) : std::max(g, target);
+      for (int ch = 0; ch < channels; ch++)
+         dst.channels[ch][i] = src.channels[ch][i] * g;
    }
 }

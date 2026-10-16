@@ -44,8 +44,13 @@ namespace McpBridge
          "(numbers: levels, bands, pitch, onsets - compare several nodes in one call) or analyze_file (whole files: "
          "tempo, key, spectrum). Use transport to play/pause/seek, e.g. play from 0 before comparing sources; for "
          "repeatable comparisons use analyze_audio with offline:true (renders the patch itself, sample-accurate). "
-         "Tidy or adjust with move_node, set_bypass (instead of zeroing a mix) and rename_node. "
-         "Node indices change after undo, redo or a failed batch: re-read get_graph then. "
+         "Tidy or adjust with move_node, set_bypass (instead of zeroing a mix), rename_node and duplicate_node. "
+         "Groups (create_group, set_group) mute/solo what leaves them and can be locked; a locked group refuses "
+         "every edit, from you too - say so and ask the user before unlocking. The timeline: list_clips, add_clip "
+         "(a node or group plays during its clip), move_clip, set_clip, delete_clip, set_loop; render_to_track "
+         "freezes a node's sound into a WAV clip. "
+         "Node indices change after undo, redo, reload or a failed batch; every node also has a stable uid "
+         "(get_graph: \"u123\"), which any tool accepts wherever it takes a node index. "
          "An image only shows if it reaches an Output node; sound only if it reaches Audio Out or an Output's audio input. "
          "Prefer modulators (LFO, Envelope, Audio Analyze, ...) bound with bind_modulator over per-frame expressions "
          "when the user asks for movement. Keep changes minimal and explain what you changed.";
@@ -76,19 +81,21 @@ namespace McpBridge
            "Every saved parameter value of one node, as {\"<kind> <key>\": value}; kind is f (float), i (int), b (bool, "
            "\"1\"/\"0\"), c (colour) or s (text, given literally - a Windows path has single backslashes). Numbered keys "
            "count from 0: a Mixer's mute0 is the channel labelled 1. Dropdowns are listed again under _options with "
-           "their option names in index order (e.g. an EQ band type 0 = low shelf); _label is the node's custom name.",
-           R"({"type":"object","properties":{"index":{"type":"integer"}},"required":["index"]})" },
+           "their option names in index order (e.g. an EQ band type 0 = low shelf); _label is the node's custom name; "
+           "_modulated lists the parameters a modulator or expression drives right now, with their current value.",
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]}},"required":["index"]})" },
          { "get_bindings",
            "Modulation bindings, expressions and globals with parameter keys and ranges. With index, also lists that "
-           "node's modulatable parameters (number, key, label, min, max) - only known once the node has drawn a frame.",
-           R"({"type":"object","properties":{"index":{"type":"integer"}}})" },
+           "node's modulatable parameters (number, key, label, min, max, current = this frame's value after "
+           "modulation) - only known once the node has drawn a frame.",
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]}}})" },
          { "explain", "The patch as a readable signal-flow description, as `Infinite --explain` prints it.",
            R"({"type":"object","properties":{"all":{"type":"boolean"}}})" },
          { "create_node",
            "Create one node. Returns its index. Category is looked up when omitted.",
            R"({"type":"object","properties":{"typeName":{"type":"string"},"category":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"}},"required":["typeName"]})" },
          { "delete_node", "Delete a node with its cables and bindings.",
-           R"({"type":"object","properties":{"index":{"type":"integer"}},"required":["index"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]}},"required":["index"]})" },
          { "connect",
            "Patch a cable from src's output into dst's input slot. srcOutput and dstSlot take a number or the name "
            "describe lists (dstSlot: inputs[].name like \"input_2\"; srcOutput: outputs[].label). The same rules as "
@@ -101,7 +108,7 @@ namespace McpBridge
            "number, text a plain string (no escaping: a path exactly as written), colours [r,g,b] 0..1. Dropdowns "
            "take the option number or its name (get_params _options lists them). A wrong type is an error, not a "
            "silent 0. Setting a file path loads the file.",
-           R"({"type":"object","properties":{"index":{"type":"integer"},"name":{"type":"string"},"value":{}},"required":["index","name","value"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"name":{"type":"string"},"value":{}},"required":["index","name","value"]})" },
          { "bind_modulator",
            "Drive a parameter from a modulator output (LFO, Envelope, Random, Macro, Audio Analyze bands, ...). param is "
            "the parameter number, key or label (get_bindings with index lists them). lo/hi: the swing in the "
@@ -145,22 +152,100 @@ namespace McpBridge
          { "move_node",
            "Move a node on the canvas: x/y place it, dx/dy move it by that much (canvas units, as get_graph's x/y). "
            "One undo step.",
-           R"({"type":"object","properties":{"index":{"type":"integer"},"x":{"type":"number"},"y":{"type":"number"},"dx":{"type":"number"},"dy":{"type":"number"}},"required":["index"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"x":{"type":"number"},"y":{"type":"number"},"dx":{"type":"number"},"dy":{"type":"number"}},"required":["index"]})" },
          { "set_bypass",
            "Bypass a node (it passes its input straight through, or goes silent / stops cooking when it has none) or "
            "enable it again - the same as the B key. Omit bypassed to toggle. Use this to take an effect out instead "
            "of zeroing its mix.",
-           R"({"type":"object","properties":{"index":{"type":"integer"},"bypassed":{"type":"boolean"}},"required":["index"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"bypassed":{"type":"boolean"}},"required":["index"]})" },
          { "rename_node",
            "Give a node a title of its own (shown on the canvas and saved with the patch); an empty name goes back to "
            "the type's name. get_graph lists it as label.",
-           R"({"type":"object","properties":{"index":{"type":"integer"},"name":{"type":"string"}},"required":["index","name"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"name":{"type":"string"}},"required":["index","name"]})" },
+         { "duplicate_node",
+           "Copy one node: same type, parameters and label, placed dx/dy (default 40/40) from it, with the same "
+           "inputs connected unless connectInputs:false. Outgoing cables and modulation bindings are not copied. "
+           "Returns the new index.",
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"dx":{"type":"number"},"dy":{"type":"number"},"connectInputs":{"type":"boolean"}},"required":["index"]})" },
+         { "create_group",
+           "Group nodes (indices) into a new Group with a label - the canvas box around them. A node can be in one "
+           "group; groups do not nest. Returns the group (index, label, members, mute, solo, locked).",
+           R"({"type":"object","properties":{"nodes":{"type":"array","items":{"type":["integer","string"]}},"label":{"type":"string"}},"required":["nodes"]})" },
+         { "group_add", "Add nodes to an existing group (group = its index).",
+           R"({"type":"object","properties":{"group":{"type":["integer","string"]},"nodes":{"type":"array","items":{"type":["integer","string"]}}},"required":["group","nodes"]})" },
+         { "group_remove", "Take nodes out of a group (they stay in the patch).",
+           R"({"type":"object","properties":{"group":{"type":["integer","string"]},"nodes":{"type":"array","items":{"type":["integer","string"]}}},"required":["group","nodes"]})" },
+         { "set_group",
+           "Set a group's mute, solo, locked and/or label. mute silences everything that LEAVES the group (audio fades "
+           "out ~10 ms, notes stop, images go black, modulators hold) while its members keep running in time; solo "
+           "mutes every other group (ungrouped nodes keep playing); locked forbids moving, rewiring, deleting and "
+           "changing values of its members by hand and by these tools (mute/solo/timeline still work). Never "
+           "unlock without the user's say-so.",
+           R"({"type":"object","properties":{"group":{"type":["integer","string"]},"mute":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"label":{"type":"string"}},"required":["group"]})" },
+         { "list_groups", "Every group with its members and mute/solo/locked state.",
+           R"({"type":"object","properties":{}})" },
+         { "apply_sound_profile",
+           "Press a Sound Analyze node's Apply: write its last analysis onto a synth (target = Equation Synth, "
+           "Wavetable, Oscillator, Analog, Metallic or Sampler). Returns what was set. One undo step.",
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"target":{"type":["integer","string"]}},"required":["index","target"]})" },
+         { "list_clips",
+           "The timeline: lanes (index, name, kind, mute, solo, enabled, gain) and clips (id, lane, startBeats, "
+           "lengthBeats, source node index/type, kind node|group|sample|video, enabled, gain, fades).",
+           R"({"type":"object","properties":{}})" },
+         { "add_clip",
+           "Put a node or group on the timeline: it plays during [startBeats, startBeats+lengthBeats). A group with "
+           "clips is audible only inside them. lane -1 (default) = a new lane; clips on one lane may not overlap.",
+           R"({"type":"object","properties":{"node":{"type":["integer","string"]},"output":{"type":"integer"},"lane":{"type":"integer"},"startBeats":{"type":"number"},"lengthBeats":{"type":"number"}},"required":["node","startBeats","lengthBeats"]})" },
+         { "move_clip", "Move/resize a clip: lane, startBeats, lengthBeats (omitted = unchanged).",
+           R"({"type":"object","properties":{"clipId":{"type":"integer"},"lane":{"type":"integer"},"startBeats":{"type":"number"},"lengthBeats":{"type":"number"}},"required":["clipId"]})" },
+         { "set_clip", "Change a clip: enabled, gainDb, fadeInBeats, fadeOutBeats, name.",
+           R"({"type":"object","properties":{"clipId":{"type":"integer"},"enabled":{"type":"boolean"},"gainDb":{"type":"number"},"fadeInBeats":{"type":"number"},"fadeOutBeats":{"type":"number"},"name":{"type":"string"}},"required":["clipId"]})" },
+         { "delete_clip", "Remove a clip from the timeline (its node stays).",
+           R"({"type":"object","properties":{"clipId":{"type":"integer"}},"required":["clipId"]})" },
+         { "set_loop", "Set the timeline loop region in beats, or enabled:false to clear it.",
+           R"({"type":"object","properties":{"enabled":{"type":"boolean"},"startBeats":{"type":"number"},"endBeats":{"type":"number"}}})" },
+         { "add_midi_track",
+           "Add a MIDI lane that plays into one instrument (a node with a note input, e.g. Equation Synth). Then "
+           "add_clip on that lane makes an empty MIDI clip; set_midi_notes fills it. MIDI clips play with the "
+           "timeline's audio source set to Timeline.",
+           R"({"type":"object","properties":{"instrument":{"type":["integer","string"]},"name":{"type":"string"}},"required":["instrument"]})" },
+         { "set_midi_notes",
+           "Replace a MIDI clip's notes: [{t: beats from the clip start, dur: beats, midi: 0-127, vel: 0-1}]. One undo "
+           "step. The user can edit them in the piano roll (double-click the clip).",
+           R"({"type":"object","properties":{"clipId":{"type":"integer"},"notes":{"type":"array","items":{"type":"object","properties":{"t":{"type":"number"},"dur":{"type":"number"},"midi":{"type":"integer"},"vel":{"type":"number"}},"required":["t","dur","midi"]}}},"required":["clipId","notes"]})" },
+         { "get_midi_notes", "A MIDI clip's notes ({t, dur, midi, vel} in beats from the clip start) and its lane/instrument.",
+           R"({"type":"object","properties":{"clipId":{"type":"integer"}},"required":["clipId"]})" },
+         { "capture_notes",
+           "Record what a note source plays (Note Sequencer, Note Switcher, Arpeggiator, MIDI File, Audio to MIDI, "
+           "...) from startBeats to endBeats (default: the loop, else 4 bars from the playhead) into a MIDI clip on a "
+           "new MIDI lane playing into instrument (default: the instrument it is cabled into). Renders offline, so "
+           "it is exact and repeatable. Waits until done; returns lane, clipId and noteCount. One undo step.",
+           R"({"type":"object","properties":{"node":{"type":["integer","string"]},"instrument":{"type":["integer","string"]},"startBeats":{"type":"number"},"endBeats":{"type":"number"}},"required":["node"]})" },
+         { "render_audio_to_file",
+           "Render a node's sound (any audio node, a Mixer, or an Audio Out = what feeds it) offline into a WAV: "
+           "from start for seconds (transport seconds) plus tail (seconds, to ring out), from a clean start (voices, "
+           "envelopes, effect tails and sequencer phases as on a fresh transport start), faster than real time, "
+           "sample-accurate and identical every run. bitDepth 16 | 24 (default) | 32 (float); sampleRate default "
+           "48000; path absolute, or relative = the recordings folder (empty = named after the node). No tempo "
+           "chunks are written. Waits until done; returns path, seconds, sampleRate, channels, peakDb, rmsDb.",
+           R"({"type":"object","properties":{"node":{"type":["integer","string"]},"start":{"type":"number"},"seconds":{"type":"number"},"tail":{"type":"number"},"path":{"type":"string"},"bitDepth":{"type":"integer","enum":[16,24,32]},"sampleRate":{"type":"number"}},"required":["node","seconds"]})" },
+         { "press_button",
+           "Press one of a node's own buttons, exactly like clicking it: Looper rec/play/dub/clear/undo, Audio Out "
+           "record/stop, Output record/render, Audio to MIDI record/stop, players' play/pause/restart, ... Omit "
+           "button to list the node's buttons. Use this instead of modulator tricks.",
+           R"({"type":"object","properties":{"node":{"type":["integer","string"]},"button":{"type":"string"}},"required":["node"]})" },
+         { "render_to_track",
+           "Freeze a node's sound: renders it offline (sample-accurate) from startBeats to endBeats plus tailSeconds "
+           "(default 2, for ringing out) into a WAV in the recordings folder and places it as an audio clip on a new "
+           "lane at startBeats. Default range: the loop, else 4 bars from the playhead. normalize optional. Waits "
+           "until done and returns the file, lane and clip id. One undo step.",
+           R"({"type":"object","properties":{"node":{"type":["integer","string"]},"startBeats":{"type":"number"},"endBeats":{"type":"number"},"tailSeconds":{"type":"number"},"normalize":{"type":"boolean"}},"required":["node"]})" },
          { "get_notes",
            "The notes an Audio to MIDI node transcribed (times in seconds of the file) or a MIDI File node plays (in "
            "beats): t, dur, note name, midi, level, plus count, range and pitch-class counts. Filter with from/to "
            "(time), low/high (MIDI numbers); limit (default 200). Use it to check which notes were detected, e.g. "
            "whether high notes are there.",
-           R"({"type":"object","properties":{"index":{"type":"integer"},"from":{"type":"number"},"to":{"type":"number"},"low":{"type":"integer"},"high":{"type":"integer"},"limit":{"type":"integer"}},"required":["index"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]},"from":{"type":"number"},"to":{"type":"number"},"low":{"type":"integer"},"high":{"type":"integer"},"limit":{"type":"integer"}},"required":["index"]})" },
          { "analyze_audio",
            "Listen to nodes as NUMBERS: records `seconds` of each node's live audio output (up to 4 nodes, captured over "
            "exactly the same time span) and returns per node: rms/peak dB, 8 band levels, spectral centroid, onsets, "
@@ -171,7 +256,7 @@ namespace McpBridge
            "itself from start (seconds on the transport, default the current position) with the device paused: "
            "sample-accurate and identical every run, independent of live timing - best for A/B comparisons such as "
            "a synth played by Audio to MIDI against the original Audio File.",
-           R"({"type":"object","properties":{"nodes":{"type":"array","items":{"type":"integer"},"maxItems":4},"node":{"type":"integer"},"seconds":{"type":"number","minimum":0.2,"maximum":30},"frameSeconds":{"type":"number"},"play":{"type":"boolean"},"offline":{"type":"boolean"},"start":{"type":"number","minimum":0}}})" },
+           R"({"type":"object","properties":{"nodes":{"type":"array","items":{"type":"integer"},"maxItems":4},"node":{"type":["integer","string"]},"seconds":{"type":"number","minimum":0.2,"maximum":30},"frameSeconds":{"type":"number"},"play":{"type":"boolean"},"offline":{"type":"boolean"},"start":{"type":"number","minimum":0}}})" },
          { "analyze_file",
            "Analyse a whole audio file offline (path, or node = a node with a file such as Audio File): duration, "
            "levels, average spectrum, onset rate, tempo (bpm + confidence), key (+ chroma), pitch summary and a "
@@ -183,12 +268,12 @@ namespace McpBridge
            "keeps the isolated strikes within low..high (MIDI), merges them (spectrum given at C4) and fits key "
            "tracking: keyLevel and keyTilt in dB per octave, as Equation Synth's keyLevel/keyTilt take them. "
            "partials 1-32. A Sound Analyze node can apply such a profile to a synth.",
-           R"({"type":"object","properties":{"path":{"type":"string"},"node":{"type":"integer"},"notes":{"type":"boolean"},"sound":{"type":"boolean"},"soundMode":{"type":"string","enum":["region","notes"]},"start":{"type":"number"},"length":{"type":"number"},"f0":{"type":"number"},"partials":{"type":"integer"},"low":{"type":"integer"},"high":{"type":"integer"}}})" },
+           R"({"type":"object","properties":{"path":{"type":"string"},"node":{"type":["integer","string"]},"notes":{"type":"boolean"},"sound":{"type":"boolean"},"soundMode":{"type":"string","enum":["region","notes"]},"start":{"type":"number"},"length":{"type":"number"},"f0":{"type":"number"},"partials":{"type":"integer"},"low":{"type":"integer"},"high":{"type":"integer"}}})" },
          { "get_sound_profile",
            "A Sound Analyze node's last result as numbers: f0, partials (frequency, level dB, T60), ADSR, spectral "
            "envelope, brightness, noisiness. Set its path/start/length with set_param first; its body's Apply button "
            "(or the values) configure a synth.",
-           R"({"type":"object","properties":{"index":{"type":"integer"}},"required":["index"]})" },
+           R"({"type":"object","properties":{"index":{"type":["integer","string"]}},"required":["index"]})" },
          { "render_frame",
            "Look at the picture: returns the Output node's current image plus brightness/colour statistics.",
            R"({"type":"object","properties":{"output":{"type":"integer","description":"Output node index when there are several"}}})" },
@@ -324,6 +409,10 @@ namespace McpBridge
          for (const json& n : g.value("nodes", json::array()))
          {
             json c = { {"index", n.value("index", -1)}, {"type", n.value("typeName", "")}, {"category", n.value("category", "")} };
+            // Stable id: any node parameter of any tool also takes "u<uid>",
+            // which keeps naming the same node after undo, redo or reload.
+            if (n.contains("uid") && n["uid"].is_number_unsigned() && n["uid"].get<uint64_t>() != 0)
+               c["uid"] = "u" + std::to_string(n["uid"].get<uint64_t>());
             if (n.value("bypassed", false))
                c["bypassed"] = true;
             if (n.contains("label") && n["label"].is_string())
@@ -427,6 +516,33 @@ namespace McpBridge
          json params = args.is_object() ? args : json::object();
          if (name == "analyze_audio" || name == "analyze_file")
             return RunAnalysis(link, name, params);
+         if (name == "render_to_track" || name == "capture_notes" || name == "render_audio_to_file")
+         {
+            // The app renders in slices between frames; this process waits.
+            const char* statusMethod = name == "render_to_track" ? "render_status"
+                                     : name == "capture_notes"   ? "capture_status"
+                                                                 : "render_file_status";
+            json reply;
+            std::string err;
+            if (!link.Call(name, params, reply, err))
+               return TextResult(err, true);
+            if (reply.contains("error"))
+               return TextResult(reply["error"].value("message", "error"), true);
+            const auto start = std::chrono::steady_clock::now();
+            for (;;)
+            {
+               const json r = reply.value("result", json::object());
+               if (r.value("done", false))
+                  return TextResult(r.dump(), !r.value("ok", false));
+               if (std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count() > 600.0)
+                  return TextResult("render timed out", true);
+               std::this_thread::sleep_for(std::chrono::milliseconds(250));
+               if (!link.Call(statusMethod, json::object(), reply, err))
+                  return TextResult(err, true);
+               if (reply.contains("error"))
+                  return TextResult(reply["error"].value("message", "error"), true);
+            }
+         }
          std::string tmpImage;
          if (name == "render_frame")
          {

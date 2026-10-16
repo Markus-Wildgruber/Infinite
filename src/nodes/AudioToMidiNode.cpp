@@ -568,3 +568,46 @@ bool AudioToMidiNode::RunSelfTest()
    printf("AUDIOTOMIDITEST %s\n", ok ? "OK" : "FAIL");
    return ok;
 }
+
+bool AudioToMidiNode::PressButton(const std::string& name, std::string& err)
+{
+   if (name == "record")
+   {
+      // The card's Record: needs a cable on the input; its error is also shown on the card.
+      if (IsRecording())
+      {
+         err = "already recording";
+         return false;
+      }
+      if (!StartRecording(err))
+      {
+         exportMessage = err;
+         return false;
+      }
+      exportMessage.clear();
+      return true;
+   }
+   if (name == "stop")
+   {
+      // Writes the take to a WAV, points path at it and transcribes it (asynchronously).
+      if (!IsRecording())
+      {
+         err = "not recording";
+         return false;
+      }
+      StopRecording();
+      return true;
+   }
+   if (name == "retry")
+   {
+      if (GetState() != State::Failed || path.empty())
+      {
+         err = "nothing to retry: the last conversion did not fail";
+         return false;
+      }
+      Reconvert();
+      return true;
+   }
+   err = "unknown button '" + name + "' (Audio to MIDI has: record, stop, retry)";
+   return false;
+}

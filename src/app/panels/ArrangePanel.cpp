@@ -196,7 +196,7 @@ namespace app
       // the clip. Suppressing every single-key shortcut while the pointer is
       // over a field is deliberate: the pointer being there is exactly the
       // statement that the next keystroke is a value, not a command.
-      if (gArrangeFocused && !ImGui::GetIO().WantTextInput && !ArrangeFieldHot() &&
+      if (gArrangeFocused && !ImGui::GetIO().WantTextInput && !ArrangeFieldHot() && !ArrangePianoRollOwnsKeys() &&
           !scrubEscaped && !ArrangeRenderBusy() &&
           gArrangeDrag.mode == kArrangeDragNone && !gArrangeGestureOpen && !gArrangeScrubbing &&
           gArrangeMarkerDragId == 0)
@@ -2377,6 +2377,14 @@ namespace app
       // double-click on empty lane space.
       auto AddUnassignedClipAt = [&](uint64_t laneIdArg, Arrange::Tick atTick)
       {
+         // A MIDI lane gets an empty one-bar MIDI clip instead: its lane's
+         // instrument plays it, there is no source to assign.
+         if (const Arrange::Lane* targetLane = Arrange::FindLane(gArrange, laneIdArg))
+            if (targetLane->type == Arrange::kLaneMidi)
+            {
+               ArrangeAddEmptyMidiClip(laneIdArg, atTick);
+               return;
+            }
          uint64_t made = 0;
          ArrangeEdit([&]()
          {
@@ -2431,6 +2439,9 @@ namespace app
             InsertArrangeTrack(true);
          if (ImGui::MenuItem(L("Audio Track")))
             InsertArrangeTrack(false);
+         ArrangeDrawAddMidiTrackMenu(gArrangeAddTrackInsertAfter,
+                                     (gArrangeAddTrackInsertAfter >= 0 && gArrangeAddTrackInsertAfter < (int)gArrange.lanes.size())
+                                        ? gArrange.lanes[(size_t)gArrangeAddTrackInsertAfter].groupId : 0);
          ImGui::EndPopup();
       }
 
@@ -2487,7 +2498,7 @@ namespace app
 
       bool anyLaneSolo = false;
       for (const Arrange::Lane& l : gArrange.lanes)
-         anyLaneSolo = anyLaneSolo || (l.type == Arrange::kLaneAudio && l.solo);
+         anyLaneSolo = anyLaneSolo || (Arrange::LaneHasMixer(l.type) && l.solo);
 
       // Bounded by laneRowTop's size, not gArrange.lanes.size(): both
       // laneRowTop and arrangeLaneRelH (aliased as laneRowH) were sized
@@ -2634,6 +2645,9 @@ namespace app
             ImGui::Selectable(lane.name.c_str(), false, ImGuiSelectableFlags_None, nameBoxSize);
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
+            // A MIDI lane names its instrument on hover (Track settings picks it).
+            if (lane.type == Arrange::kLaneMidi && ImGui::IsItemHovered() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+               ImGui::SetTooltip(T("MIDI track - instrument: %s"), ArrangeMidiInstrumentLabel(lane).c_str());
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                ToggleOrOpenRowSettings(laneId);
@@ -2664,6 +2678,7 @@ namespace app
          // Mix strip positioned at the right of the header column
          ImGui::SetCursorScreenPos(ImVec2(rulerStartX - kMixStripW - 4.0f, curY + (rowH - kMixCtl) * 0.5f));
          const bool isVideo = lane.type == Arrange::kLaneVideo;
+         const bool isMidiLane = lane.type == Arrange::kLaneMidi;
          const bool laneSilenced = !isVideo && (lane.mute || (anyLaneSolo && !lane.solo));
          if (rowH >= kMixCtl + 4.0f)
          {
@@ -2778,10 +2793,16 @@ namespace app
 
             ImGui::PushID((int)(clip.id & 0x7fffffff));
 
-            GraphNode* clipNode = nodeForUid(clip.srcUid);
+            // A MIDI clip has no source: its lane's instrument plays it, and
+            // without one it is drawn offline like an unassigned clip.
+            GraphNode* clipNode = isMidiLane ? nodeForUid(lane.instrumentUid) : nodeForUid(clip.srcUid);
             const bool offline = clipNode == nullptr;
+            // A group clip: drawn in the group's own colour with its label,
+            // and no waveform (it gates the group, it has no audio of its own).
+            const bool groupClip = !isMidiLane && clipNode != nullptr && ArrangeIsGroupNode(*clipNode);
             const std::string clipLabel = !clip.name.empty() ? clip.name
-               : (clipNode != nullptr ? NodeTitle(*clipNode) : std::string("Unassigned"));
+               : (isMidiLane ? std::string("MIDI")
+                             : (clipNode != nullptr ? ArrangeSourceTitle(*clipNode) : std::string("Unassigned")));
 
             ImGui::SetCursorScreenPos(ImVec2(cLeft, cTop));
             ImGui::InvisibleButton("##clipbtn", ImVec2(cWidth, cBottom - cTop));
@@ -2910,6 +2931,13 @@ namespace app
                // the proportional scale. A plain click keeps an existing
                // selection that contains the clip, so the drag moves all of it.
                if (clipActivated && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
+                   gArrangeDrag.mode == kArrangeDragNone && !cio.KeyShift && !cio.KeySuper && !cio.KeyCtrl && isMidiLane)
+               {
+                  // A MIDI clip opens in the piano roll (its inspector is on
+                  // the clip menu: Clip Settings).
+                  OpenArrangePianoRoll(clip.id);
+               }
+               else if (clipActivated && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
                    gArrangeDrag.mode == kArrangeDragNone && !cio.KeyShift && !cio.KeySuper && !cio.KeyCtrl)
                {
                   if (gArrangeClipSettingsPanelOpen && gArrangeSettingsPanelTarget == clip.id)
@@ -2980,10 +3008,16 @@ namespace app
             // shows exactly the palette swatch the user picked, not a blended-down shade.
             ImU32 clipBaseCol = hasTint
                ? IM_COL32((int)std::lround(clip.colorR * 255.0f), (int)std::lround(clip.colorG * 255.0f), (int)std::lround(clip.colorB * 255.0f), 255)
-               : (isVideo ? IM_COL32(109, 40, 217, 210) : IM_COL32(5, 150, 105, 210));
+               : (isVideo ? IM_COL32(109, 40, 217, 210) : (isMidiLane ? IM_COL32(37, 99, 235, 210) : IM_COL32(5, 150, 105, 210)));
             ImU32 clipActiveCol = hasTint
                ? IM_COL32((int)std::lround(clip.colorR * 255.0f), (int)std::lround(clip.colorG * 255.0f), (int)std::lround(clip.colorB * 255.0f), 255)
-               : (isVideo ? IM_COL32(139, 92, 246, 255) : IM_COL32(16, 185, 129, 255));
+               : (isVideo ? IM_COL32(139, 92, 246, 255) : (isMidiLane ? IM_COL32(59, 130, 246, 255) : IM_COL32(16, 185, 129, 255)));
+            ImU32 groupCol = 0;
+            if (groupClip && !hasTint && ArrangeGroupSourceColor(clip.srcUid, groupCol))
+            {
+               clipBaseCol = groupCol;
+               clipActiveCol = groupCol | IM_COL32(0, 0, 0, 255);
+            }
             const bool muted = !clip.enabled || offline || laneSilenced;
             if (muted)
             {
@@ -3014,7 +3048,9 @@ namespace app
             // - and a stretch that has never played stays on the centre
             // line rather than guessing. Nothing is drawn during a take: the
             // panel is locked anyway and the take owns the frame budget.
-            if (!isVideo && cWidth > 6.0f && !ArrangeRenderBusy() && !clip.importPending)
+            if (isMidiLane && cWidth > 6.0f)
+               ArrangeDrawMidiClipPreview(dl, clip, ImVec2(cLeft, cTop), ImVec2(cRight, cBottom), clipX0, clipX1, muted);
+            if (!isVideo && !isMidiLane && !groupClip && cWidth > 6.0f && !ArrangeRenderBusy() && !clip.importPending)
             {
                const float midY = (cTop + cBottom) * 0.5f;
                const float halfH = std::max(2.0f, (cBottom - cTop) * 0.5f - 5.0f);
@@ -3224,8 +3260,17 @@ namespace app
                                             : IM_COL32(255, 255, 255, 255);
                // Starts after the thumbnail when there is one, so the two
                // never overlap.
-               const float labelX = (thumbRight > cLeft ? thumbRight + 6.0f : cLeft + 8.0f);
+               float labelX = (thumbRight > cLeft ? thumbRight + 6.0f : cLeft + 8.0f);
                dl->PushClipRect(ImVec2(cLeft + 2.0f, cTop), ImVec2(cRight - 2.0f, cBottom), true);
+               if (groupClip)
+               {
+                  // The canvas group frame in miniature: says "this gates a
+                  // group" before the name does.
+                  const float gy = cTop + 8.0f + ImGui::GetFontSize() * 0.5f;
+                  dl->AddRect(ImVec2(labelX, gy - 5.0f), ImVec2(labelX + 12.0f, gy + 5.0f), labelCol, 2.0f, 0, 1.4f);
+                  dl->AddLine(ImVec2(labelX, gy - 2.0f), ImVec2(labelX + 12.0f, gy - 2.0f), labelCol, 1.0f);
+                  labelX += 17.0f;
+               }
                dl->AddText(ImVec2(labelX, cTop + 8.0f), labelCol, fullLabel.c_str());
                dl->PopClipRect();
             }
@@ -3834,7 +3879,7 @@ namespace app
                ImGui::Separator();
             }
 
-            if (ctxSelectionSingleType && ctxLaneType != Arrange::kLaneAudio && ImGui::BeginMenu(L("Compositing")))
+            if (ctxSelectionSingleType && ctxLaneType == Arrange::kLaneVideo && ImGui::BeginMenu(L("Compositing")))
             {
                // How this clip lays over the lanes below it. Applies to every
                // selected video clip, like Color Tint.
@@ -3947,7 +3992,21 @@ namespace app
             // doc comment in ArrangeModel.h). Only Audio/Video Clip can be
             // reassigned.
             cp = Arrange::FindClip(gArrange, cid);
-            if (cp != nullptr && !cp->sampleDropped && ImGui::MenuItem(L("Assign Node...")))
+            if (ctxLaneType == Arrange::kLaneMidi)
+            {
+               // A MIDI clip: its notes open in the piano roll; its source is
+               // the lane instrument (track settings), nothing to assign.
+               if (ImGui::MenuItem(L("Edit Notes (Piano Roll)")))
+                  OpenArrangePianoRoll(cid);
+               if (ImGui::MenuItem(L("Clip Settings")))
+               {
+                  gArrangeClipSettingsPanelOpen = true;
+                  gArrangeSettingsPanelTarget = cid;
+                  gArrangeRowSel.clear();
+                  gArrangeRowSelAnchor = 0;
+               }
+            }
+            else if (cp != nullptr && !cp->sampleDropped && ImGui::MenuItem(L("Assign Node...")))
             {
                gArrangeAssigningClipId = cid;
                gArrangeAssignTargetIds.clear();
@@ -3956,7 +4015,7 @@ namespace app
 
             // Output: only for a source with more than one output of this
             // lane's type (VideoSourceNode has one of each, so it gets none).
-            if (ctxNode != nullptr)
+            if (ctxNode != nullptr && ctxLaneType != Arrange::kLaneMidi)
             {
                const std::vector<int> outs = ArrangeOutputsOfType(*ctxNode, ctxLaneType);
                if (outs.size() > 1 && ImGui::BeginMenu(L("Output")))
@@ -4005,7 +4064,7 @@ namespace app
          gArrangeMixGestureLaneId = 0;
       }
       else if (gArrangeGestureOpen && gArrangeDrag.mode == kArrangeDragNone && gArrangeRenamingLaneId == 0 &&
-               gArrangeMarkerDragId == 0 && gArrangeMixGestureLaneId == 0)
+               gArrangeMarkerDragId == 0 && gArrangeMixGestureLaneId == 0 && !ArrangePianoRollGestureOpen())
       {
          // The popup closed with a field still mid-edit (click outside):
          // its deactivate never ran, so close the gesture here.
@@ -4052,6 +4111,7 @@ namespace app
                gArrangeAddTrackInsertAfter = laneIdx;
                InsertArrangeTrack(false);
             }
+            ArrangeDrawAddMidiTrackMenu(laneIdx, ctxLane->groupId);
             if (ImGui::MenuItem(L("Rename Track"), MODKEY "+R"))
             {
                gArrangeRenamingLaneId = ctxLaneId;
@@ -4159,6 +4219,7 @@ namespace app
                gArrangeAddTrackInsertAfter = lastLaneIdx;
                InsertArrangeTrack(false, ctxGroupId);
             }
+            ArrangeDrawAddMidiTrackMenu(lastLaneIdx, ctxGroupId);
             if (ImGui::MenuItem(L("Rename Group"), MODKEY "+R"))
             {
                gArrangeRenamingLaneId = ctxGroupId;
@@ -4438,6 +4499,7 @@ namespace app
             ArrangeEdit([&]() { Arrange::AddLane(gArrange, Arrange::kLaneVideo); });
          if (ImGui::MenuItem(L("Add Audio Track")))
             ArrangeEdit([&]() { Arrange::AddLane(gArrange, Arrange::kLaneAudio); });
+         ArrangeDrawAddMidiTrackMenu(-1, 0);
          if (ImGui::MenuItem(L("Add Track Group")))
             ArrangeEdit([&]() { Arrange::AddTrackGroup(gArrange, {}, "New Group"); });
          ImGui::EndPopup();

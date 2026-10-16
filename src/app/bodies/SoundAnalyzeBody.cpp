@@ -357,6 +357,29 @@ namespace app
       float DbFrac(float db, float bottom) { return std::clamp((db - bottom) / (0.0f - bottom), 0.0f, 1.0f); }
    }
 
+   bool ApplySoundProfile(SoundAnalyzeNode* src, int targetIndex, std::string& message)
+   {
+      GraphNode* target = FindNodeByIndex(targetIndex);
+      if (src == nullptr || target == nullptr || target->node == nullptr)
+      {
+         message = "unknown target node";
+         return false;
+      }
+      if (!src->HasProfile())
+      {
+         message = "this Sound Analyze node has no analysis yet";
+         return false;
+      }
+      if (!IsApplyTarget(target->node.get()))
+      {
+         message = target->typeName + " cannot take a sound profile (Equation Synth, Wavetable, Oscillator, Analog, Metallic or Sampler can)";
+         return false;
+      }
+      message = ApplyProfileTo(*src, *target);
+      src->applyMessage = message;
+      return true;
+   }
+
    void DrawSoundAnalyzeBody(GraphNode& gn, SoundAnalyzeNode* n)
    {
       using State = SoundAnalyzeNode::State;

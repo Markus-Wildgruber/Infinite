@@ -203,7 +203,28 @@ public:
       const float swing = std::clamp(mSwing.load(std::memory_order_relaxed), 0.0f, 1.0f);
       const bool run = mRun.load(std::memory_order_relaxed);
 
-      const double rawPosNow = Transport::Instance().Beats() / beatsPerStep;
+      const Transport& transport = Transport::Instance();
+      const double rawPosNow = transport.Beats() / beatsPerStep;
+
+      // A transport jump (seek, rewind, stop, loop lap - every one bumps
+      // ResetEpoch) re-seats the scan at this block's own start, a hair
+      // below it, so a step sitting exactly on the new position fires on
+      // this block. Without it a rewind fell into the "rawPosNow <
+      // mPrevRawPos" resync below, which seats at the block's END and so
+      // skipped step 0 of every run started from a rewind, and a forward
+      // seek scanned the whole skipped span and fired it as one burst.
+      // While the transport is stopped nothing is scheduled and the scan
+      // stays parked at the playhead, so play starts with the step under it.
+      const bool playing = transport.IsPlaying();
+      const unsigned long long epoch = transport.ResetEpoch();
+      if (epoch != mSeenEpoch || !playing)
+      {
+         mSeenEpoch = epoch;
+         const double blockBeats = playing ? (double)numFrames * (double)transport.Tempo() / 60.0 /
+                                                std::max(1.0, mSampleRate)
+                                           : 0.0;
+         mPrevRawPos = std::max(0.0, transport.Beats() - blockBeats) / beatsPerStep - 1e-6;
+      }
 
       struct FireEvent
       {
@@ -214,7 +235,11 @@ public:
       FireEvent stepEvts[64];
       int numStepEvts = 0;
 
-      if (rawPosNow < mPrevRawPos)
+      if (!playing)
+      {
+         // Stopped: nothing fires (see the jump re-seat above).
+      }
+      else if (rawPosNow < mPrevRawPos)
       {
          // Rewind/scrub: don't iterate a negative range, just resync.
          mPrevRawPos = rawPosNow;
@@ -459,6 +484,7 @@ private:
    Voice mVoices[kNumVoices];
    int mLaneVoiceCursor[kNumLanes] = {};
    double mPrevRawPos = 0.0;
+   unsigned long long mSeenEpoch = ~0ull; // Transport::ResetEpoch the scan was last seated for
 
    SampleSlot mSampleSlots[kNumLanes];
 

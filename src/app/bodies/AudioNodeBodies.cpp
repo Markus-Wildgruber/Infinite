@@ -259,9 +259,21 @@ namespace app
    // or the user's Desktop when nothing has been picked yet.
    std::string RecordingDirFor(const AudioOutputNode* n)
    {
-      if (!n->recordDirectory.empty())
-         return n->recordDirectory;
-      return AppPaths::DesktopDir();
+      return n->RecordingDirectory();
+   }
+
+   // AudioOutputNode::StartRecordingInFolder (the Record button and
+   // PressButton("record") alike) names its files with the scheme above.
+   namespace
+   {
+      std::string AudioOutRecordingNamer(const std::string& dir, const std::string& ext)
+      {
+         return DefaultRecordingFileName(dir, ext);
+      }
+      struct InstallAudioOutNamer
+      {
+         InstallAudioOutNamer() { AudioOutputNode::sRecordingNamer = &AudioOutRecordingNamer; }
+      } sInstallAudioOutNamer;
    }
 
 
@@ -339,9 +351,7 @@ namespace app
          }
          else
          {
-            const std::string ext = (n->formatIndex == 1) ? "flac" : (n->formatIndex == 2 ? "mp3" : "wav");
-            const std::string dir = RecordingDirFor(n);
-            n->StartRecording(dir + "/" + DefaultRecordingFileName(dir, ext));
+            n->StartRecordingInFolder(); // same path as PressButton("record")
          }
       }
       if (!recording && !audioOn && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))

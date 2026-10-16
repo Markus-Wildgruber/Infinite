@@ -44,6 +44,18 @@ public:
 
    // Manual strike trigger from UI button
    void TriggerStrike();
+   // Generic button API (INode): "strike", the card's Strike.
+   std::vector<std::string> ButtonNames() const override { return { "strike" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "strike")
+      {
+         TriggerStrike();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Metallic has: strike)";
+      return false;
+   }
 
    // Apply material physics preset defaults
    void SetMaterialPreset(int preset);

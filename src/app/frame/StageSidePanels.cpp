@@ -53,21 +53,26 @@ void DrawSidePanels(FrameCtx& fc)
 
          GraphNode* hoveredCompatible = nullptr;
          ImVec2 hoveredP(0, 0), hoveredS(0, 0);
-         for (GraphNode& gn : gNodes)
-         {
-            const bool match = assignIsVideo ? IsNodeVideoCompatible(gn) : IsNodeAudioCompatible(gn);
-            if (!match)
-               continue;
-            const ImVec2 p = ed::GetNodePosition(gn.NodeId());
-            const ImVec2 s = ed::GetNodeSize(gn.NodeId());
-            if (mp.x >= p.x && mp.x <= p.x + s.x && mp.y >= p.y && mp.y <= p.y + s.y)
+         // Two passes: a node first, then a group (a group is a valid clip
+         // source on any lane - ArrangeClipSourceFits - but its frame covers
+         // its members, so a member under the mouse must win).
+         for (int pass = 0; pass < 2 && hoveredCompatible == nullptr; pass++)
+            for (GraphNode& gn : gNodes)
             {
-               hoveredCompatible = &gn;
-               hoveredP = p;
-               hoveredS = s;
-               break;
+               if (gn.node == nullptr || ArrangeIsGroupNode(gn) != (pass == 1))
+                  continue;
+               if (!ArrangeClipSourceFits(gn, assignIsVideo ? Arrange::kLaneVideo : Arrange::kLaneAudio))
+                  continue;
+               const ImVec2 p = ed::GetNodePosition(gn.NodeId());
+               const ImVec2 s = ed::GetNodeSize(gn.NodeId());
+               if (mp.x >= p.x && mp.x <= p.x + s.x && mp.y >= p.y && mp.y <= p.y + s.y)
+               {
+                  hoveredCompatible = &gn;
+                  hoveredP = p;
+                  hoveredS = s;
+                  break;
+               }
             }
-         }
 
          if (hoveredCompatible != nullptr)
          {

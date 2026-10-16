@@ -1,4 +1,5 @@
 #include "GrainMolderNode.h"
+#include "nodes/NodeButtons.h"
 
 #include <algorithm>
 #include <atomic>
@@ -94,6 +95,7 @@ public:
       mVoices.SetSampleRate(sampleRate);
       mVoices.SetADSR(2.0f, 0.0f, 1.0f, 15.0f);
       mSelfEnv.SetSampleRate(sampleRate);
+      mSelfEnv.Reset(); // a fresh start begins from silence (see Envelope::Reset)
       mSelfEnv.SetADSR(2.0f, 0.0f, 1.0f, 15.0f);
       if (mRecordBuffer.empty())
          mRecordBuffer.resize((size_t)kMaxRecordSeconds * kMaxRecordSampleRate);
@@ -801,4 +803,20 @@ void GrainMolderNode::CookIfNeeded(int frameId)
 void GrainMolderNode::SweepPrepare()
 {
    mAudioNode->PushBuffer(MakeSweepToneBuffer());
+}
+
+// Generic button API: the card's buttons (the caller pushes the undo
+// checkpoint the card pushes before Record/Stop).
+std::vector<std::string> GrainMolderNode::ButtonNames() const
+{
+   return { "record", "stop", "audition", "stop_audition" };
+}
+
+bool GrainMolderNode::PressButton(const std::string& name, std::string& err)
+{
+   bool ok = false;
+   if (NodeButtons::RecordToggle(*this, name, err, ok) ||
+       NodeButtons::AuditionToggle(*this, name, err, ok, [this]() { TriggerPreview(start); }))
+      return ok;
+   return NodeButtons::Unknown(*this, "Grain Molder", name, err);
 }

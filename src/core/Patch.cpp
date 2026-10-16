@@ -437,6 +437,19 @@ bool Write(const std::string& path, const Data& data, std::string& outError)
       for (const ClipRecord& c : s.clips)
          if (c.sampleDropped && c.sourceOffsetSeconds != 0.0f)
             file << "clipsrcoffset " << i << " " << c.id << " " << FloatToString(c.sourceOffsetSeconds) << "\n";
+      // MIDI lanes: instrument + notes, own append-only tags (an older reader
+      // skips both and sees an empty lane).
+      if (s.type == kStreamMidi && s.instrumentUid != 0)
+         file << "streammidi " << i << " " << s.instrumentUid << "\n";
+      for (const ClipRecord& c : s.clips)
+      {
+         if (c.notes.empty())
+            continue;
+         file << "clipnotes " << i << " " << c.id << " " << c.notes.size();
+         for (const NoteRecord& n : c.notes)
+            file << " " << n.startTick << " " << n.lengthTick << " " << n.note << " " << FloatToString(n.velocity);
+         file << "\n";
+      }
    }
    for (const MarkerRecord& mk : data.markers)
       file << "marker " << mk.id << " " << mk.posTick << " " << mk.color << " " << EscapeLine(mk.name) << "\n";
@@ -961,7 +974,7 @@ bool ReadStream(std::istream& file, Data& outData, std::string& outError)
          if (!raw.empty() && raw[0] == ' ')
             raw.erase(0, 1);
          s.name = UnescapeLine(raw);
-         if (s.type != kStreamVideo && s.type != kStreamAudio) s.type = kStreamVideo;
+         if (s.type != kStreamVideo && s.type != kStreamAudio && s.type != kStreamMidi) s.type = kStreamVideo;
          if (s.blendMode < 0 || s.blendMode > 31) s.blendMode = 0;
          if (!std::isfinite(s.opacity)) s.opacity = 1.0f;
          s.opacity = std::clamp(s.opacity, 0.0f, 1.0f);
@@ -984,6 +997,36 @@ bool ReadStream(std::istream& file, Data& outData, std::string& outError)
          {
             outData.streams[streamIdx].mute = mute != 0;
             outData.streams[streamIdx].solo = solo != 0;
+         }
+      }
+      else if (tag == "streammidi")
+      {
+         int streamIdx = -1;
+         uint64_t uid = 0;
+         if (in >> streamIdx >> uid && streamIdx >= 0 && streamIdx < (int)outData.streams.size())
+            outData.streams[streamIdx].instrumentUid = uid;
+      }
+      else if (tag == "clipnotes")
+      {
+         int streamIdx = -1;
+         uint64_t clipId = 0;
+         long long count = 0;
+         if (in >> streamIdx >> clipId >> count && streamIdx >= 0 && streamIdx < (int)outData.streams.size() &&
+             clipId != 0 && count > 0)
+         {
+            std::vector<NoteRecord> notes;
+            notes.reserve((size_t)std::min<long long>(count, 1 << 20));
+            for (long long k = 0; k < count; k++)
+            {
+               NoteRecord n;
+               if (!(in >> n.startTick >> n.lengthTick >> n.note >> n.velocity))
+                  break; // a truncated line keeps the notes read so far
+               if (!std::isfinite(n.velocity)) n.velocity = 0.8f;
+               notes.push_back(n);
+            }
+            for (ClipRecord& c : outData.streams[streamIdx].clips)
+               if (c.id == clipId)
+                  c.notes = notes;
          }
       }
       else if (tag == "streamrowheight")

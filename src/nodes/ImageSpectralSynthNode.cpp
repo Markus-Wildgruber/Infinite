@@ -190,6 +190,7 @@ public:
       for (int v = 0; v < kMaxVoices; v++)
       {
          mVoices[v].ampEnv.SetSampleRate(mSampleRate);
+         mVoices[v].ampEnv.Reset(); // a fresh start begins from silence
       }
       for (int stage = 0; stage < SynthModes::kMaxFilterStages; stage++)
       {

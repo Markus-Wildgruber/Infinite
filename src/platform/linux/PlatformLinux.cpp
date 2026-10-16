@@ -443,6 +443,28 @@ namespace Platform
       return AppendExtensionIfMissing(std::string(res), ".mid");
    }
 
+   std::string SaveWavDialog(const std::string& suggestedName)
+   {
+      if (IsHeadlessOrExitAfter()) return "";
+      ScopedHostEnvironment hostEnv;
+      EnsureDialogBackendChecked();
+      const char* const filterPatterns[] = {
+         "*.wav"
+      };
+      std::string defaultPath = suggestedName.empty() ? "Untitled.wav" : suggestedName;
+      defaultPath = AppendExtensionIfMissing(defaultPath, ".wav");
+
+      const char* res = tinyfd_saveFileDialog(
+         "Save Audio File",
+         defaultPath.c_str(),
+         1,
+         filterPatterns,
+         "WAV audio (*.wav)"
+      );
+      if (!res) return "";
+      return AppendExtensionIfMissing(std::string(res), ".wav");
+   }
+
    std::string OpenFolderDialog(const char* title, const std::string& initialDir)
    {
       if (IsHeadlessOrExitAfter()) return "";

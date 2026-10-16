@@ -58,6 +58,24 @@ public:
 
    AudioCaptureRing& CaptureRing() { return mCaptureRing; }
 
+   // --- generic button API (INode) ---
+   //   export_image  writes the output to exportImagePath (synchronous)
+   //   record        starts a live video recording to recordVideoPath
+   //   stop          requests the recording to stop (finalizes over the next frames)
+   //   render        starts an offline render session (runs over the next frames)
+   // Each runs what the card's button runs; the asynchronous ones return as
+   // soon as they have started.
+   std::vector<std::string> ButtonNames() const override;
+   bool PressButton(const std::string& name, std::string& err) override;
+   // The card's defaults: an empty exportImagePath / recordVideoPath becomes
+   // <Desktop>/infinite_output.<format>.
+   void EnsureDefaultPaths();
+   // App-level actions the node cannot reach on its own (the GL image
+   // exporter, the offline render session and its per-frame pump). Installed
+   // by the app (StageNodeBodies.cpp); null in a build without it.
+   static bool (*sExportImageHook)(OutputNode* n, std::string& err);
+   static bool (*sStartOfflineRenderHook)(OutputNode* n, std::string& err);
+
    // --- recording ---
    bool StartRecording(const std::string& path);
    // Fully synchronous: blocks until the encoder is joined and the movie is

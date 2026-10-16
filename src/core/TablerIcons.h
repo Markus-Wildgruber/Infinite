@@ -803,4 +803,51 @@ namespace Tabler
       dl->AddRect(P(4.5f, 4.5f), P(19.5f, 19.5f), col, r, 0, stroke);
       dl->AddRectFilled(P(9.0f, 9.0f), P(15.0f, 15.0f), col, 1.0f * s);
    }
+
+   // Tabler: volume (speaker body + two sound waves) / volume-3 (speaker
+   // crossed out) when `muted`. The group header's mute button.
+   inline void DrawVolume(ImDrawList* dl, ImVec2 center, float size, ImU32 col, bool muted = false,
+                          float customStroke = 0.0f)
+   {
+      if (!dl) return;
+      const float s = size / 24.0f;
+      const float stroke = customStroke > 0.0f ? customStroke : ImMax(1.1f, 1.6f * s);
+      auto P = [&](float x, float y) { return Point24(center, size, x, y); };
+
+      const ImVec2 body[6] = { P(3.5f, 9.5f), P(7.0f, 9.5f), P(12.0f, 5.0f),
+                               P(12.0f, 19.0f), P(7.0f, 14.5f), P(3.5f, 14.5f) };
+      dl->AddPolyline(body, 6, col, ImDrawFlags_Closed, stroke);
+      if (muted)
+      {
+         dl->AddLine(P(15.5f, 9.5f), P(20.5f, 14.5f), col, stroke);
+         dl->AddLine(P(20.5f, 9.5f), P(15.5f, 14.5f), col, stroke);
+      }
+      else
+      {
+         const ImVec2 c = P(12.0f, 12.0f);
+         dl->PathArcTo(c, 4.0f * s, -0.9f, 0.9f, 8);
+         dl->PathStroke(col, 0, stroke);
+         dl->PathArcTo(c, 8.0f * s, -0.9f, 0.9f, 12);
+         dl->PathStroke(col, 0, stroke);
+      }
+   }
+
+   // Tabler: lock / lock-open (body + shackle). The group header's lock button.
+   inline void DrawLock(ImDrawList* dl, ImVec2 center, float size, ImU32 col, bool open = false,
+                        float customStroke = 0.0f)
+   {
+      if (!dl) return;
+      const float s = size / 24.0f;
+      const float stroke = customStroke > 0.0f ? customStroke : ImMax(1.1f, 1.6f * s);
+      auto P = [&](float x, float y) { return Point24(center, size, x, y); };
+
+      dl->AddRect(P(5.5f, 11.0f), P(18.5f, 20.0f), col, 2.0f * s, 0, stroke);
+      dl->AddCircleFilled(P(12.0f, 15.5f), 1.2f * s, col);
+      // Shackle: two legs and an arch. Open lifts the right leg off the body.
+      const float rightLegBottom = open ? 7.5f : 11.0f;
+      dl->AddLine(P(8.0f, 11.0f), P(8.0f, 7.5f), col, stroke);
+      dl->AddLine(P(16.0f, rightLegBottom), P(16.0f, 7.5f), col, stroke);
+      dl->PathArcTo(P(12.0f, 7.5f), 4.0f * s, IM_PI, 2.0f * IM_PI, 10);
+      dl->PathStroke(col, 0, stroke);
+   }
 }

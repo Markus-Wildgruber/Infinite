@@ -5,6 +5,7 @@
 #include "audio/Wavetable.h"
 #include "core/Mesh.h"
 #include "nodes/AnalyzeNodes.h"
+#include "nodes/AudioNodes.h"
 #include "nodes/AudioPluginNode.h"
 #include "nodes/DrumSequencerNode.h"
 #include "nodes/FieldElementNode.h"
@@ -42,13 +43,16 @@ void DrawPopupsA(FrameCtx& fc)
          }
          else if (auto* g = dynamic_cast<GroupNode*>(gn->node.get()))
          {
-            if (ImGui::MenuItem(L("Rename")))
+            // Mute / Solo / Lock (Groups.cpp) - live even while locked.
+            DrawGroupContextMenuItems(*gn, g);
+            ImGui::Separator();
+            if (ImGui::MenuItem(L("Rename"), nullptr, false, !g->locked))
             {
                PushUndoCheckpoint();
                g->renaming = true;
                g->renameJustStarted = true;
             }
-            if (ImGui::MenuItem(L("Ungroup")))
+            if (ImGui::MenuItem(L("Ungroup"), nullptr, false, !g->locked))
             {
                ed::ClearSelection();
                ed::SelectNode(gn->NodeId());
@@ -63,11 +67,21 @@ void DrawPopupsA(FrameCtx& fc)
                }
                gRequestDuplicate = true;
             }
+            // Timeline (ArrangeTools.cpp / ArrangeRenderToTrack.cpp): a group
+            // clip makes the group play only inside its clips; render to
+            // track bounces the audio that leaves the group.
+            ImGui::Separator();
+            if (ImGui::MenuItem(L("Add to Timeline")))
+               AddNodeToArrangeTimeline(gn->index);
+            if (ImGui::MenuItem(L("Render to track...")))
+               OpenRenderToTrackPopup(gn->index);
+            if (ImGui::MenuItem(L("Render to file...")))
+               OpenRenderToFilePopup(gn->index);
             ImGui::Separator();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.20f, 0.20f, 0.25f));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.85f, 0.20f, 0.20f, 0.40f));
-            if (ImGui::MenuItem(L("Delete Group"), "Backspace"))
+            if (ImGui::MenuItem(L("Delete Group"), "Backspace", false, !g->locked))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -80,6 +94,10 @@ void DrawPopupsA(FrameCtx& fc)
          }
          else if (auto* c = dynamic_cast<CommentNode*>(gn->node.get()))
          {
+            // A note inside a locked group cannot be edited, restyled or
+            // deleted by hand (Groups.cpp).
+            const bool noteLocked = NodeEditLocked(gn->index, nullptr);
+            ImGui::BeginDisabled(noteLocked);
             if (ImGui::MenuItem(L("Edit Note")))
             {
                PushUndoCheckpoint();
@@ -109,6 +127,7 @@ void DrawPopupsA(FrameCtx& fc)
                gColor.label = "colour";
                gColor.justOpened = true;
             }
+            ImGui::EndDisabled();
             if (ImGui::MenuItem(L("Duplicate"), MODKEY "+D"))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
@@ -118,29 +137,13 @@ void DrawPopupsA(FrameCtx& fc)
                }
                gRequestDuplicate = true;
             }
-            if (GroupNode* owner = GroupOwning(gn->index))
-            {
-               if (ImGui::MenuItem(L("Ungroup")))
-               {
-                  PushUndoCheckpoint();
-                  gGroupMembers[owner].erase(gn->index);
-                  if (int ownerIndex = IndexOfGroupNode(owner); ownerIndex >= 0)
-                  {
-                     if (GraphNode* ownerGn = FindNodeByIndex(ownerIndex))
-                     {
-                        const ImVec2 gp = ed::GetNodePosition(ownerGn->NodeId());
-                        const ImVec2 gs = ed::GetNodeSize(ownerGn->NodeId());
-                        const ImVec2 mp = ed::GetNodePosition(gn->NodeId());
-                        ed::SetNodePosition(gn->NodeId(), ImVec2(mp.x, gp.y + gs.y + 40.0f));
-                     }
-                  }
-               }
-            }
+            // Add to group <label> / Remove from group (Groups.cpp).
+            DrawNodeGroupMembershipMenu(*gn);
             ImGui::Separator();
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.20f, 0.20f, 0.25f));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.85f, 0.20f, 0.20f, 0.40f));
-            if (ImGui::MenuItem(L("Delete Note"), "Backspace"))
+            if (ImGui::MenuItem(L("Delete Note"), "Backspace", false, !noteLocked))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -154,8 +157,10 @@ void DrawPopupsA(FrameCtx& fc)
          else
          {
             // Primary Actions
+            // A locked group's member: no bypass, no delete (Groups.cpp).
+            const bool nodeLocked = NodeEditLocked(gn->index, nullptr);
             const char* bypassLabel = gn->node->bypassed ? "Enable Node" : "Bypass Node";
-            if (ImGui::MenuItem(bypassLabel, "B"))
+            if (ImGui::MenuItem(bypassLabel, "B", false, !nodeLocked))
             {
                PushUndoCheckpoint();
                gn->node->bypassed = !gn->node->bypassed;
@@ -235,6 +240,31 @@ void DrawPopupsA(FrameCtx& fc)
                if (ImGui::MenuItem(L("Add to Timeline")))
                   AddNodeToArrangeTimeline(gn->index);
             }
+            // Bounce this node's audio to a new timeline track
+            // (ArrangeRenderToTrack.cpp). An Audio Out renders what feeds it.
+            if (IsNodeAudioCompatible(*gn) || dynamic_cast<AudioOutputNode*>(gn->node.get()) != nullptr)
+            {
+               if (ImGui::MenuItem(L("Render to track...")))
+                  OpenRenderToTrackPopup(gn->index);
+               // Offline into a WAV (ArrangeRenderToFile.cpp); a Mixer or an
+               // Audio Out is the mix, so it reads as an export there.
+               const bool isMix = dynamic_cast<AudioOutputNode*>(gn->node.get()) != nullptr ||
+                                  dynamic_cast<MixerNode*>(gn->node.get()) != nullptr;
+               if (ImGui::MenuItem(isMix ? L("Export audio...") : L("Render to file...")))
+                  OpenRenderToFilePopup(gn->index);
+            }
+            // Timeline MIDI (ArrangeMidi.cpp): a note producer's output onto a
+            // new MIDI track; an instrument gets a MIDI track of its own.
+            if (ArrangeIsNoteProducer(*gn) && ImGui::MenuItem(L("Capture notes to timeline...")))
+               OpenCaptureNotesPopup(gn->index);
+            if (ArrangeIsNoteInstrument(*gn) && ImGui::MenuItem(L("Add MIDI track for this")))
+            {
+               PushUndoCheckpoint();
+               int laneIndex = -1;
+               std::string midiErr;
+               if (ArrangeAddMidiLane(gn->uid, std::string(), laneIndex, midiErr))
+                  gArrangePanelOpen = true;
+            }
             ProjectorWindow* projector = FindProjectorWindow(gn->index);
             if (CanShowInViewportPanel(*gn) && projector != nullptr)
             {
@@ -277,24 +307,8 @@ void DrawPopupsA(FrameCtx& fc)
                ImGui::CloseCurrentPopup();
                gOpenNodeHelpPopup = true;
             }
-            if (GroupNode* owner = GroupOwning(gn->index))
-            {
-               if (ImGui::MenuItem(L("Ungroup")))
-               {
-                  PushUndoCheckpoint();
-                  gGroupMembers[owner].erase(gn->index);
-                  if (int ownerIndex = IndexOfGroupNode(owner); ownerIndex >= 0)
-                  {
-                     if (GraphNode* ownerGn = FindNodeByIndex(ownerIndex))
-                     {
-                        const ImVec2 gp = ed::GetNodePosition(ownerGn->NodeId());
-                        const ImVec2 gs = ed::GetNodeSize(ownerGn->NodeId());
-                        const ImVec2 mp = ed::GetNodePosition(gn->NodeId());
-                        ed::SetNodePosition(gn->NodeId(), ImVec2(mp.x, gp.y + gs.y + 40.0f));
-                     }
-                  }
-               }
-            }
+            // Add to group <label> / Remove from group (Groups.cpp).
+            DrawNodeGroupMembershipMenu(*gn);
 
             ImGui::Separator();
 
@@ -302,7 +316,7 @@ void DrawPopupsA(FrameCtx& fc)
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.20f, 0.20f, 0.25f));
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.85f, 0.20f, 0.20f, 0.40f));
-            if (ImGui::MenuItem(L("Delete Node"), "Backspace"))
+            if (ImGui::MenuItem(L("Delete Node"), "Backspace", false, !nodeLocked))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -353,6 +367,16 @@ void DrawPopupsA(FrameCtx& fc)
       // Modulation-binding popup (Absolute/Bipolar/depth/Unbind), requested by
       // DrawModulationBindingMenu from deep inside a param slider/knob - see
       // gModBindingMenuNode's comment for why it can only actually open here.
+      // A locked group's member: no binding/expression/range edits.
+      if (gOpenModBindingMenu)
+      {
+         std::string lockedWhy;
+         if (NodeEditLocked(gModBindingMenuNode, &lockedWhy))
+         {
+            gOpenModBindingMenu = false;
+            gPatchStatus = lockedWhy;
+         }
+      }
       if (gOpenModBindingMenu)
       {
          ImGui::OpenPopup("##modbind");

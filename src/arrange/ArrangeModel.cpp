@@ -46,6 +46,7 @@ namespace
             Clip left = c;
             left.length = a - s;
             ClampFades(left);
+            CropMidiNotesRight(left.notes, left.length);
             out.push_back(left);
 
             // Same shape as Split() (this IS an implicit split, carved out
@@ -60,6 +61,7 @@ namespace
             right.length = e - b;
             right.sourceOffsetSeconds = c.sourceOffsetSeconds + (float)TicksToSeconds(b - s, SampleSourceBpm(c.syncToTempo, c.sampleBpm, gSampleLiveTempoBpm));
             ClampFades(right);
+            CropMidiNotesLeft(right.notes, b - s);
             out.push_back(right);
             continue;
          }
@@ -67,6 +69,7 @@ namespace
          {
             c.length = a - s;
             ClampFades(c);
+            CropMidiNotesRight(c.notes, c.length);
             out.push_back(c);
             continue;
          }
@@ -77,6 +80,7 @@ namespace
          c.start = b;
          c.length = e - b;
          ClampFades(c);
+         CropMidiNotesLeft(c.notes, b - s);
          out.push_back(c);
       }
       if (changed)
@@ -167,12 +171,83 @@ namespace
    }
 }
 
+void SanitizeMidiNotes(std::vector<MidiNote>& notes)
+{
+   notes.erase(std::remove_if(notes.begin(), notes.end(), [](const MidiNote& n) { return n.start < 0; }), notes.end());
+   for (MidiNote& n : notes)
+   {
+      if (n.length < 1) n.length = 1;
+      if (n.start > kMaxTick) n.start = kMaxTick;
+      if (n.length > kMaxTick) n.length = kMaxTick;
+      n.note = std::clamp(n.note, 0, 127);
+      if (!std::isfinite(n.velocity)) n.velocity = 0.8f;
+      n.velocity = std::clamp(n.velocity, 0.0f, 1.0f);
+   }
+   std::stable_sort(notes.begin(), notes.end(), [](const MidiNote& a, const MidiNote& b)
+   {
+      return a.start != b.start ? a.start < b.start : a.note < b.note;
+   });
+}
+
+
+void CropMidiNotesLeft(std::vector<MidiNote>& notes, Tick delta)
+{
+   if (delta == 0)
+      return;
+   std::vector<MidiNote> out;
+   out.reserve(notes.size());
+   for (MidiNote n : notes)
+   {
+      const Tick s = n.start - delta;
+      const Tick e = s + n.length;
+      if (e <= 0)
+         continue; // wholly before the new start
+      n.start = std::max<Tick>(0, s);
+      n.length = e - n.start;
+      out.push_back(n);
+   }
+   notes.swap(out);
+   SanitizeMidiNotes(notes);
+}
+
+
+void CropMidiNotesRight(std::vector<MidiNote>& notes, Tick length)
+{
+   std::vector<MidiNote> out;
+   out.reserve(notes.size());
+   for (MidiNote n : notes)
+   {
+      if (n.start >= length)
+         continue;
+      if (n.start + n.length > length)
+         n.length = length - n.start;
+      out.push_back(n);
+   }
+   notes.swap(out);
+}
+
+
 void Normalize(Model& m)
 {
    for (Lane& l : m.lanes)
    {
+      if (l.type != kLaneVideo && l.type != kLaneAudio && l.type != kLaneMidi)
+         l.type = kLaneVideo;
+      if (l.type != kLaneMidi)
+         l.instrumentUid = 0;
       for (Clip& clip : l.clips)
       {
+         // Notes belong to MIDI lanes only; a MIDI clip has no source node.
+         if (l.type == kLaneMidi)
+         {
+            clip.srcUid = 0;
+            clip.srcOutput = 0;
+            SanitizeMidiNotes(clip.notes);
+         }
+         else if (!clip.notes.empty())
+         {
+            clip.notes.clear();
+         }
          if (clip.start < 0) clip.start = 0;
          if (clip.length < 1) clip.length = 1;
          if (clip.srcOutput < 0) clip.srcOutput = 0;
@@ -360,7 +435,8 @@ bool Validate(const Model& m, std::string* why)
       if (l.id == 0) return fail("lane with id 0");
       if (!ids.insert(l.id).second) return fail("duplicate lane id " + std::to_string(l.id));
       if (l.id >= m.nextId) return fail("lane id " + std::to_string(l.id) + " >= nextId");
-      if (l.type != kLaneVideo && l.type != kLaneAudio) return fail("bad lane type");
+      if (l.type != kLaneVideo && l.type != kLaneAudio && l.type != kLaneMidi) return fail("bad lane type");
+      if (l.type != kLaneMidi && l.instrumentUid != 0) return fail("instrument on a non-MIDI lane");
 
       Tick prevEnd = 0;
       bool first = true;
@@ -373,6 +449,10 @@ bool Validate(const Model& m, std::string* why)
          if (c.length <= 0) return fail("clip length <= 0");
          if (c.fadeIn < 0 || c.fadeOut < 0 || c.fadeIn > c.length || c.fadeOut > c.length)
             return fail("fade outside clip");
+         if (l.type != kLaneMidi && !c.notes.empty()) return fail("notes on a non-MIDI clip");
+         for (const MidiNote& n : c.notes)
+            if (n.start < 0 || n.length < 1 || n.note < 0 || n.note > 127 || !(n.velocity >= 0.0f && n.velocity <= 1.0f))
+               return fail("bad MIDI note in clip " + std::to_string(c.id));
          if (!first && c.start < prevEnd)
             return fail("clips overlap or unsorted on lane " + std::to_string(l.id));
          prevEnd = c.End();
@@ -534,6 +614,9 @@ bool TrimEdge(Model& m, uint64_t id, int edge, Tick tick)
       // the source read-point must skip forward by the same amount, in
       // source seconds (see SampleSourceBpm) - same formula Split uses.
       c.sourceOffsetSeconds += (float)TicksToSeconds(tick - c.start, SampleSourceBpm(c.syncToTempo, c.sampleBpm, gSampleLiveTempoBpm));
+      // MIDI: the notes stay where they are in time, so they move by the
+      // opposite of the edge (a note the new start cuts through is cropped).
+      CropMidiNotesLeft(c.notes, tick - c.start);
       c.start = tick;
       c.length = end - tick;
    }
@@ -574,10 +657,14 @@ bool Split(Model& m, uint64_t id, Tick tick, uint64_t* outRightId)
    // exactly where the cut sits, in source seconds (see SampleSourceBpm), so
    // the two halves play back as one uninterrupted take.
    right.sourceOffsetSeconds = c.sourceOffsetSeconds + (float)TicksToSeconds(tick - c.start, SampleSourceBpm(c.syncToTempo, c.sampleBpm, gSampleLiveTempoBpm));
+   // MIDI: a note crossing the cut ends at it on the left and restarts at 0
+   // on the right; everything after the cut moves to the right half.
+   CropMidiNotesLeft(right.notes, tick - c.start);
 
    c.length = tick - c.start;
    c.fadeOut = 0;
    ClampFades(c);
+   CropMidiNotesRight(c.notes, c.length);
 
    lane.clips.insert(lane.clips.begin() + loc.index + 1, right);
    SortLane(lane);
@@ -793,6 +880,7 @@ bool TrimGroupEdge(Model& m, uint64_t groupId, int edge, Tick tick)
             const Tick end = c.End();
             // Same source-offset adjustment as TrimEdge's kEdgeStart branch.
             c.sourceOffsetSeconds += (float)TicksToSeconds(t - c.start, SampleSourceBpm(c.syncToTempo, c.sampleBpm, gSampleLiveTempoBpm));
+            CropMidiNotesLeft(c.notes, t - c.start);
             c.start = t;
             c.length = end - t;
          }
@@ -899,8 +987,8 @@ uint64_t AddLane(Model& m, int type, int atIndex)
 {
    Lane l;
    l.id = m.NewId();
-   l.type = (type == kLaneAudio) ? kLaneAudio : kLaneVideo;
-   l.name = UniqueLaneName(m, l.type == kLaneAudio ? "Audio" : "Video", l.type);
+   l.type = (type == kLaneAudio || type == kLaneMidi) ? type : kLaneVideo;
+   l.name = UniqueLaneName(m, l.type == kLaneAudio ? "Audio" : (l.type == kLaneMidi ? "MIDI" : "Video"), l.type);
    const int at = (atIndex < 0 || atIndex > (int)m.lanes.size()) ? (int)m.lanes.size() : atIndex;
    m.lanes.insert(m.lanes.begin() + at, l);
    m.revision++;
@@ -929,7 +1017,7 @@ std::string UniqueLaneName(const Model& m, const std::string& baseName, int type
    int startNum = 1;
    if (stem.empty())
    {
-      stem = (type == kLaneVideo ? "Video" : "Audio");
+      stem = (type == kLaneVideo ? "Video" : (type == kLaneMidi ? "MIDI" : "Audio"));
       startNum = 1;
    }
    else
@@ -1042,7 +1130,7 @@ bool DuplicateLane(Model& m, uint64_t laneId, uint64_t* outLaneId)
 
    Lane nl = m.lanes[i];
    nl.id = m.NewId();
-   nl.name = UniqueLaneName(m, nl.name.empty() ? (nl.type == kLaneVideo ? "Video" : "Audio") : nl.name, nl.type);
+   nl.name = UniqueLaneName(m, nl.name.empty() ? std::string(nl.type == kLaneVideo ? "Video" : (nl.type == kLaneMidi ? "MIDI" : "Audio")) : nl.name, nl.type);
    std::unordered_map<uint64_t, uint64_t> clipGroupRemap;
    for (Clip& c : nl.clips)
    {
@@ -1117,8 +1205,13 @@ bool ClearSource(Model& m, uint64_t uid)
    if (uid == 0) return false;
    bool changed = false;
    for (Lane& l : m.lanes)
+   {
+      // A MIDI lane whose instrument was deleted keeps its notes and goes
+      // offline, exactly like a clip whose source went away.
+      if (l.instrumentUid == uid) { l.instrumentUid = 0; changed = true; }
       for (Clip& c : l.clips)
          if (c.srcUid == uid) { c.srcUid = 0; changed = true; }
+   }
    if (changed) m.revision++;
    return changed;
 }
@@ -1409,7 +1502,7 @@ bool DuplicateTrackGroup(Model& m, uint64_t groupId, uint64_t* outGroupId)
       Lane nl = srcLane;
       nl.id = m.NewId();
       nl.groupId = groupRemap[srcLane.groupId];
-      nl.name = UniqueLaneName(m, nl.name.empty() ? (nl.type == kLaneVideo ? "Video" : "Audio") : nl.name, nl.type);
+      nl.name = UniqueLaneName(m, nl.name.empty() ? std::string(nl.type == kLaneVideo ? "Video" : (nl.type == kLaneMidi ? "MIDI" : "Audio")) : nl.name, nl.type);
       for (Clip& c : nl.clips)
       {
          c.id = m.NewId();

@@ -255,6 +255,11 @@ extern std::vector<uint64_t> gArrangeAssignTargetIds;
       // so ArrangePollMediaImports must not re-estimate/overwrite them,
       // just attach the newly decoded buffer to the clone's own node.
       bool isClone = false;
+      // True for the WAV a "Render to track" job just wrote: the clip must
+      // stay at native speed (Sync to Tempo off) so it lines up sample for
+      // sample with what was rendered - the BPM analysis still fills
+      // sampleBpm/origBpm for display, but never switches sync on.
+      bool keepNativeSpeed = false;
    };
 
 extern std::vector<ArrangePendingImport> gArrangePendingImports;
@@ -624,6 +629,44 @@ bool ArrangeDragEnd();
 uint64_t AddNodeToArrangeTimeline(int nodeIndex, int laneType = -1, int srcOutput = -1);
 
 bool ArrangeAssignClipSource(uint64_t clipId, uint64_t uid);
+
+// ---- group clip sources (ArrangeTools.cpp) --------------------------------
+// A GroupNode is a valid clip source on any lane: its clip draws nothing and
+// plays nothing itself, it only gates the group (GroupTimelineWindows).
+bool ArrangeIsGroupNode(const GraphNode& gn);
+// The lane a node lands on by default: ArrangeLaneTypeForNode, and for a
+// group audio if a member makes sound, else video if one makes pictures.
+int ArrangeNaturalLaneType(const GraphNode& gn);
+// Whether `gn` may be the source of a clip on a lane of `laneType`.
+bool ArrangeClipSourceFits(const GraphNode& gn, int laneType);
+// Clip label for a source: a group's own label, else NodeTitle.
+std::string ArrangeSourceTitle(const GraphNode& gn);
+// The group's colour (GroupNode::color) when `uid` is a group.
+bool ArrangeGroupSourceColor(uint64_t uid, ImU32& out);
+void FrameTest_ARRANGEGROUPTEST(int frameId, GLFWwindow* window);
+
+// ---- MIDI lanes (ArrangeMidi.cpp, ArrangePianoRoll.cpp) --------------------
+void FrameTest_ARRANGEMIDITEST(int frameId, GLFWwindow* window);
+// The first instrument whose note input is cabled from `producer`, or 0.
+uint64_t ArrangeFirstInstrumentOf(const GraphNode& producer);
+// The lane's instrument for display: its title, "(no instrument)" or "(missing)".
+std::string ArrangeMidiInstrumentLabel(const Arrange::Lane& lane);
+// The mini piano roll drawn inside a MIDI clip on the timeline. [clipX0,
+// clipX1] is the whole clip's x span (it may be cut by the visible rect).
+void ArrangeDrawMidiClipPreview(ImDrawList* dl, const Arrange::Clip& clip, const ImVec2& rectMin, const ImVec2& rectMax,
+                                float clipX0, float clipX1, bool muted);
+// One-bar empty MIDI clip at `atTick` (one undo step); returns its id or 0.
+uint64_t ArrangeAddEmptyMidiClip(uint64_t laneId, Arrange::Tick atTick);
+// "Add MIDI Track" submenu: one entry per note instrument on the canvas plus
+// "No instrument yet". The new lane lands after lane index `insertAfter` (-1 =
+// at the end) in track group `groupId`. One undo step.
+void ArrangeDrawAddMidiTrackMenu(int insertAfter, uint64_t groupId);
+// Inspector sections: a MIDI lane's instrument picker, a MIDI clip's notes.
+void ArrangeDrawMidiLaneInspector(uint64_t laneId, float fieldW);
+void ArrangeDrawMidiClipInspector(uint64_t clipId, float fieldW);
+
+// The rate the last render-to-track job ran at (ArrangeRenderToTrack.cpp).
+double RenderToTrackSampleRate();
 
 ImU32 ArrangeGroupColor(uint64_t groupId, int alpha = 255);
 

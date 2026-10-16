@@ -83,8 +83,45 @@ namespace Arrange
       return std::max<Tick>(1, (Tick)llround(seconds * (effBpm / 60.0) * (double)kPPQ));
    }
 
-   enum LaneType { kLaneVideo = 0, kLaneAudio = 1 };
+   // kLaneMidi: an instrument track. The lane names ONE note-consuming canvas
+   // node (Lane::instrumentUid); its clips hold notes (Clip::notes) instead of
+   // a source node, and their srcUid stays 0.
+   enum LaneType { kLaneVideo = 0, kLaneAudio = 1, kLaneMidi = 2 };
+   // Lanes that have a mixer strip (mute/solo/gain/pan) and take part in the
+   // solo rule: audio and MIDI. A soloed lane of either kind silences every
+   // unsoloed one of both.
+   inline bool LaneHasMixer(int type) { return type == kLaneAudio || type == kLaneMidi; }
    enum Edge { kEdgeStart = 0, kEdgeEnd = 1 };
+
+   // One note of a MIDI clip. Ticks are relative to the clip's own start, so
+   // moving the clip moves its notes. A note may run past the clip's end (it
+   // is cut there on playback) and notes past the end survive a shorter clip,
+   // so trimming the end and dragging it back out is lossless; trimming the
+   // start, splitting and overwriting crop them (see CropMidiNotes*).
+   struct MidiNote
+   {
+      Tick  start    = 0;     // >= 0, relative to Clip::start
+      Tick  length   = 1;     // >= 1
+      int   note     = 60;    // MIDI 0..127
+      float velocity = 0.8f;  // 0..1
+      bool operator==(const MidiNote& o) const
+      {
+         return start == o.start && length == o.length && note == o.note && velocity == o.velocity;
+      }
+      bool operator!=(const MidiNote& o) const { return !(*this == o); }
+   };
+
+   // Sorted by (start, note); clamps pitch/velocity and length >= 1, drops
+   // notes that start before 0.
+   void SanitizeMidiNotes(std::vector<MidiNote>& notes);
+   // The notes of a clip piece that now starts `delta` ticks later than the
+   // original (delta may be negative: the piece starts earlier). A note that
+   // started before the new start is shortened to begin at 0; one that ended
+   // before it is dropped.
+   void CropMidiNotesLeft(std::vector<MidiNote>& notes, Tick delta);
+   // The notes of a clip piece that now ends at `length` ticks: notes starting
+   // at or after it are dropped, a note crossing it is shortened to end there.
+   void CropMidiNotesRight(std::vector<MidiNote>& notes, Tick length);
    // SetEnabled's third argument.
    enum EnableMode { kDisable = 0, kEnable = 1, kToggle = 2 };
 
@@ -172,6 +209,10 @@ namespace Arrange
       // is stable across saves.
       std::vector<int> bypassedModParams;
 
+      // MIDI lane only: the clip's notes, sorted by (start, note), start
+      // relative to the clip (see MidiNote). Empty on every other clip.
+      std::vector<MidiNote> notes;
+
       bool IsModBypassed(int paramIndex) const
       {
          return std::find(bypassedModParams.begin(), bypassedModParams.end(), paramIndex) !=
@@ -206,6 +247,10 @@ namespace Arrange
       std::string name;           // empty = auto ("V1", "A2", ...)
       float    colorR = 0.0f, colorG = 0.0f, colorB = 0.0f; // 0,0,0 = default type accent
       float    rowHeight = 0.0f;  // 0 = default row height; drag-resized via the row's bottom border
+      // MIDI only: GraphNode::uid of the instrument the lane's notes play
+      // (any node with a note input). 0 = none yet; ClearSource zeroes it
+      // when that node is deleted.
+      uint64_t instrumentUid = 0;
       std::vector<Clip> clips;    // always sorted by start, never overlapping
    };
 
@@ -390,7 +435,8 @@ namespace Arrange
    bool DuplicateLane(Model& m, uint64_t laneId, uint64_t* outLaneId = nullptr);
    bool SetLaneEnabled(Model& m, uint64_t laneId, int mode); // EnableMode
    // Clears srcUid on every clip pointing at `uid` instead of deleting the
-   // clip: deleting a node leaves its clips offline, not gone (WP5).
+   // clip: deleting a node leaves its clips offline, not gone (WP5). Also
+   // clears a MIDI lane's instrumentUid when it names `uid`.
    bool ClearSource(Model& m, uint64_t uid);
 
    // --- track groups -----------------------------------------------------

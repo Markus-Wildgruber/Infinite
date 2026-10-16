@@ -17,6 +17,18 @@ public:
       Mp3
    };
 
+   // Sample encoding of a WAV file (ignored for FLAC/MP3). Pcm16/Pcm24 are
+   // WAVE_FORMAT_PCM (fmt chunk 16 bytes); Float32 is WAVE_FORMAT_IEEE_FLOAT
+   // (fmt chunk 18 bytes, cbSize 0) followed by the fact chunk its spec
+   // requires. Nothing else is ever written: no LIST/acid/smpl/bext/cue.
+   // Layout in src/audio/WavFormat.h.
+   enum class WavEncoding
+   {
+      Pcm16,
+      Pcm24,
+      Float32
+   };
+
    AudioFileWriter();
    ~AudioFileWriter();
 
@@ -24,7 +36,8 @@ public:
 
    // Opens `path` in the format deduced from extension (or explicitly specified).
    // Returns false if the file couldn't be created or initialized.
-   bool Open(const std::string& path, double sampleRate, int numChannels, Format format = Format::Auto);
+   bool Open(const std::string& path, double sampleRate, int numChannels, Format format = Format::Auto,
+             WavEncoding wavEncoding = WavEncoding::Pcm16);
 
    // Converts `frames` interleaved float samples to the appropriate destination format and appends them.
    void Append(const float* interleaved, int frames);
@@ -36,6 +49,10 @@ public:
    int64_t BytesWritten() const;
    const std::string& Path() const { return mPath; }
    Format GetFormat() const { return mFormat; }
+   WavEncoding GetWavEncoding() const { return mWavEncoding; }
+   // False once a write to the file failed (disk full, removed volume): the
+   // caller should stop and report it; Close() still fixes up the header.
+   bool WriteOk() const { return mWriteOk; }
 
    static Format FormatFromPath(const std::string& path);
    static const char* ExtensionForFormat(Format format);
@@ -51,6 +68,8 @@ private:
    double mSampleRate = 44100.0;
    int64_t mFramesWritten = 0;
    int64_t mBytesWrittenDirect = 0;
+   WavEncoding mWavEncoding = WavEncoding::Pcm16;
+   bool mWriteOk = true;
 
    // WAV state
    FILE* mFile = nullptr;

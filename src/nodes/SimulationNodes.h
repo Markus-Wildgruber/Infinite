@@ -55,6 +55,18 @@ public:
 
    size_t AliveCount() const { return mAliveCount; }
    void Reset();
+   // Generic button API (INode): "reset", the card's Reset.
+   std::vector<std::string> ButtonNames() const override { return { "reset" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "reset")
+      {
+         Reset();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Particle System has: reset)";
+      return false;
+   }
 
    int maxParticles = 4000;
    float emitRate = 200.0f;      // particles per second
@@ -183,6 +195,18 @@ public:
    size_t TriangleCount() const { return mMesh.indices.size() / 3; }
    size_t ConstraintCount() const { return mConstraints.size(); }
    void Reset();
+   // Generic button API (INode): "reset", the card's Reset.
+   std::vector<std::string> ButtonNames() const override { return { "reset" }; }
+   bool PressButton(const std::string& name, std::string& err) override
+   {
+      if (name == "reset")
+      {
+         Reset();
+         return true;
+      }
+      err = "unknown button '" + name + "' (Cloth has: reset)";
+      return false;
+   }
 
    int pinMode = kPinTop;
    float stiffness = 0.9f;

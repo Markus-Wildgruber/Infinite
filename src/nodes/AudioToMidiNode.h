@@ -90,6 +90,13 @@ public:
    bool StartRecording(std::string& error);
    void StopRecording();
 
+   // Generic button API (INode): "record" (StartRecording, its error also
+   // lands in exportMessage like the card's), "stop" (StopRecording), "retry"
+   // (Reconvert, only after a failed conversion). Export MIDI needs a file
+   // name from a dialog and is not a button here.
+   std::vector<std::string> ButtonNames() const override { return { "record", "stop", "retry" }; }
+   bool PressButton(const std::string& name, std::string& err) override;
+
    // Knob values -> model thresholds (defaults land on Basic Pitch's own 0.5 / 0.3 / 127.7 ms).
    BasicPitch::Settings CurrentSettings() const;
 

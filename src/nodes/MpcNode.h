@@ -111,6 +111,13 @@ public:
    // high). Only edges reach the audio thread, so a held level fires once.
    void SetPadHeld(int pad, bool held, float velocity = 1.0f);
 
+   // Generic button API (INode, the assistant's press_button): "pad1".."pad16"
+   // taps a pad (a rising then a falling edge, like a short click: a one-shot
+   // or loop pad plays on, a gate pad sounds only for that instant), "clear"
+   // empties the selected pad (the card's Clear).
+   std::vector<std::string> ButtonNames() const override;
+   bool PressButton(const std::string& name, std::string& err) override;
+
    bool PadPlaying(int pad) const { return (mPlayingMask & (1u << Clamp(pad))) != 0; }
    bool PadLoaded(int pad) const { return !padPath[Clamp(pad)].empty(); }
    const std::string& PadName(int pad) const { return padName[Clamp(pad)]; }

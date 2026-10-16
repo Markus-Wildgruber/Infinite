@@ -88,6 +88,13 @@ class INode;
 //     name. Only written when the list is non-empty; a patch without it
 //     loads with nothing bypassed, i.e. exactly the behaviour that predates
 //     the field.
+//   streammidi <streamIndex> <instrumentUid>
+//     A MIDI lane's (stream type 2) instrument node uid. Only written for a
+//     MIDI lane with an instrument.
+//   clipnotes <streamIndex> <clipId> <count> [<startTick> <lengthTick> <note> <velocity>] x count
+//     A MIDI clip's notes (Arrange::Clip::notes), ticks relative to the clip
+//     start, velocity 0..1. Variable length, to end of line. Only written for
+//     a clip with notes; an older reader skips the unknown tag.
 //   marker <id> <posTick> <colorRGBA8> <name to end of line>
 //   arrange <nextId> <timeDisplay> <snap> <triplet> <zoom> <scroll> <loopOn>
 //           <loopStart> <loopEnd> <dock> <w> <h> <fps> <sr> <format>
@@ -322,7 +329,19 @@ namespace Patch
    // so reordering or deleting a stream can never leave a clip on the wrong
    // lane. Clips within one stream never overlap - enforced by the editor,
    // not here.
-   enum StreamType { kStreamVideo = 0, kStreamAudio = 1 };
+   // kStreamMidi: an instrument track (Arrange::kLaneMidi). An older reader
+   // clamps the unknown type to video, so such a lane comes back as an empty
+   // video lane there rather than breaking the load.
+   enum StreamType { kStreamVideo = 0, kStreamAudio = 1, kStreamMidi = 2 };
+
+   // One note of a MIDI clip (Arrange::MidiNote): ticks relative to the clip.
+   struct NoteRecord
+   {
+      int64_t startTick  = 0;
+      int64_t lengthTick = 1;
+      int     note       = 60;
+      float   velocity   = 0.8f;
+   };
 
    struct ClipRecord
    {
@@ -381,6 +400,9 @@ namespace Patch
       // on every clip saved before this field existed, which is the same as
       // "nothing bypassed" - so an old patch loads identically.
       std::vector<int> bypassedModParams;
+      // MIDI clip notes, own `clipnotes` line (variable length, to end of
+      // line). Empty on every non-MIDI clip and on every older patch.
+      std::vector<NoteRecord> notes;
    };
 
    struct StreamRecord
@@ -403,6 +425,7 @@ namespace Patch
       std::string name;         // empty = auto ("V1", "A2", ...) - label derived by the UI
       float colorR = 0.0f, colorG = 0.0f, colorB = 0.0f;
       float rowHeight = 0.0f;   // 0 = default; new field, older patches load at the default height
+      uint64_t instrumentUid = 0; // MIDI only; own `streammidi` line
       std::vector<ClipRecord> clips;
    };
 

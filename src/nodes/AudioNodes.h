@@ -272,6 +272,18 @@ public:
    // call when not recording.
    void StopRecording();
    bool IsRecording() const { return mWriter.IsOpen(); }
+   // The folder the next recording lands in: recordDirectory, else the Desktop.
+   std::string RecordingDirectory() const;
+   // The card's Record button: a fresh file in RecordingDirectory(), named by
+   // sRecordingNamer (Infinite-<patch>-NNN.<ext>), in formatIndex's format.
+   // False when the engine is not running or the file could not be opened.
+   bool StartRecordingInFolder();
+   // Installed by the app (AudioNodeBodies.cpp: the patch-name based scheme);
+   // null falls back to a fixed name.
+   static std::string (*sRecordingNamer)(const std::string& dir, const std::string& ext);
+   // Generic button API (INode): "record" (= StartRecordingInFolder), "stop".
+   std::vector<std::string> ButtonNames() const override { return { "record", "stop" }; }
+   bool PressButton(const std::string& name, std::string& err) override;
    double ElapsedSeconds() const { return mOpenSampleRate > 0.0 ? (double)mWriter.FramesWritten() / mOpenSampleRate : 0.0; }
    int64_t FileSizeBytes() const { return mWriter.BytesWritten(); }
    const std::string& RecordingPath() const { return mWriter.Path(); }

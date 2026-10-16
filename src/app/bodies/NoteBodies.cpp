@@ -677,10 +677,8 @@ namespace app
          {
             PushUndoCheckpoint();
             // Recording runs on the beat clock; a stopped transport would
-            // capture a single sample.
-            if (!Transport::Instance().IsPlaying())
-               Transport::Instance().SetPlaying(true);
-            n->StartRecording();
+            // capture a single sample (CVRecorderNode::PressRecord).
+            n->PressRecord();
          }
       }
       if (recording)

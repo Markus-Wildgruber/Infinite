@@ -170,7 +170,14 @@ void AudioEffectNode::CookIfNeeded(int frameId)
    // the real device rate; falls back to a sane default when no device is
    // open yet so a patch built before pressing play still shows a sensible
    // response curve.
-   const double sampleRate = AudioEngine::Instance().SampleRate();
+   // An offline take (render to track/file, offline capture) runs with the
+   // device closed (SampleRate() == 0) and the graph prepared at the take's
+   // rate, so the rate this node was actually prepared at wins; without it a
+   // take at 48 kHz got coefficients for the 44.1 kHz fallback and every
+   // cutoff landed ~9% off.
+   double sampleRate = AudioEngine::Instance().SampleRate();
+   if (mAudioNode->preparedForSampleRate > 0.0)
+      sampleRate = mAudioNode->preparedForSampleRate;
    mAudioNode->Kernel().PushParams(*this, sampleRate > 0.0 ? sampleRate : 44100.0);
 
    float peak = 0.0f;

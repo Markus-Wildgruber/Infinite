@@ -122,6 +122,9 @@ public:
    void StartRecording();
    void StopRecording();
    bool IsRecording() const { return mRecording; }
+   // Generic button API (INode, the assistant's press_button): record, stop, audition, stop_audition, reslice.
+   std::vector<std::string> ButtonNames() const override;
+   bool PressButton(const std::string& name, std::string& err) override;
 
    // While recording, ProcessBlock must run every block to capture
    // audioInput even with no downstream cable and no note input.

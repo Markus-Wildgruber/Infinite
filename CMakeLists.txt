@@ -448,6 +448,7 @@ set(COMMON_SOURCES
     src/app/graph/Disconnect.cpp
     src/app/graph/ExportImage.cpp
     src/app/graph/GraphHosts.cpp
+    src/app/graph/Groups.cpp
     src/app/graph/NodeRegistry.cpp
     src/app/graph/PatchFiles.cpp
     src/app/graph/PatchIO.cpp
@@ -455,11 +456,17 @@ set(COMMON_SOURCES
     src/app/graph/Projector.cpp
     src/app/graph/Rpc.cpp
     src/app/graph/AudioProbeJobs.cpp
+    src/app/graph/OfflineTake.cpp
     src/app/graph/Wiring.cpp
     src/app/panels/ArrangePanel.cpp
     src/app/panels/ArrangeRender.cpp
     src/app/panels/ArrangeSupport1.cpp
     src/app/panels/ArrangeSupport2.cpp
+    src/app/panels/ArrangeRenderToTrack.cpp
+    src/app/panels/ArrangeRenderToFile.cpp
+    src/app/panels/ArrangeTools.cpp
+    src/app/panels/ArrangeMidi.cpp
+    src/app/panels/ArrangePianoRoll.cpp
     src/app/panels/HelpWindows.cpp
     src/app/panels/LibraryPanels.cpp
     src/app/panels/Minimap.cpp

@@ -26,6 +26,43 @@ constexpr int kAudioMaxNodeInputs = 12;
 constexpr int kAudioMaxNodeOutputs = 12;
 constexpr int kAudioMaxBlockFrames = 4096;
 constexpr int kAudioMaxChannels = 8;
+// Node-editor groups that can mute/solo (app/graph/Groups.cpp). Each live
+// group holds one slot for as long as it exists; slots are what pins and
+// terminals name, so a gate's smoothed gain survives every topology rebuild.
+constexpr int kMaxGroupGates = 64;
+// Group mute fades over this long - short enough to read as instant, long
+// enough that a running oscillator does not click.
+constexpr double kGroupGateRampSeconds = 0.010;
+
+// One group's gate. The main thread writes the atomics (mute/solo state, and
+// notesOpen also folds in the timeline at frame rate); the audio thread owns
+// `gain`, ramping it toward target x (timeline window open) every block.
+// Lives in AudioEngine, never in a topology, so a rebuild cannot reset a
+// fade in progress.
+struct GroupGate
+{
+   std::atomic<float> target { 1.0f };    // 1 = audible, 0 = muted / soloed out
+   std::atomic<bool> notesOpen { true };  // NoteEventQueue reads this per Pop
+   std::atomic<bool> snap { true };       // jump `gain` to its target next block
+   float gain = 1.0f;                     // audio thread only
+};
+
+// A group's gate as one topology generation sees it: which slot, and the
+// beat windows (into AudioTopology::groupWindows) inside which the timeline
+// lets it sound. hasClips false = the timeline never gates it.
+struct GroupGateTopo
+{
+   int slot = -1;
+   int windowOffset = 0;
+   int numWindows = 0;
+   bool hasClips = false;
+};
+
+struct GroupBeatWindow
+{
+   double startBeat = 0.0;
+   double endBeat = 0.0; // exclusive
+};
 
 enum AudioStageId : int
 {
@@ -74,6 +111,12 @@ struct AudioTopologyEntry
    // just these while no audio device is open.
    bool noteOnly = false;
    int stageId = kAudioStageOther;
+
+   // Group mute, per input pin: the GroupGate slot whose gain this pin's
+   // signal is multiplied by (the pin's source is a member of that group and
+   // this node is not), or -1 for an ungated pin - every pin of a patch with
+   // no groups, and every member-to-member cable.
+   int inputGate[kAudioMaxNodeInputs] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
    // Plugin/effect delay compensation (PDC): per input pin, the pin's source
    // branch needs a CompensationDelay so every pin merging into this node
@@ -191,6 +234,10 @@ struct AudioTerminal
    // delayed to match a slower terminal nor counted when finding the slowest one.
    bool live = false;
 
+   // Group mute: the GroupGate slot whose gain this terminal's signal is
+   // multiplied by (its source node is a group member), or -1.
+   int gateSlot = -1;
+
    // Arrangement Timeline clip scheduling. `numWindows > 0` marks this as a
    // timeline terminal: [windowOffset, windowOffset + numWindows) indexes
    // AudioTopology::clipWindows, sorted by startBeat and non-overlapping (one
@@ -304,6 +351,9 @@ struct NoteWire
    int slot = 0;
    NoteEventQueue* inbox = nullptr;
    int cursor = -1;
+   // Group mute: the producer is a member of a group the consumer is not in,
+   // so the consumer's cursor reads through this gate (GroupGate::notesOpen).
+   const std::atomic<bool>* noteGate = nullptr;
 };
 
 struct AudioTopology
@@ -330,6 +380,12 @@ struct AudioTopology
    // nodes (and the NoteEventQueues) that generation reaches.
    std::vector<NoteOutboxPlan> noteOutboxes;
    std::vector<NoteWire> noteWires;
+
+   // Every group gate a pin or terminal of this generation names, each slot
+   // once, with its timeline windows (flat backing store, same pattern as
+   // clipWindows). RunTopology advances each listed gate once per block.
+   std::vector<GroupGateTopo> groupGates;
+   std::vector<GroupBeatWindow> groupWindows;
 };
 
 // Owns the audio device connection and runs a DAG of AudioNodes, each over
@@ -504,6 +560,20 @@ public:
    // arrangement panel. Present whether or not a device is open: an offline
    // take fills it through ProcessOffline exactly the same way.
    ClipPeakRing& ClipPeaks() { return mClipPeaks; }
+
+   // Group mute/solo gates (app/graph/Groups.cpp). Stable addresses for the
+   // engine's lifetime; an out-of-range slot gets a dummy that no topology
+   // ever names.
+   GroupGate& GroupGateAt(int slot)
+   {
+      return (slot >= 0 && slot < kMaxGroupGates) ? mGroupGates[slot] : mGroupGateDummy;
+   }
+   // Audio-thread view, for the self-test: the gain a slot's gate ended the
+   // last block on. Relaxed read of an audio-thread float; diagnostics only.
+   float GroupGateGain(int slot) const
+   {
+      return (slot >= 0 && slot < kMaxGroupGates) ? mGroupGates[slot].gain : 1.0f;
+   }
 
    // Main thread only. The generation number that will be attached to the
    // NEXT SetTopology() call - i.e. the generation of whatever topology is
@@ -701,4 +771,21 @@ private:
    // solve the per-thread-lazy-allocation problem these members no longer
    // have).
    std::vector<OfflineTap>* mOfflineTaps = nullptr;
+
+   // Group gates (see GroupGate). mGateStart/mGateTarget are per-block
+   // audio-thread scratch: the gain each listed slot starts this block on and
+   // the value it is ramping toward, filled once per block before any node
+   // cooks so every pin and terminal of one group fades identically.
+   GroupGate mGroupGates[kMaxGroupGates];
+   GroupGate mGroupGateDummy;
+   float mGateStart[kMaxGroupGates] = {};
+   float mGateTarget[kMaxGroupGates] = {};
+   float mGateStepPerFrame = 1.0f;
+   void AdvanceGroupGates(ProcessList* list, int numFrames, double sampleRate);
+   // dst = src x the slot's ramp this block. dst may alias src.
+   void ApplyGroupGate(int slot, const AudioBuffer& src, AudioBuffer& dst, int numFrames, int numChannels) const;
+   bool GroupGateIsUnity(int slot) const
+   {
+      return slot < 0 || slot >= kMaxGroupGates || (mGateStart[slot] == 1.0f && mGateTarget[slot] == 1.0f);
+   }
 };

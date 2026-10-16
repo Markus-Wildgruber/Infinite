@@ -1,4 +1,5 @@
 #include "MolderNode.h"
+#include "nodes/NodeButtons.h"
 
 #include <algorithm>
 #include <cmath>
@@ -92,6 +93,7 @@ public:
    {
       mSampleRate = sampleRate;
       mSelfEnv.SetSampleRate(sampleRate);
+      mSelfEnv.Reset(); // a fresh start begins from silence (see Envelope::Reset)
       mSelfEnv.SetADSR(2.0f, 0.0f, 1.0f, 15.0f);
       if (mRecordBuffer.empty())
          mRecordBuffer.resize((size_t)kMaxRecordSeconds * kMaxRecordSampleRate);
@@ -761,4 +763,23 @@ void MolderNode::SweepPostAlter(const std::string& /*paramName*/, int& frameId)
       SweepWaitForJob();
    }
    mAudioNode->TriggerPreview(0.0f);
+}
+
+// Generic button API: the card's buttons (the caller pushes the undo
+// checkpoint the card pushes before Record/Stop).
+std::vector<std::string> MolderNode::ButtonNames() const
+{
+   return { "record", "stop", "audition", "stop_audition", "roll", "iterate", "reset" };
+}
+
+bool MolderNode::PressButton(const std::string& name, std::string& err)
+{
+   bool ok = false;
+   if (NodeButtons::RecordToggle(*this, name, err, ok) ||
+       NodeButtons::AuditionToggle(*this, name, err, ok, [this]() { TriggerPreview(start); }) ||
+       NodeButtons::Action("roll", name, ok, [this]() { Roll(); }) ||
+       NodeButtons::Action("iterate", name, ok, [this]() { Iterate(); }) ||
+       NodeButtons::Action("reset", name, ok, [this]() { Reset(); }))
+      return ok;
+   return NodeButtons::Unknown(*this, "Molder", name, err);
 }

@@ -63,54 +63,39 @@ namespace app
       int gNextJobId = 1;
       int gCaptureJob = -1; // the job that owns AudioProbe right now
 
+      // Self-test hook (INFINITE_RENDERFILETEST): the raw first slot of the
+      // last finished capture, so a render can be compared sample by sample.
+      bool gKeepLastCapture = false;
+      std::vector<float> gLastCapture;
+      double gLastCaptureRate = 0.0;
+
       // What an offline capture borrowed, given back by EndOffline.
-      struct OfflineRestore
-      {
-         bool active = false;
-         bool deviceWasRunning = false;
-         bool wasPlaying = false;
-         double seconds = 0.0;
-      };
-      OfflineRestore gOffline;
+      OfflineTake gOffline;
 
       // Offline capture: the same measurement as a live one, but the graph is
       // rendered here, block by block, from `start` seconds on the transport -
       // the way an offline render does - instead of listening to the device.
-      // Every run renders the same samples (the transport is exact, players
-      // that follow it land on the same sample, nothing depends on UI timing),
-      // so a synth rendered from Audio to MIDI's notes can be compared with
-      // the Audio File it was transcribed from, repeatably.
-      bool BeginOffline(Job& job, double startSeconds, std::string& err)
+      // It is an OfflineTake (graph/OfflineTake.cpp) like render to track and
+      // render to file: every node starts from its prepared state at `start`
+      // (no voice, envelope or tail carried over from live playback, step
+      // clocks re-derived from the transport) and modulation is stepped on
+      // the audio clock, so every run renders the same samples and a render
+      // to file of the same node and span matches it. The device is not
+      // needed: with none open the take runs at OfflineTakeRate().
+      bool BeginOffline(Job& job, double startSeconds, const std::vector<uint64_t>& tapUids, std::string& err)
       {
-         if (ArrangeRenderBusy() || Transport::Instance().IsOfflineMode())
+         if (ArrangeRenderBusy() || Transport::Instance().IsOfflineMode() || gOffline.active)
          {
             err = "an offline render is running; wait for it to finish";
             return false;
          }
-         const bool deviceWasRunning = AudioEngine::Instance().SampleRate() > 0.0;
-         // The graph's AudioNodes are prepared when a device opens, so open it
-         // once if it never was; the rate is the one the graph was prepared at.
-         if (!deviceWasRunning && !StartAudioEngine(gAudioStartError))
-         {
-            err = "the audio device could not start (" + gAudioStartError + "); offline capture needs it once to prepare the graph";
-            return false;
-         }
-         const double rate = AudioEngine::Instance().SampleRate();
-         if (!(rate > 0.0))
-         {
-            err = "no audio sample rate";
-            return false;
-         }
-         gOffline.active = true;
-         gOffline.deviceWasRunning = deviceWasRunning;
-         gOffline.wasPlaying = Transport::Instance().IsPlaying();
-         gOffline.seconds = Transport::Instance().Seconds();
-         AudioEngine::Instance().Stop();
-         Transport::Instance().Seek(std::max(0.0, startSeconds));
-         Transport::Instance().SetOfflineMode(true, rate);
-         Transport::Instance().SetPlaying(true);
+         const double rate = OfflineTakeRate();
+         OfflineTakeBegin(gOffline, rate, std::max(0.0, startSeconds));
          AudioProbe::Instance().SetOffline(true);
-         RebuildAudioTopology();
+         // Measured nodes are processed even when nothing downstream reaches
+         // an Audio Out (the same forced roots render to track uses).
+         OfflineTakeForceNodes(tapUids);
+         OfflineTakePrepare(gOffline);
          job.offline = true;
          job.offlineRate = rate;
          job.framesTotal = (long long)std::llround(job.seconds * rate);
@@ -122,37 +107,24 @@ namespace app
       {
          if (!gOffline.active)
             return;
-         gOffline.active = false;
          AudioProbe::Instance().SetOffline(false);
-         Transport::Instance().SetOfflineMode(false);
-         Transport::Instance().Seek(gOffline.seconds);
-         if (gOffline.deviceWasRunning)
-            StartAudioEngine(gAudioStartError);
-         else
-            Transport::Instance().NotifyAudioEngineStopped();
-         Transport::Instance().SetPlaying(gOffline.wasPlaying);
-         RebuildAudioTopology();
+         OfflineTakeRestore(gOffline);
       }
 
       // One main-loop slice of an offline capture: renders blocks for up to
       // ~60 ms, draining the probe after each so its rings never fill.
       void PumpOffline(Job& job)
       {
-         static float sL[4096];
-         static float sR[4096];
-         static float* sChannels[2] = { sL, sR };
+         static float sL[kAudioMaxBlockFrames];
+         static float sR[kAudioMaxBlockFrames];
          AudioProbe& probe = AudioProbe::Instance();
          float chunk[8192];
          const auto start = std::chrono::steady_clock::now();
-         const int blockCap = std::clamp(OfflineAudioBlockFrames(), 32, 4096);
+         const int blockCap = OfflineTakeBlockFrames();
          while (job.framesDone < job.framesTotal)
          {
             const int frames = (int)std::min<long long>(blockCap, job.framesTotal - job.framesDone);
-            AudioBuffer buf;
-            buf.channels = sChannels;
-            buf.numChannels = 2;
-            buf.numFrames = frames;
-            AudioEngine::Instance().ProcessOffline(buf);
+            OfflineTakeRender(gOffline, sL, sR, frames);
             job.framesDone += frames;
             for (size_t s = 0; s < job.buffers.size(); s++)
             {
@@ -161,7 +133,6 @@ namespace app
                   job.buffers[s].insert(job.buffers[s].end(), chunk, chunk + n);
                job.overflows += probe.TakeOverflows((int)s);
             }
-            Transport::Instance().SetOfflineVideoTime(Transport::Instance().Seconds());
             if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(60))
                break;
          }
@@ -203,6 +174,19 @@ namespace app
          err = "node " + std::to_string(gn.index) + " (" + gn.typeName +
                ") has no audio output - measure an audio source, an effect, or the node feeding it";
          return nullptr;
+      }
+
+      // The uid of the node TapTarget taps (an Audio Out: its feeder), 0 if none.
+      uint64_t TapUid(GraphNode& gn)
+      {
+         if (dynamic_cast<IAudioSource*>(gn.node.get()) != nullptr)
+            return gn.uid;
+         if (auto* out = dynamic_cast<AudioOutputNode*>(gn.node.get()))
+            if (out->input.IsConnected())
+               for (GraphNode& other : gNodes)
+                  if (other.node.get() == out->input.GetSource())
+                     return other.uid;
+         return 0;
       }
 
       json AnalyzeCapture(std::vector<std::vector<float>> buffers, std::vector<int> indices, std::vector<std::string> types,
@@ -389,6 +373,7 @@ namespace app
          job.seconds = std::clamp(params.value("seconds", 3.0), 0.2, 30.0);
          job.frameSeconds = std::clamp(params.value("frameSeconds", 0.1), 0.02, 2.0);
          const AudioNode* targets[AudioProbe::kSlots] = {};
+         std::vector<uint64_t> tapUids;
          for (size_t i = 0; i < indices.size(); i++)
          {
             GraphNode* gn = FindNodeByIndex(indices[i]);
@@ -405,6 +390,8 @@ namespace app
                return false;
             }
             targets[i] = target;
+            if (const uint64_t uid = TapUid(*gn))
+               tapUids.push_back(uid);
             job.nodeIndices.push_back(gn->index);
             job.nodeTypes.push_back(gn->typeName);
          }
@@ -413,7 +400,7 @@ namespace app
          {
             const double start = params.contains("start") && params["start"].is_number() ? params["start"].get<double>()
                                                                                          : Transport::Instance().Seconds();
-            if (!BeginOffline(job, start, outError))
+            if (!BeginOffline(job, start, tapUids, outError))
                return false;
             // The topology was just rebuilt; resolve the taps again in case a node's audio half was recreated.
             for (size_t i = 0; i < indices.size(); i++)
@@ -499,6 +486,26 @@ namespace app
          outResult = { { "id", id }, { "seconds", std::round(Jobs()[id].seconds * 1000.0) / 1000.0 } };
          return true;
       }
+   }
+
+   void AudioProbeKeepLastCapture(bool keep)
+   {
+      gKeepLastCapture = keep;
+      if (!keep)
+      {
+         gLastCapture.clear();
+         gLastCapture.shrink_to_fit();
+         gLastCaptureRate = 0.0;
+      }
+   }
+
+   bool AudioProbeLastCapture(std::vector<float>& outInterleaved, double& outRate)
+   {
+      if (gLastCapture.empty())
+         return false;
+      outInterleaved = gLastCapture;
+      outRate = gLastCaptureRate;
+      return true;
    }
 
    bool IsAudioProbeRpc(const std::string& method)
@@ -614,6 +621,11 @@ namespace app
                   for (auto& b : job.buffers)
                      if (b.size() / 2 > want)
                         b.resize(want * 2);
+                  if (gKeepLastCapture && !job.buffers.empty())
+                  {
+                     gLastCapture = job.buffers[0];
+                     gLastCaptureRate = sr;
+                  }
                   job.state = Job::Analyzing;
                   job.analysis = std::async(std::launch::async, AnalyzeCapture, std::move(job.buffers), job.nodeIndices,
                                             job.nodeTypes, sr, job.frameSeconds);

@@ -19,6 +19,9 @@ void DrawFramePump(FrameCtx& fc)
 {
    auto& window = fc.window;
    auto& frameId = fc.frameId;
+   // Audio-only offline takes step modulation + cook on this same counter
+   // (OfflineTake.cpp), like the video render's ++frameId below.
+   OfflineTakeBindFrameCounter(&fc.frameId);
    auto& isBenchB5c = fc.isBenchB5c;
    auto& isBenchB2 = fc.isBenchB2;
    auto& isBenchB7 = fc.isBenchB7;

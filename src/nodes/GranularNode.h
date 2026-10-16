@@ -78,6 +78,9 @@ public:
    void StartRecording();
    void StopRecording();
    bool IsRecording() const { return mRecording; }
+   // Generic button API (INode, the assistant's press_button): record, stop.
+   std::vector<std::string> ButtonNames() const override;
+   bool PressButton(const std::string& name, std::string& err) override;
    bool RequiresAudioProcessing() const override { return IsRecording(); }
 
    void Seek(float frac);

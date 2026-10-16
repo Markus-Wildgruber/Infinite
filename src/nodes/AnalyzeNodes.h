@@ -261,6 +261,15 @@ public:
    void Restart();
    bool IsPlaying() const;
    bool IsLoaded() const { return mLoaded; }
+   // The card's Play / Pause / Restart buttons: with followTransport they ARE
+   // the transport (play, pause, seek to offset); otherwise the file's own.
+   void PressPlay();
+   void PressPause();
+   void PressRestart();
+   // Generic button API (INode, the assistant's press_button): play, pause,
+   // restart. Only while a file is loaded (the card hides them otherwise).
+   std::vector<std::string> ButtonNames() const override { return { "play", "pause", "restart" }; }
+   bool PressButton(const std::string& name, std::string& err) override;
 
    double Duration() const { return mDuration; }
    double Position() const;

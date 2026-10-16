@@ -9,6 +9,7 @@
 #include "audio/DspMath.h"
 #include "audio/MeterRing.h"
 #include "audio/ParamMailbox.h"
+#include "platform/AppPaths.h"
 #include "platform/PlatformAudio.h"
 
 namespace
@@ -521,4 +522,54 @@ void AudioOutputNode::StopRecording()
    // fraction of a second isn't silently dropped.
    CookIfNeeded(0);
    mWriter.Close();
+}
+
+std::string (*AudioOutputNode::sRecordingNamer)(const std::string& dir, const std::string& ext) = nullptr;
+
+std::string AudioOutputNode::RecordingDirectory() const
+{
+   return recordDirectory.empty() ? AppPaths::DesktopDir() : recordDirectory;
+}
+
+bool AudioOutputNode::StartRecordingInFolder()
+{
+   const std::string ext = (formatIndex == 1) ? "flac" : (formatIndex == 2 ? "mp3" : "wav");
+   const std::string dir = RecordingDirectory();
+   const std::string name = sRecordingNamer != nullptr ? sRecordingNamer(dir, ext) : ("Infinite-recording." + ext);
+   return StartRecording(dir + "/" + name);
+}
+
+bool AudioOutputNode::PressButton(const std::string& name, std::string& err)
+{
+   if (name == "record")
+   {
+      if (IsRecording())
+      {
+         err = "already recording";
+         return false;
+      }
+      if (AudioEngine::Instance().SampleRate() <= 0.0)
+      {
+         err = "audio is not running: start audio first";
+         return false;
+      }
+      if (!StartRecordingInFolder())
+      {
+         err = "could not open a recording file in " + RecordingDirectory();
+         return false;
+      }
+      return true;
+   }
+   if (name == "stop")
+   {
+      if (!IsRecording())
+      {
+         err = "not recording";
+         return false;
+      }
+      StopRecording();
+      return true;
+   }
+   err = "unknown button '" + name + "' (Audio Out has: record, stop)";
+   return false;
 }

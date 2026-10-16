@@ -15,6 +15,17 @@ class Envelope
 public:
    void SetSampleRate(double sr) { mSampleRate = sr > 0.0 ? sr : 44100.0; }
 
+   // Back to silence and idle, for PrepareToPlay: a re-prepared synth (an
+   // offline render's fresh start, a device change) must start its next note
+   // from zero. NoteOn() deliberately keeps the level (click-free retrigger),
+   // so without this a note after a re-prepare began at the old voice's
+   // sustain level - an offline render of a slow pad started loud.
+   void Reset()
+   {
+      mStage = Stage::Idle;
+      mLevel = 0.0f;
+   }
+
    void SetADSR(float attackMs, float decayMs, float sustainLevel, float releaseMs)
    {
       mSustainLevel = sustainLevel < 0.0f ? 0.0f : (sustainLevel > 1.0f ? 1.0f : sustainLevel);

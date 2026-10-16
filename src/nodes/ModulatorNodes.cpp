@@ -229,6 +229,12 @@ float SmoothNode::Value01()
       return input ? input->Value01() : constantIn;
    const float target = input ? input->Value01() : constantIn;
    const double beats = Transport::Instance().Beats();
+   const unsigned long long epoch = Transport::Instance().ResetEpoch();
+   if (epoch != mLastEpoch)
+   {
+      mLastEpoch = epoch;
+      mLast = -1.0f; // restart on the target after a transport jump
+   }
    if (mLast >= 0.0f && beats == mLastBeats)
       return mLast; // already advanced this tick - don't double-apply the filter
 
@@ -691,4 +697,37 @@ float AudioToCVNode::CurrentLevel() const
 float AudioToCVNode::RawEnvelope() const
 {
    return mAudioNode ? mAudioNode->RawEnvelope() : 0.0f;
+}
+
+void CVRecorderNode::PressRecord()
+{
+   if (!Transport::Instance().IsPlaying())
+      Transport::Instance().SetPlaying(true);
+   StartRecording();
+}
+
+bool CVRecorderNode::PressButton(const std::string& name, std::string& err)
+{
+   if (name == "record")
+   {
+      if (IsRecording())
+      {
+         err = "already recording";
+         return false;
+      }
+      PressRecord();
+      return true;
+   }
+   if (name == "stop")
+   {
+      if (!IsRecording())
+      {
+         err = "not recording";
+         return false;
+      }
+      StopRecording();
+      return true;
+   }
+   err = "unknown button '" + name + "' (CV Recorder has: record, stop)";
+   return false;
 }

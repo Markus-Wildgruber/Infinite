@@ -283,6 +283,13 @@ void DrawKeyboard(FrameCtx& fc)
                gSuppressUndoCheckpoints = true;
                for (int i = 0; i < linkCount; i++)
                {
+                  // A cable touching a locked group's member stays.
+                  std::string why;
+                  if (LinkEditLocked((int)selLinks[i].Get(), &why))
+                  {
+                     gPatchStatus = why;
+                     continue;
+                  }
                   DisconnectLinkById((int)selLinks[i].Get());
                   ed::DeleteLink(selLinks[i]);
                }
@@ -321,7 +328,8 @@ void DrawKeyboard(FrameCtx& fc)
       }
 
       const bool doDelete = gRequestDelete ||
-         (!typing && !gPerfMatrixFocused && !gArrangeFocused && (ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
+         (!typing && !gPerfMatrixFocused && !gArrangeFocused && !ArrangePianoRollOwnsKeys() &&
+          (ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
                       ImGui::IsKeyPressed(ImGuiKey_Backspace, false) ||
                       (shiftOnly && ImGui::IsKeyPressed(ImGuiKey_X, false))));
       gRequestDelete = false;
@@ -338,10 +346,14 @@ void DrawKeyboard(FrameCtx& fc)
             // A selected group takes its members with it - otherwise "delete"
             // on a group would silently do no more than an ungroup.
             std::set<int> toDelete;
+            std::string lockedWhy;
             for (int i = 0; i < nodeCount; i++)
             {
                GraphNode* gn = FindNodeByIndex((int)selNodes[i].Get() / GraphNode::kStride);
                if (gn == nullptr)
+                  continue;
+               // A locked group, and each of its members, refuses deletion.
+               if (NodeEditLocked(gn->index, &lockedWhy))
                   continue;
                toDelete.insert(gn->index);
                if (auto* g = dynamic_cast<GroupNode*>(gn->node.get()))
@@ -351,6 +363,18 @@ void DrawKeyboard(FrameCtx& fc)
                      toDelete.insert(it->second.begin(), it->second.end());
                }
             }
+            for (int i = 0; i < linkCount;)
+            {
+               if (LinkEditLocked((int)selLinks[i].Get(), &lockedWhy))
+               {
+                  selLinks[i] = selLinks[linkCount - 1];
+                  linkCount--;
+               }
+               else
+                  i++;
+            }
+            if (!lockedWhy.empty())
+               gPatchStatus = lockedWhy;
 
             // One checkpoint for the whole batch: RemoveNodeByIndex (and the
             // per-link path below) each push their own by default, which
@@ -534,6 +558,13 @@ void DrawKeyboard(FrameCtx& fc)
                GraphNode* sel = FindNodeByIndex((int)selNodes[i].Get() / GraphNode::kStride);
                if (sel == nullptr)
                   continue;
+               // A locked group neither dissolves nor lets a member go.
+               std::string lockedWhy;
+               if (NodeEditLocked(sel->index, &lockedWhy))
+               {
+                  gPatchStatus = lockedWhy;
+                  continue;
+               }
                if (dynamic_cast<GroupNode*>(sel->node.get()) != nullptr)
                {
                   doomedGroups.insert(sel->index);
@@ -572,11 +603,11 @@ void DrawKeyboard(FrameCtx& fc)
                if (owner == nullptr)
                   continue;
                gGroupMembers[owner].erase(memberIndex);
-               // Membership here is purely geometric - anything fully inside
-               // the group's box gets adopted right back in next frame.
-               // Nudging the node just past the box's bottom edge is what
-               // makes removing it actually stick (same as the per-node
-               // right-click "Ungroup" above).
+               // Membership is explicit, so the erase above is what removes
+               // it; the node is also moved just past the box's bottom edge
+               // so it visibly leaves instead of sitting inside a box it no
+               // longer belongs to (same as the context menu's "Remove from
+               // group").
                if (int ownerIndex = IndexOfGroupNode(owner); ownerIndex >= 0)
                {
                   if (GraphNode* ownerGn = FindNodeByIndex(ownerIndex))
@@ -613,60 +644,42 @@ void DrawKeyboard(FrameCtx& fc)
             std::vector<ed::NodeId> selNodes(count);
             const int nodeCount = ed::GetSelectedNodes(selNodes.data(), count);
 
-            bool any = false;
-            ImVec2 bmin(0.0f, 0.0f), bmax(0.0f, 0.0f);
-            std::set<int> picked;
+            std::vector<int> picked;
             for (int i = 0; i < nodeCount; i++)
             {
                GraphNode* member = FindNodeByIndex((int)selNodes[i].Get() / GraphNode::kStride);
                if (member == nullptr || dynamic_cast<GroupNode*>(member->node.get()) != nullptr)
                   continue; // grouping a group isn't supported
                // Membership is exclusive, so a node that already belongs
-               // somewhere stays where it is rather than being pulled into a
-               // second group that would then fight the first one for it.
+               // somewhere (a locked group's members included) stays where it
+               // is rather than being pulled into a second group that would
+               // then fight the first one for it.
                if (GroupOwning(member->index) != nullptr)
                   continue;
-               picked.insert(member->index);
-               const ImVec2 p = ed::GetNodePosition(member->NodeId());
-               const ImVec2 s = ed::GetNodeSize(member->NodeId());
-               if (!any)
+               picked.push_back(member->index);
+            }
+
+            if (!picked.empty())
+            {
+               // The same path the API uses (Groups.cpp): explicit
+               // membership, sized around the members, gates applied.
+               PushUndoCheckpoint();
+               std::string err;
+               if (GroupNode* grp = CreateGroupForNodes(picked, "Group", err))
                {
-                  bmin = p;
-                  bmax = ImVec2(p.x + s.x, p.y + s.y);
-                  any = true;
+                  for (GraphNode& ggn : gNodes)
+                  {
+                     if (ggn.node.get() != grp)
+                        continue;
+                     ed::ClearSelection();
+                     gPendingSelect.push_back(ggn.NodeId());
+                     break;
+                  }
                }
                else
                {
-                  bmin.x = std::min(bmin.x, p.x);
-                  bmin.y = std::min(bmin.y, p.y);
-                  bmax.x = std::max(bmax.x, p.x + s.x);
-                  bmax.y = std::max(bmax.y, p.y + s.y);
+                  gPatchStatus = err;
                }
-            }
-
-            if (any)
-            {
-               const float kPad = 32.0f;
-               const float kHeader = 24.0f;
-               const float gx = bmin.x - kPad;
-               const float gy = bmin.y - kPad - kHeader;
-               const float gw = (bmax.x - bmin.x) + kPad * 2.0f;
-               const float gh = (bmax.y - bmin.y) + kPad * 2.0f + kHeader;
-
-               PushUndoCheckpoint();
-               gSuppressUndoCheckpoints = true;
-               if (GraphNode* ggn = SpawnNode("Group", "Compositing", gx, gy))
-               {
-                  if (auto* grp = dynamic_cast<GroupNode*>(ggn->node.get()))
-                  {
-                     grp->width = gw;
-                     grp->height = gh;
-                     gGroupMembers[grp] = picked;
-                  }
-                  ed::ClearSelection();
-                  gPendingSelect.push_back(ggn->NodeId());
-               }
-               gSuppressUndoCheckpoints = false;
             }
          }
       }
@@ -696,6 +709,12 @@ void DrawKeyboard(FrameCtx& fc)
                   GraphNode* sel = FindNodeByIndex((int)selNodes[i].Get() / GraphNode::kStride);
                   if (sel == nullptr || !CanBypass(*sel))
                      continue;
+                  std::string lockedWhy;
+                  if (NodeEditLocked(sel->index, &lockedWhy))
+                  {
+                     gPatchStatus = lockedWhy;
+                     continue;
+                  }
                   sel->node->bypassed = !sel->node->bypassed;
                   if (dynamic_cast<IAudioSource*>(sel->node.get()) != nullptr ||
                       dynamic_cast<INoteSource*>(sel->node.get()) != nullptr)
@@ -834,6 +853,14 @@ void DrawKeyboard(FrameCtx& fc)
          ed::LinkId linkId;
          while (ed::QueryDeletedLink(&linkId))
          {
+            // Lock: a cable touching a locked group's member is refused.
+            std::string lockedWhy;
+            if (LinkEditLocked((int)linkId.Get(), &lockedWhy))
+            {
+               ed::RejectDeletedItem();
+               gPatchStatus = lockedWhy;
+               continue;
+            }
             if (ed::AcceptDeletedItem())
             {
                PushUndoCheckpoint();
@@ -844,6 +871,13 @@ void DrawKeyboard(FrameCtx& fc)
          ed::NodeId nodeId;
          while (ed::QueryDeletedNode(&nodeId))
          {
+            std::string lockedWhy;
+            if (NodeEditLocked((int)nodeId.Get() / GraphNode::kStride, &lockedWhy))
+            {
+               ed::RejectDeletedItem();
+               gPatchStatus = lockedWhy;
+               continue;
+            }
             if (ed::AcceptDeletedItem())
                RemoveNodeByIndex((int)nodeId.Get() / GraphNode::kStride);
          }

@@ -1330,6 +1330,28 @@ namespace Platform
       }
    }
 
+   std::string SaveWavDialog(const std::string& suggestedName)
+   {
+      @autoreleasepool
+      {
+         NSSavePanel* panel = [NSSavePanel savePanel];
+         [panel setTitle:@"Save audio file"];
+         [panel setNameFieldStringValue:
+            [NSString stringWithUTF8String:suggestedName.empty() ? "Untitled.wav"
+                                                                 : suggestedName.c_str()]];
+         if (@available(macOS 11.0, *))
+         {
+            UTType* tWav = [UTType typeWithFilenameExtension:@"wav"];
+            if (tWav != nil)
+               [panel setAllowedContentTypes:@[ tWav ]];
+         }
+         if ([panel runModal] != NSModalResponseOK)
+            return std::string();
+         NSURL* url = [panel URL];
+         return url ? std::string([[url path] UTF8String]) : std::string();
+      }
+   }
+
    std::string SaveMidiDialog(const std::string& suggestedName)
    {
       @autoreleasepool

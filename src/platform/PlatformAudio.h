@@ -41,6 +41,9 @@ namespace Platform
    // Save-as for a .mid (Audio to MIDI's export). Returns the chosen path with
    // the .mid extension, or "" if cancelled.
    std::string SaveMidiDialog(const std::string& suggestedName = "Untitled.mid");
+   // Save-as for a .wav (Render to file / Export audio). Returns the chosen
+   // path with the .wav extension, or "" if cancelled.
+   std::string SaveWavDialog(const std::string& suggestedName = "Untitled.wav");
 
    bool AudioStart(std::string& outError);
    void AudioStop();

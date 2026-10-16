@@ -249,7 +249,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Curves` | input:image | out:image | 6 | bypass |
 | `Feedback` | input:image | out:image | 1 | bypass |
 | `Fit` | input:image | out:image | 8 | bypass |
-| `Group` | none | out:image | 4 | bypass |
+| `Group` | none | out:image | 8 | bypass |
 | `Layer Stack` | input:image, input_2:image, input_3:image, input_4:image | out:image | 8 |  |
 | `Null` | in:image | out:image | 0 | bypass |
 | `Reaction Diffusion` | input:image | out:image | 11 | bypass |
@@ -450,7 +450,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Field Synth` | notes:note, in:audio | out:audio | 13 | bypass |
 | `Grain Molder` | notes:note, record_in:audio | out:audio | 14 | bypass |
 | `Granular` | record_in:audio | out:audio | 21 | bypass |
-| `Looper` | audio:audio | out:audio | 10 | bypass |
+| `Looper` | audio:audio | out:audio | 14 | bypass |
 | `MPC` | notes:note | out:audio | 177 | bypass |
 | `Metallic` | notes:note | out:audio | 15 | bypass |
 | `Molder` | record_in:audio | out:audio | 16 | bypass |

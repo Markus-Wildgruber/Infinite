@@ -72,6 +72,40 @@
 
 namespace app
 {
+namespace
+{
+   // OutputNode::PressButton's app-level actions: the same calls the card's
+   // Export Image and Render buttons make (below, in the OutputNode branch).
+   bool OutputExportImageHook(OutputNode* n, std::string& /*err*/)
+   {
+      ExportImage(n, n->exportImagePath);
+      return true;
+   }
+
+   bool OutputStartOfflineRenderHook(OutputNode* n, std::string& err)
+   {
+      if (gOfflineRender.active && gOfflineRender.node != n)
+      {
+         err = "another offline render is running";
+         return false;
+      }
+      StartOfflineRenderSession(n);
+      if (gOfflineRender.active && gOfflineRender.node == n)
+         return true;
+      err = n->RecordStatus().empty() ? "the offline render did not start" : n->RecordStatus();
+      return false;
+   }
+
+   struct InstallOutputButtonHooks
+   {
+      InstallOutputButtonHooks()
+      {
+         OutputNode::sExportImageHook = &OutputExportImageHook;
+         OutputNode::sStartOfflineRenderHook = &OutputStartOfflineRenderHook;
+      }
+   } sInstallOutputButtonHooks;
+}
+
 void DrawNodeBodies(FrameCtx& fc)
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -85,6 +119,10 @@ void DrawNodeBodies(FrameCtx& fc)
    auto& b6FrameVisibleCount = fc.b6FrameVisibleCount;
    auto& b6FrameBodiesDrawnCount = fc.b6FrameBodiesDrawnCount;
    auto& b6FrameOffscreenMs = fc.b6FrameOffscreenMs;
+
+      // Locked groups: members go back to where they are pinned before any
+      // node draws, whatever dragged them this frame (Groups.cpp).
+      EnforceGroupLocks();
 
       for (GraphNode& gn : gNodes)
       {
@@ -247,9 +285,18 @@ void DrawNodeBodies(FrameCtx& fc)
          ed::BeginNode(gn.NodeId());
          gInsideNodeCanvas = true;
          ImGui::PushID(gn.index);
-         const bool dimmed = gn.node->bypassed;
+         // Dimmed when bypassed, or when its group's outputs are closed
+         // (muted, soloed out, outside its timeline clips).
+         const bool dimmed = gn.node->bypassed || NodeGroupSilenced(gn.index);
          if (dimmed)
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.55f);
+         // A locked group's member: every widget in the body is greyed out
+         // and refuses input (knobs, sliders, typed values and expressions,
+         // the bypass toggle). Modulation, the timeline, mute and solo still
+         // drive it - they write the params directly, not through widgets.
+         const bool lockedNode = NodeEditLocked(gn.index, nullptr);
+         if (lockedNode)
+            ImGui::BeginDisabled();
 
          const bool isAudioBody = IsAudioBodyNode(gn.node.get());
          auto* mixerNode = dynamic_cast<MixerNode*>(gn.node.get());
@@ -958,14 +1005,7 @@ void DrawNodeBodies(FrameCtx& fc)
                DrawFilterParams(n);
             else if (auto* n = dynamic_cast<OutputNode*>(gn.node.get()))
             {
-               if (n->exportImagePath.empty())
-               {
-                  n->exportImagePath = AppPaths::DesktopDir() + "/infinite_output." + (n->imageFormat == 1 ? "jpg" : "png");
-               }
-               if (n->recordVideoPath.empty())
-               {
-                  n->recordVideoPath = AppPaths::DesktopDir() + "/infinite_output." + (n->videoFormat == 1 ? "mov" : "mp4");
-               }
+               n->EnsureDefaultPaths(); // the same defaults OutputNode::PressButton uses
 
                char imgBuf[512];
                snprintf(imgBuf, sizeof(imgBuf), "%s", n->exportImagePath.c_str());
@@ -1301,6 +1341,8 @@ void DrawNodeBodies(FrameCtx& fc)
             }
          }
 
+         if (lockedNode)
+            ImGui::EndDisabled();
          if (dimmed)
             ImGui::PopStyleVar();
          ImGui::PopID();

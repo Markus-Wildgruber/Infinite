@@ -23,6 +23,13 @@ namespace app
          return;
       if (n->IsRecording() || n->IsFinalizing())
          return;
+      // An audio-only offline take (render to track/file, offline capture,
+      // note capture, timeline WAV) owns the device and transport right now.
+      if (Transport::Instance().IsOfflineMode())
+      {
+         n->SetRecordStatus("another offline render is running - try again when it finishes");
+         return;
+      }
 
       // A live source can't be pre-synthesized for an offline take, so refuse
       // rather than write a file full of one frozen frame. An arrangement
@@ -218,6 +225,19 @@ namespace app
    // the thing being rendered.
    void DrawArrangeWavRenderProgressWindow()
    {
+      // Render to track (ArrangeRenderToTrack.cpp) draws its popup and its
+      // own progress dialog from here: this runs once a frame at top level,
+      // right before ImGui::Render, which is exactly where both belong.
+      DrawRenderToTrackPopup();
+      DrawRenderToTrackProgressWindow();
+      // Render to file / Export audio (ArrangeRenderToFile.cpp), same place.
+      DrawRenderToFilePopup();
+      DrawRenderToFileProgressWindow();
+      // Timeline MIDI (ArrangeMidi.cpp / ArrangePianoRoll.cpp): the capture
+      // popup and progress dialog, and the floating piano roll.
+      DrawCaptureNotesPopup();
+      DrawCaptureNotesProgressWindow();
+      DrawArrangePianoRollWindow();
       if (!gArrangeWavRender.active)
          return;
 
@@ -439,10 +459,18 @@ namespace app
          const Arrange::Loc cloc = Arrange::Find(gArrange, clipId);
          const Arrange::Lane* owningLane = cloc.Valid() ? &gArrange.lanes[cloc.lane] : nullptr;
          const bool isVideo = owningLane != nullptr && owningLane->type == Arrange::kLaneVideo;
+         // A MIDI clip holds notes for its lane's instrument: no source, no
+         // fades or gain (the lane's mix strip is its level).
+         const bool isMidi = owningLane != nullptr && owningLane->type == Arrange::kLaneMidi;
          const bool isSample = clip->sampleDropped;
+         // A group clip only opens/closes the group's gate (GroupTimelineWindows):
+         // gain, pan, pitch, fades and the video grade have nothing to act on.
+         const bool isGroupClip = !isMidi && ArrangeIsGroupSource(clip->srcUid);
 
          // Header: Title + Close [X]
-         const char* clipKindLabel = isVideo
+         const char* clipKindLabel = isMidi ? "MIDI Clip"
+            : isGroupClip ? "Group Clip"
+            : isVideo
             ? (isSample ? "Video Sample" : "Video Clip")
             : (isSample ? "Audio Sample" : "Audio Clip");
          ImGui::TextUnformatted(clipKindLabel);
@@ -502,7 +530,8 @@ namespace app
                }
             });
          }
-         if (tickField("Fade In##clipfadein", clip->fadeIn, 0, clip->length, ArrangeTickUnit::FadeMs, &newTick))
+         if (!isGroupClip && !isMidi &&
+             tickField("Fade In##clipfadein", clip->fadeIn, 0, clip->length, ArrangeTickUnit::FadeMs, &newTick))
          {
             ArrangeEdit([&]() {
                if (Arrange::Clip* c = Arrange::FindClip(gArrange, clipId))
@@ -512,7 +541,8 @@ namespace app
                }
             });
          }
-         if (tickField("Fade Out##clipfadeout", clip->fadeOut, 0, clip->length, ArrangeTickUnit::FadeMs, &newTick))
+         if (!isGroupClip && !isMidi &&
+             tickField("Fade Out##clipfadeout", clip->fadeOut, 0, clip->length, ArrangeTickUnit::FadeMs, &newTick))
          {
             ArrangeEdit([&]() {
                if (Arrange::Clip* c = Arrange::FindClip(gArrange, clipId))
@@ -523,7 +553,7 @@ namespace app
             });
          }
 
-         if (isVideo && ArrangeVideoSourceConflictClips().count(clipId))
+         if (isVideo && !isGroupClip && ArrangeVideoSourceConflictClips().count(clipId))
          {
             ImGui::Spacing();
             ImGui::TextDisabled("%s", T("Source"));
@@ -544,7 +574,7 @@ namespace app
          // position lock), so a source shared across lanes is a conflict for
          // any audio clip, not only a dropped Sample. It is a fact about the
          // patch rather than a setting, so it stays informational.
-         if (!isVideo && gArrangeRetriggerConflictClipIds.count(clipId))
+         if (!isVideo && !isMidi && gArrangeRetriggerConflictClipIds.count(clipId))
          {
             ImGui::Spacing();
             ImGui::TextDisabled("%s", T("Playback & Trigger"));
@@ -561,7 +591,25 @@ namespace app
          ImGui::Spacing();
          ImGui::Separator();
 
-         if (isVideo)
+         if (isMidi)
+         {
+            ArrangeDrawMidiClipInspector(clipId, fieldW);
+         }
+         else if (isGroupClip)
+         {
+            // What the clip does, stated once: the group sounds and shows only
+            // inside its clips (any lane), and its own mute/solo still win.
+            ImGui::TextDisabled("%s", T("Group Gate"));
+            GraphNode* grp = FindNodeByUid(clip->srcUid);
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextWrapped(T("Gates group \"%s\": it plays only inside its timeline clips."),
+                               grp != nullptr ? ArrangeSourceTitle(*grp).c_str() : "?");
+            ImGui::PopTextWrapPos();
+            std::vector<std::pair<double, double>> windows;
+            GroupTimelineWindows(clip->srcUid, windows);
+            ImGui::TextDisabled(T("%d active window(s) on the timeline"), (int)windows.size());
+         }
+         else if (isVideo)
          {
             ImGui::TextDisabled("%s", T("Compositing & Video"));
             const std::vector<std::string>& modes = BlendModes::Names();
@@ -738,9 +786,14 @@ namespace app
 
          ImGui::Spacing();
          ImGui::Separator();
-         ImGui::TextDisabled("%s", T("Source Node"));
-         GraphNode* srcNode = FindNodeByUid(clip->srcUid);
-         if (srcNode != nullptr)
+         if (!isMidi)
+            ImGui::TextDisabled("%s", T("Source Node"));
+         GraphNode* srcNode = isMidi ? nullptr : FindNodeByUid(clip->srcUid);
+         if (isMidi)
+         {
+            // The lane's instrument plays it (ArrangeDrawMidiClipInspector above).
+         }
+         else if (srcNode != nullptr)
          {
             ImGui::Text(T("Node: %s"), NodeTitleWithInstance(*srcNode).c_str());
             ImGui::TextDisabled(T("Type: %s"), srcNode->typeName.c_str());
@@ -923,7 +976,8 @@ namespace app
          if (Arrange::Lane* lane = Arrange::FindLane(gArrange, rowId))
          {
             const bool isVideo = lane->type == Arrange::kLaneVideo;
-            ImGui::TextUnformatted(isVideo ? "Video Track" : "Audio Track");
+            const bool isMidiLane = lane->type == Arrange::kLaneMidi;
+            ImGui::TextUnformatted(isVideo ? "Video Track" : (isMidiLane ? "MIDI Track" : "Audio Track"));
             ImGui::SameLine(availW - 18.0f);
             if (DrawCloseBtn())
                gArrangeClipSettingsPanelOpen = false;
@@ -961,15 +1015,25 @@ namespace app
             }
 
             ImGui::Spacing();
-            if (!isVideo)
+            if (isMidiLane)
             {
-               ImGui::TextDisabled("%s", T("Audio Track Controls"));
+               ArrangeDrawMidiLaneInspector(rowId, fieldW);
+               ImGui::Spacing();
+               // ArrangeDrawMidiLaneInspector may have changed the model.
+               lane = Arrange::FindLane(gArrange, rowId);
+            }
+            if (lane != nullptr && !isVideo)
+            {
+               ImGui::TextDisabled("%s", isMidiLane ? T("MIDI Track Mix") : T("Audio Track Controls"));
                bool solo = lane->solo;
                if (ImGui::Checkbox(L("Solo##tracksolo"), &solo))
                {
                   ArrangeEdit([&]() {
                      if (Arrange::Lane* l = Arrange::FindLane(gArrange, rowId))
+                     {
                         l->solo = solo;
+                        gArrange.revision++; // the audio topology rebuilds on revision
+                     }
                   });
                }
                ImGui::SameLine();
@@ -978,7 +1042,10 @@ namespace app
                {
                   ArrangeEdit([&]() {
                      if (Arrange::Lane* l = Arrange::FindLane(gArrange, rowId))
+                     {
                         l->mute = mute;
+                        gArrange.revision++; // the audio topology rebuilds on revision
+                     }
                   });
                }
 
@@ -988,7 +1055,10 @@ namespace app
                {
                   ArrangeEdit([&]() {
                      if (Arrange::Lane* l = Arrange::FindLane(gArrange, rowId))
+                     {
                         l->gainDb = gainDb;
+                        gArrange.revision++; // the audio topology rebuilds on revision
+                     }
                   });
                }
 
@@ -998,11 +1068,14 @@ namespace app
                {
                   ArrangeEdit([&]() {
                      if (Arrange::Lane* l = Arrange::FindLane(gArrange, rowId))
+                     {
                         l->pan = pan;
+                        gArrange.revision++; // the audio topology rebuilds on revision
+                     }
                   });
                }
             }
-            else
+            else if (lane != nullptr)
             {
                ImGui::TextDisabled("%s", T("Video Track Controls"));
                float opacity = lane->opacity;
@@ -1156,7 +1229,10 @@ namespace app
 
    bool ArrangeRenderBusy()
    {
-      return gOfflineRender.active || gArrangeWavRender.active;
+      // A render-to-track take owns the graph the same way a WAV take does:
+      // the timeline locks and every other render/capture refuses.
+      return gOfflineRender.active || gArrangeWavRender.active || RenderToTrackBusy() || CaptureNotesBusy() ||
+             RenderToFileBusy();
    }
 
 
@@ -1220,21 +1296,19 @@ namespace app
    // Restores everything a take borrowed. Shared by the WAV path's finish and
    // its failure exits so a half-started take can't leave the device detached
    // or the transport stuck in offline mode.
+   // The WAV take is an OfflineTake (graph/OfflineTake.cpp): every node
+   // re-prepared at the start, modulation stepped on the audio clock.
+   static OfflineTake gArrangeWavTake;
+
    void ArrangeWavRenderRestore()
    {
-      Transport::Instance().SetOfflineMode(false);
-      Transport::Instance().Seek(gArrangeWavRender.endSeconds);
-      if (gArrangeWavRender.deviceWasRunning)
-         StartAudioEngine(gAudioStartError);
-      else
-         Transport::Instance().NotifyAudioEngineStopped();
-      Transport::Instance().SetPlaying(gArrangeWavRender.wasPlaying);
-      SetCanvasSwapInterval(gArrangeWavRender.vsyncWasOn ? 1 : 0);
+      // Routing flags first: the restore's own rebuilds (device restart,
+      // final topology) must already see the take as over.
       gArrangeWavRender.active = false;
       gArrangeWavRender.timelineAudio = false;
       gArrangeWavRender.cancelRequested = false;
       gArrangeRenderActiveLaneScope.clear();
-      RebuildAudioTopology();
+      OfflineTakeRestore(gArrangeWavTake, gArrangeWavRender.endSeconds);
    }
 
 
@@ -1273,12 +1347,11 @@ namespace app
          ArrangeRenderFailJob(job, "no audio device");
          return false;
       }
-      AudioEngine::Instance().Stop();
 
       if (!gArrangeWavRender.writer.Open(job.path, rate, 2, AudioFileWriter::Format::Wav))
       {
-         if (deviceWasRunningBefore)
-            StartAudioEngine(gAudioStartError);
+         if (!deviceWasRunningBefore)
+            AudioEngine::Instance().Stop(); // undo the warm-up start above
          gArrangeRenderActiveLaneScope.clear();
          ArrangeRenderFailJob(job, "could not create " + job.path);
          return false;
@@ -1296,12 +1369,14 @@ namespace app
       gArrangeWavRender.wasPlaying = Transport::Instance().IsPlaying();
       gArrangeWavRender.vsyncWasOn = gVsync;
       gArrangeWavRender.startedTime = glfwGetTime();
-      SetCanvasSwapInterval(0);
 
-      Transport::Instance().Seek(startSec);
-      Transport::Instance().SetOfflineMode(true, rate);
-      Transport::Instance().SetPlaying(true);
-      RebuildAudioTopology(); // picks up timelineAudio through ArrangeTimelineRoutingActive
+      // Stops the device, parks the transport at startSec in offline mode;
+      // the prepare's rebuild picks up timelineAudio through
+      // ArrangeTimelineRoutingActive (active is already set).
+      OfflineTakeBegin(gArrangeWavTake, rate, startSec);
+      // A device this function only opened to warm the graph stays closed.
+      gArrangeWavTake.deviceWasRunning = deviceWasRunningBefore;
+      OfflineTakePrepare(gArrangeWavTake);
 
       job.status = kArrangeJobRendering;
       job.framesTotal = (int)std::min<long long>(gArrangeWavRender.framesTotal, (long long)2147483647);
@@ -1323,7 +1398,6 @@ namespace app
 
       static float sWavL[kAudioMaxBlockFrames];
       static float sWavR[kAudioMaxBlockFrames];
-      static float* sWavChannels[2] = { sWavL, sWavR };
       static std::vector<float> sWavInterleave;
 
       const double budgetStart = glfwGetTime();
@@ -1335,11 +1409,10 @@ namespace app
       {
          const int blockFrames = (int)std::min<long long>(
             blockCap, gArrangeWavRender.framesTotal - gArrangeWavRender.framesDone);
-         AudioBuffer buf;
-         buf.channels = sWavChannels;
-         buf.numChannels = 2;
-         buf.numFrames = blockFrames;
-         AudioEngine::Instance().ProcessOffline(buf);
+         // Modulation + cook step when due, then ProcessOffline; also keeps
+         // the drawn playhead and anything reading video time honest (the
+         // clip windows themselves are scheduled off the audio clock, WP3).
+         OfflineTakeRender(gArrangeWavTake, sWavL, sWavR, blockFrames);
 
          sWavInterleave.resize((size_t)blockFrames * 2);
          for (int i = 0; i < blockFrames; i++)
@@ -1349,13 +1422,6 @@ namespace app
          }
          gArrangeWavRender.writer.Append(sWavInterleave.data(), blockFrames);
          gArrangeWavRender.framesDone += blockFrames;
-
-         // Keeps the drawn playhead and anything reading video time honest
-         // while the take runs; the clip windows themselves are scheduled off
-         // the audio clock ProcessOffline just advanced (WP3).
-         Transport::Instance().SetOfflineVideoTime(
-            gArrangeWavRender.startSeconds +
-            (double)gArrangeWavRender.framesDone / gArrangeWavRender.sampleRate);
 
          if (glfwGetTime() - budgetStart > 0.1)
             break;
@@ -1509,6 +1575,9 @@ namespace app
    void ArrangeRenderQueueTick()
    {
       ArrangeWavRenderPump();
+      PumpRenderToTrack();
+      PumpRenderToFile();
+      PumpCaptureNotes();
 
       if (gArrangeRenderActiveJobId != 0 && !ArrangeRenderBusy())
       {

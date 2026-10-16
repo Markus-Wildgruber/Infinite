@@ -1219,13 +1219,16 @@ extern const std::vector<std::string>& kVideoExt;
    // type (SamplerNode, VideoSourceNode, ImageSourceNode). Deliberately a
    // plain rect test against ed::GetNodePosition/GetNodeSize rather than
    // ed::GetHoveredNode() - see the release handler's own comment for why.
+   // A locked group's member is never a drop target (it would be an edit by
+   // hand - Groups.cpp); the drop falls through as if nothing were there.
+   bool NodeEditLocked(int nodeIndex, std::string* reason);
    template <typename T>
    T* FindNodeUnderCanvasPoint(const ImVec2& canvasPoint)
    {
       for (GraphNode& gn : gNodes)
       {
          auto* typed = gn.node ? dynamic_cast<T*>(gn.node.get()) : nullptr;
-         if (typed == nullptr)
+         if (typed == nullptr || NodeEditLocked(gn.index, nullptr))
             continue;
          const ImVec2 p = ed::GetNodePosition(gn.NodeId());
          const ImVec2 s = ed::GetNodeSize(gn.NodeId());
@@ -2979,7 +2982,9 @@ bool AudioToggleButton(const char* label, bool* value, float width = 44.0f, floa
 bool DrawGateButton(const char* id, float totalW, float height, const GatePainter& paint,
                        bool* activated = nullptr);
 
-bool DrawGateControl(const char* id, const char* label, float btnW, int style, bool lit);
+// `driven` (optional) reports whether a CV cable drives the level this frame
+// (true) or the mouse does (false).
+bool DrawGateControl(const char* id, const char* label, float btnW, int style, bool lit, bool* driven = nullptr);
 
 bool AudioSoloButton(const char* label, bool* value, float width = 26.0f, float height = 0.0f);
 
@@ -3254,6 +3259,10 @@ void DrawAudioToCVBody(GraphNode& gn, AudioToCVNode* n);
 void DrawAudioCompareBody(GraphNode& gn, AudioCompareNode* n);
 
 void DrawSoundAnalyzeBody(GraphNode& gn, SoundAnalyzeNode* n);
+// The body's Apply button as a function (the assistant's apply_sound_profile):
+// writes `src`'s last profile onto the synth node `targetIndex`. The caller
+// pushes the undo checkpoint. `message` says what was set, or why not.
+bool ApplySoundProfile(SoundAnalyzeNode* src, int targetIndex, std::string& message);
 
 void DrawEnvelopeBody(GraphNode& gn, EnvelopeNode* n);
 
@@ -3682,6 +3691,55 @@ void PruneDeadGroups();
 
 void DrawGroupNode(GraphNode& gn, GroupNode* n);
 
+// ---- Groups: explicit membership, mute / solo / lock (app/graph/Groups.cpp) ----
+// Groups the given nodes (indices) into a new Group sized around them; fails
+// (err) if a node is a group, already in another group, or in a locked group.
+GroupNode* CreateGroupForNodes(const std::vector<int>& nodeIndices, const std::string& label, std::string& err);
+bool AddNodesToGroup(GroupNode* group, const std::vector<int>& nodeIndices, std::string& err);
+bool RemoveNodesFromGroup(GroupNode* group, const std::vector<int>& nodeIndices, std::string& err);
+GroupNode* GroupOfNode(int nodeIndex);            // nullptr if ungrouped
+std::vector<int> GroupMemberIndices(const GroupNode* group);
+// True when `nodeIndex` (a member, or the group node itself for structural
+// edits other than unlocking) may not be edited because its group is locked;
+// `reason` = "Group '<label>' is locked".
+bool NodeEditLocked(int nodeIndex, std::string* reason);
+// Same, for a cable: true when either end is NodeEditLocked.
+bool LinkEditLocked(int linkId, std::string* reason);
+// After changing mute/solo/locked from code: applies it (gates, topology).
+void ApplyGroupState();
+// (GroupTimelineWindows, the timeline gate, is declared with the Arrange
+// group-clip helpers further down and implemented in panels/ArrangeTools.cpp.)
+// Once a frame (top of ApplyModulationAndPalette): mute/solo/timeline into
+// every gate, image-cable gates, geometry gate, topology rebuild when the
+// membership moved.
+void UpdateGroupGates();
+// Member node -> gate slot, for RebuildAudioTopology.
+void BuildGroupGateSlotMap(std::unordered_map<const INode*, int>& out);
+// The group's gate slot (allocated on first use), -1 when none is free.
+int GroupGateSlot(GroupNode* g);
+// Whether the group's outputs are closed this frame (muted, soloed out, or
+// outside its timeline windows) / whether a node's group is.
+bool GroupIsClosed(const GroupNode* g);
+bool NodeGroupSilenced(int nodeIndex);
+// The modulation apply loop: true = hold this destination (its modulator is
+// in a closed group the destination is not in).
+bool GroupHoldsModulation(int modNodeIndex, int dstNodeIndex);
+// Serialization: gGroupMembers -> GroupNode::membersText before every
+// BuildPatchData, and back after every ApplyPatchData.
+void SyncGroupMembersText();
+void RestoreGroupMembership();
+void LegacyAdoptByGeometry(GraphNode& gn, GroupNode* n);
+// Inside the editor context, before nodes draw: pins locked members in place.
+void EnforceGroupLocks();
+// UI: group header buttons, group context items, a node's Add to / Remove
+// from group items, the M shortcut, and a member's detach (refuses a locked
+// group, moves the node below the box).
+void DrawGroupHeaderButtons(GraphNode& gn, GroupNode* g);
+void DrawGroupContextMenuItems(GraphNode& gn, GroupNode* g);
+void DrawNodeGroupMembershipMenu(GraphNode& gn);
+void ToggleMuteOnSelectedGroups();
+void DetachNodeFromGroupUi(int nodeIndex);
+
 void DrawDrawParams(DrawNode* n);
 
 INode* DisplayNode(INode* node);
@@ -3772,6 +3830,211 @@ constexpr float kAssistantPanelMinWidth = 280.0f;
 bool IsNodeVideoCompatible(const GraphNode& gn);
 
 bool IsNodeAudioCompatible(const GraphNode& gn);
+
+// ---- Timeline tools (src/app/panels/ArrangeTools.cpp) ----------------------
+// Group clips: a GroupNode can be a clip source (Clip::srcUid = the group's
+// uid). A group with at least one clip anywhere on the timeline is audible only
+// inside the windows returned here. Returns false when the group has no clip at
+// all (ungated); true otherwise, with the sorted, merged [startBeat, endBeat)
+// windows of its *playing* clips (clip enabled, lane effectively enabled, audio
+// lane not muted / not silenced by another lane's solo, inside an active
+// lane-scoped render). true with an empty list means "gated and silent".
+// Cached on gArrange.revision; main thread only.
+bool GroupTimelineWindows(uint64_t groupUid, std::vector<std::pair<double, double>>& outBeatWindows);
+// True when `uid` resolves to a GroupNode - such a clip schedules no audio
+// terminal and composites no video layer.
+bool ArrangeIsGroupSource(uint64_t uid);
+
+// Clip/loop helpers for the assistant RPC. None of them pushes an undo entry:
+// the caller pushes one checkpoint (PushUndoCheckpoint) first, so each call is
+// one undo step. Every edit goes through the Arrange:: model ops, bumps
+// gArrange.revision (the panel redraws, the audio topology rebuilds) and
+// dirties the patch. Lanes forbid overlapping clips: add/move refuse an
+// overlap with a clear error instead of overwriting.
+nlohmann::json ArrangeClipsJson();
+bool ArrangeAddClip(uint64_t srcUid, int srcOutput, int laneIndex /* -1 = new lane */, double startBeats,
+                    double lengthBeats, uint64_t& outClipId, std::string& err);
+bool ArrangeMoveClip(uint64_t clipId, int laneIndex /* -1 keep */, double startBeats /* <0 keep */,
+                     double lengthBeats /* <=0 keep */, std::string& err);
+bool ArrangeDeleteClip(uint64_t clipId, std::string& err);
+// props: enabled, gainDb, fadeInBeats, fadeOutBeats, name. Other keys ignored.
+bool ArrangeSetClipProps(uint64_t clipId, const nlohmann::json& props, std::string& err);
+// The timeline loop, published to Transport exactly as the panel does it.
+bool ArrangeSetLoop(bool enabled, double startBeats, double endBeats, std::string& err);
+
+// Render to track (src/app/panels/ArrangeRenderToTrack.cpp): renders a node's
+// (or a group's boundary) audio offline into a WAV in the recordings folder and
+// drops it on a new audio track at startBeats. One job at a time; refused while
+// any other render or offline capture runs. Pumped once a frame from
+// ArrangeRenderQueueTick. The finished patch/timeline change is one undo step
+// (the job pushes its own checkpoint when it commits).
+struct RenderToTrackStatus
+{
+   bool active = false;   // rendering or waiting for the clip's import to land
+   bool done = false;     // the last job finished (ok or not)
+   bool ok = false;
+   float progress = 0.0f; // 0..1
+   std::string message;
+   uint64_t clipId = 0;
+   int laneIndex = -1;
+   std::string path;
+};
+bool StartRenderNodeToTrack(int nodeIndex, double startBeats, double endBeats, double tailSeconds, bool normalize,
+                            std::string& err);
+const RenderToTrackStatus& RenderToTrackState(); // last/active job
+bool RenderToTrackBusy();
+void PumpRenderToTrack();
+void DrawRenderToTrackProgressWindow();
+// The canvas "Render to track..." popup (node context menu): open for a node.
+void OpenRenderToTrackPopup(int nodeIndex);
+void DrawRenderToTrackPopup();
+// Nodes RebuildAudioTopology must process while a render-to-track or
+// render-to-file job taps them, even with nothing downstream (empty when no
+// job runs).
+const std::vector<INode*>& RenderToTrackForcedNodes();
+
+// Render to file (src/app/panels/ArrangeRenderToFile.cpp): renders a node's
+// audio (an Audio Out: what feeds it; a group: the audio that leaves it, like
+// render to track) offline from startSeconds for durationSeconds + tailSeconds
+// into a stereo WAV. bitDepth 16 / 24 (PCM) or 32 (IEEE float); sampleRate 0 =
+// 48000 - the graph renders at its prepared rate (OfflineTakeRate) and a
+// windowed-sinc converter (audio/dsp/StreamResampler.h) writes the asked rate.
+// path: absolute, relative to the recordings folder, or empty = recordings
+// folder + node title. Written block by block (no whole-take buffer; the WAV
+// format's 4 GiB data limit is the only length limit). One job at a time,
+// refused while any other render/capture runs; pumped from
+// ArrangeRenderQueueTick. Device and transport are restored afterwards.
+struct RenderToFileStatus
+{
+   bool active = false, done = false, ok = false;
+   float progress = 0.0f;
+   std::string message, path;
+   double seconds = 0.0, sampleRate = 0.0;
+   int channels = 2;
+   float peakDb = -120.0f, rmsDb = -120.0f; // of what was written (dBFS)
+};
+bool StartRenderToFile(int nodeIndex, double startSeconds, double durationSeconds, double tailSeconds,
+                       const std::string& path, int bitDepth, double sampleRate, std::string& err);
+// Shared by render to track and render to file (ArrangeRenderToTrack.cpp):
+// the uids a render of `gn` taps (itself; an Audio Out's feeder; a group's
+// members whose audio leaves it - at most AudioProbe::kSlots), and a node
+// title made safe for a file name.
+bool RenderTapsForNode(GraphNode& gn, std::vector<uint64_t>& outUids, std::string& err);
+std::string RenderSafeFilePart(const std::string& s);
+const RenderToFileStatus& RenderToFileState();
+bool RenderToFileBusy();
+void CancelRenderToFile();
+void PumpRenderToFile();
+void DrawRenderToFileProgressWindow();
+// The canvas "Render to file..." / "Export audio..." popup: open for a node.
+void OpenRenderToFilePopup(int nodeIndex);
+void DrawRenderToFilePopup();
+// INFINITE_RENDERFILETEST (frame test, ArrangeRenderToFile.cpp).
+void FrameTest_RENDERFILETEST(int frameId, GLFWwindow* window);
+
+// ---- offline takes (src/app/graph/OfflineTake.cpp) ---------------------------
+// The shared start/render/restore of every audio-only offline render (render
+// to track/file, offline capture, note capture, the timeline WAV render):
+// device closed, transport parked at the start in offline mode, every node
+// re-prepared at the take's rate (fresh voices, tails and step clocks), and
+// modulation + the audio nodes' cook stepped on the audio clock every 1/60 s
+// of rendered audio (the video render's per-frame lockstep, for audio-only
+// takes), so a take is repeatable and modulation moves through it.
+struct OfflineTake
+{
+   bool active = false;
+   double rate = 0.0;          // the graph's prepared rate for the take
+   double startSeconds = 0.0;  // transport seconds at frame 0
+   long long framesDone = 0;   // frames rendered so far
+   long long nextModFrame = 0; // next frame count at which modulation steps
+   int modStepFrames = 800;
+   bool deviceWasRunning = false, wasPlaying = false, vsyncWasOn = false;
+   double savedSeconds = 0.0, savedHeadlessRate = 0.0;
+};
+// The rate a take renders at: the device's, else the headless rate, else the
+// configured rate (48000 when none).
+double OfflineTakeRate();
+// OfflineAudioBlockFrames() clamped to what the engine and AudioProbe take.
+int OfflineTakeBlockFrames();
+// Stops the device, parks the transport (startBeats >= 0 wins over
+// startSeconds) in offline mode, playing. The caller then arms whatever the
+// topology rebuild must see (forced nodes, taps) and calls OfflineTakePrepare.
+void OfflineTakeBegin(OfflineTake& take, double rate, double startSeconds, double startBeats = -1.0);
+// Re-prepares every node and rebuilds the topology, with modulation at the start.
+void OfflineTakePrepare(OfflineTake& take);
+// One block: a modulation/cook step when due, then AudioEngine::ProcessOffline.
+void OfflineTakeRender(OfflineTake& take, float* left, float* right, int frames);
+// Applies modulation at the take's current position and cooks audio/note/
+// modulator nodes (OfflineTakeRender calls it on its own cadence).
+void OfflineTakeModulationStep(OfflineTake& take);
+// Gives everything back; seekSeconds < 0 = where the transport was before.
+void OfflineTakeRestore(OfflineTake& take, double seekSeconds = -1.0);
+// DrawFramePump binds its frame counter so a take's cook ids continue it.
+void OfflineTakeBindFrameCounter(int* frameId);
+// Nodes (by uid) the running take taps: RebuildAudioTopology processes them
+// even with nothing downstream (via RenderToTrackForcedNodes). Set between
+// OfflineTakeBegin and OfflineTakePrepare; cleared by Begin and Restore.
+void OfflineTakeForceNodes(const std::vector<uint64_t>& uids);
+const std::vector<uint64_t>& OfflineTakeForcedUids();
+
+// ---- Timeline MIDI (src/app/panels/ArrangeMidi.cpp) -------------------------
+// A MIDI lane (Arrange::kLaneMidi) plays its clips' notes into one instrument
+// node (any node with a note input), merged with that node's canvas note cable.
+// Same contract as the clip helpers above: none of these pushes undo.
+bool ArrangeIsNoteInstrument(const GraphNode& gn); // has a note input
+bool ArrangeIsNoteProducer(const GraphNode& gn);   // has a note output
+// Indices of every visible node with a note input, in gNodes order.
+std::vector<int> ArrangeNoteInstrumentNodes();
+// Appends a MIDI lane. instrumentUid 0 = none yet (pick later); name empty =
+// the instrument's title.
+bool ArrangeAddMidiLane(uint64_t instrumentUid, const std::string& name, int& outLaneIndex, std::string& err);
+bool ArrangeSetMidiLaneInstrument(uint64_t laneId, uint64_t instrumentUid, std::string& err);
+// notes: [{t (beats from clip start), dur (beats), midi 0..127, vel 0..1 (default 0.8)}],
+// replaces the clip's notes. The clip must be on a MIDI lane.
+bool ArrangeSetMidiNotes(uint64_t clipId, const nlohmann::json& notes, std::string& err);
+// {clipId, lane, laneId, name, startBeats, lengthBeats, enabled, instrumentUid,
+//  instrumentIndex, noteCount, notes:[same shape]} or {error}.
+nlohmann::json ArrangeMidiNotesJson(uint64_t clipId);
+// Capture notes to timeline: renders a note producer's output over
+// [startBeats, endBeats) (MIDI File / Audio to MIDI: read directly), then adds a
+// MIDI lane on the instrument (0 = the first one the node is cabled into, else
+// none) with one clip at startBeats. Offline and pumped once a frame from
+// ArrangeRenderQueueTick like render to track; poll CaptureNotesState().
+struct CaptureNotesStatus
+{
+   bool active = false;   // rendering
+   bool done = false;     // the last job finished (ok or not)
+   bool ok = false;
+   float progress = 0.0f; // 0..1
+   std::string message;
+   int laneIndex = -1;
+   uint64_t clipId = 0;
+   int noteCount = 0;
+};
+bool StartCaptureNotesToTimeline(int nodeIndex, uint64_t instrumentUid /*0 = auto*/, double startBeats, double endBeats,
+                                 std::string& err);
+const CaptureNotesStatus& CaptureNotesState();
+bool CaptureNotesBusy();
+void PumpCaptureNotes();
+void DrawCaptureNotesProgressWindow();
+// The canvas "Capture notes to timeline..." popup (note producer's context menu).
+void OpenCaptureNotesPopup(int nodeIndex);
+void DrawCaptureNotesPopup();
+// Piano roll (src/app/panels/ArrangePianoRoll.cpp): a floating editor for one
+// MIDI clip, drawn once a frame at top level.
+void OpenArrangePianoRoll(uint64_t clipId);
+void DrawArrangePianoRollWindow();
+// True while the piano roll window has keyboard focus (as of its last draw):
+// Delete/Backspace and the arrow keys are its own then, not the canvas's or
+// the timeline's.
+bool ArrangePianoRollOwnsKeys();
+// True while a piano-roll drag holds the timeline gesture snapshot open
+// (ArrangeGestureBegin), so the panel's stray-gesture cleanup leaves it alone.
+bool ArrangePianoRollGestureOpen();
+// Piano-roll audition through the instrument's timeline merger (silent when the
+// instrument has no MIDI lane or the engine is off).
+void ArrangeMidiAudition(uint64_t instrumentUid, int note, float velocity);
+void ArrangeMidiAuditionOff(uint64_t instrumentUid);
 
 
 
@@ -4583,6 +4846,10 @@ bool IsAudioProbeRpc(const std::string& method);
 bool HandleAudioProbeRpc(const std::string& method, const nlohmann::json& params,
                          nlohmann::json& outResult, std::string& outError);
 void PumpAudioProbeJobs();
+// Self-test hook: keep the raw interleaved first slot of the last finished
+// capture (AudioProbeLastCapture returns false when there is none).
+void AudioProbeKeepLastCapture(bool keep);
+bool AudioProbeLastCapture(std::vector<float>& outInterleaved, double& outRate);
 bool RunAudioAnalysisTest(); // INFINITE_AUDIOANALYSISTEST
 
 void DrawMinimap();
