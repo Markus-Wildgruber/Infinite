@@ -1,4 +1,9 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
+#include "app/ui/design/components/AudioViz.h"
+#include "app/ui/design/TokenColors.h"
+#include "app/ui/design/components/FieldWell.h"
+#include "app/ui/design/UiType.h"
+#include "app/ui/design/components/NodeHeader.h"
 #include "app/frame/FrameCtx.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "core/ImageCable.h"
@@ -69,9 +74,18 @@
 #include "nodes/UtilityNodes.h"
 #include "nodes/VideoInNode.h"
 #include "nodes/VideoSourceNode.h"
+#include "nodes/CurveOpsNode.h"
+#include "nodes/DelaunayNodes.h"
+#include "nodes/FieldNotesNode.h"
+#include "nodes/MidiOutNode.h"
+#include "nodes/Sketch3DNode.h"
+#include "nodes/SketchNode.h"
+#include "nodes/SpatialMixerNode.h"
+#include "nodes/TrackNodeBase.h"
 
 namespace app
 {
+
 namespace
 {
    // OutputNode::PressButton's app-level actions: the same calls the card's
@@ -106,6 +120,30 @@ namespace
    } sInstallOutputButtonHooks;
 }
 
+// A click on a node's error/warning badge: the one place each NodeIssue::Fix is carried out.
+static void RunNodeIssueFix(GraphNode& gn, const NodeIssue& issue)
+{
+   switch (issue.fix)
+   {
+   case NodeIssue::Fix::Relink:
+      if (gn.node->Relink())
+         gPatchStatus = std::string(T("Relinked ")) + NodeTitle(gn);
+      break;
+   case NodeIssue::Fix::AudioSettings:
+      gSettingsOpen = true;
+      break;
+   case NodeIssue::Fix::Plugins:
+      gNodePanelOpen = true;
+      gSearchPanelMode = 3;
+      break;
+   case NodeIssue::Fix::ShowNode:
+      ed::SelectNode(gn.NodeId(), false);
+      ed::NavigateToSelection(false, 0.2f);
+      break;
+   case NodeIssue::Fix::None:
+      break;
+   }
+}
 void DrawNodeBodies(FrameCtx& fc)
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -227,6 +265,8 @@ void DrawNodeBodies(FrameCtx& fc)
                gHeadlessDrawn.insert(gn.index);
          }
 
+         const bool paramsOpen = gn.showParams;
+
          // Category tint: same idea as DrawGroupNode's stored colour, but from
          // the static per-category table since categories are a fixed
          // vocabulary, not something a user repicks per node. Blended into the
@@ -277,8 +317,10 @@ void DrawNodeBodies(FrameCtx& fc)
             }
             else
             {
+               // Hairline: the category tint fill carries identity; selection (the editor's own colour) is the loud state.
                ed::PushStyleColor(ed::StyleColor_NodeBorder,
-                                  ImColor(catColor.r, catColor.g, catColor.b, isLight ? 0.75f : 0.55f));
+                                  ImColor(catColor.r, catColor.g, catColor.b, isLight ? 0.55f : 0.40f));
+               ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 1.0f);
             }
          }
 
@@ -305,6 +347,7 @@ void DrawNodeBodies(FrameCtx& fc)
          const ImVec2 topRowPos = ImGui::GetCursorPos();
          int inputs = InputCountFor(gn);
          float maxInputY = topRowPos.y;
+         float headerRightX = 0.0f;   // screen x of the pin header's right edge: a long header sets the node width, so `out` aligns to it too
 
          if (mixerNode != nullptr && mixerNode->numChannels > 0)
          {
@@ -328,18 +371,33 @@ void DrawNodeBodies(FrameCtx& fc)
          else
          {
             const float pinSpacing = (inputs > 4) ? 8.0f : 12.0f;
+            // A long pin header (Render 3D: 9 pins, Material: 9) would otherwise set the node's width and leave an
+            // empty strip beside the params columns. Wrap it into rows no wider than two param columns.
+            const float wrapW = kParamWidth * 2.0f + 16.0f + 48.0f;
+            float rowUsed = 0.0f;
             for (int slot = 0; slot < inputs; slot++)
             {
                char label[24];
                if (const char* named = gn.node->InputLabel(slot))
                   snprintf(label, sizeof(label), "%s", named);
                else if (inputs == 1)
-                  label[0] = '\0';
+                  snprintf(label, sizeof(label), "in"); // R6: no bare pin dot
                else
                   snprintf(label, sizeof(label), "%c", 'A' + slot);
+               const float thisW = kPinHit + 4.0f + ImGui::CalcTextSize(label).x;
+               if (slot > 0)
+               {
+                  if (rowUsed + pinSpacing + thisW > wrapW)
+                     rowUsed = 0.0f;   // next pin starts a new row (no SameLine)
+                  else
+                  {
+                     ImGui::SameLine(0.0f, pinSpacing);
+                     rowUsed += pinSpacing;
+                  }
+               }
                DrawPin(gn.InputPinId(slot), ed::PinKind::Input, label);
-               if (slot + 1 < inputs)
-                  ImGui::SameLine(0.0f, pinSpacing);
+               headerRightX = std::max(headerRightX, ImGui::GetItemRectMax().x);
+               rowUsed += thisW;
             }
             if (inputs > 0)
                maxInputY = std::max(maxInputY, ImGui::GetCursorPosY());
@@ -378,11 +436,15 @@ void DrawNodeBodies(FrameCtx& fc)
          // ed::GetNodeSize() is scaled by the current zoom, so feeding it back
          // into padding inflated the node a little more every frame until it
          // covered the canvas and swallowed every click.
+         gParamWidthLive = std::max(kParamWidthBase, headerRightX - ImGui::GetCursorScreenPos().x);
          ImGui::BeginGroup();
 
          if (!isComment)
          {
-            ImGui::TextUnformatted(NodeTitle(gn).c_str());
+            {
+               UiType::Scope titleType(UiType::Size::Title, UiType::Weight::Medium);
+               ImGui::TextUnformatted(NodeTitle(gn).c_str());
+            }
             int instanceTotal = 0;
             const int instanceIdx = GetNodeInstanceIndex(gn, &instanceTotal);
             if (instanceTotal > 1)
@@ -390,17 +452,16 @@ void DrawNodeBodies(FrameCtx& fc)
                ImGui::SameLine(0.0f, 4.0f);
                ImGui::TextDisabled("#%d", instanceIdx);
             }
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 2.0f);
-            if (isLight)
-               ImGui::PushStyleColor(ImGuiCol_Text,
-                                     ImVec4(catColor.r * 0.75f, catColor.g * 0.75f,
-                                            catColor.b * 0.75f, 1.0f));
-            else
-               ImGui::PushStyleColor(ImGuiCol_Text,
-                                     ImVec4(catColor.r * 0.6f + 0.4f, catColor.g * 0.6f + 0.4f,
-                                            catColor.b * 0.6f + 0.4f, 1.0f));
-            ImGui::TextUnformatted(gn.category.c_str());
-            ImGui::PopStyleColor();
+            // One header row: title, instance number, then the category dimmed to its right.
+            const ImVec4 catText = isLight
+               ? ImVec4(catColor.r * 0.75f, catColor.g * 0.75f, catColor.b * 0.75f, 1.0f)
+               : ImVec4(catColor.r * 0.6f + 0.4f, catColor.g * 0.6f + 0.4f, catColor.b * 0.6f + 0.4f, 0.75f);
+            NodeHeader::Category(gn.category.c_str(), catText);
+            if (const NodeIssue issue = gn.node->Issue())
+            {
+               if (NodeHeader::IssueBadge(issue))
+                  RunNodeIssueFix(gn, issue);
+            }
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f);
          }
 
@@ -415,12 +476,25 @@ void DrawNodeBodies(FrameCtx& fc)
          // --- preview: image for image nodes, a value meter for modulators ---
          const bool multiOutModulator =
             dynamic_cast<ImageAnalyzeNode*>(gn.node.get()) != nullptr ||
+            dynamic_cast<TrackNodeBase*>(gn.node.get()) != nullptr ||
             dynamic_cast<AudioFileNode*>(gn.node.get()) != nullptr ||
             dynamic_cast<AudioAnalyzeNode*>(gn.node.get()) != nullptr ||
             dynamic_cast<GeometryTableNode*>(gn.node.get()) != nullptr;
+         // Senders out of the app (MIDI device, OSC socket) make no picture: without this they fall
+         // through to DrawPreview and show an empty "no input" box. Their status line is in the params.
+         const bool externalSender =
+            dynamic_cast<MidiOutNode*>(gn.node.get()) != nullptr ||
+            dynamic_cast<OscSendNode*>(gn.node.get()) != nullptr;
          IGeometrySource* geoSourceForViewport = dynamic_cast<IGeometrySource*>(gn.node.get());
-         if (multiOutModulator)
-            ; // these draw their own meters in the params panel
+         // Breathing room between the title bar and a macro's main control.
+         if (dynamic_cast<MacroKnobNode*>(gn.node.get()) || dynamic_cast<MacroSliderNode*>(gn.node.get()) ||
+             dynamic_cast<MacroBipolarKnobNode*>(gn.node.get()) || dynamic_cast<MacroXYNode*>(gn.node.get()) ||
+             dynamic_cast<MacroToggleNode*>(gn.node.get()) || dynamic_cast<MacroTriggerNode*>(gn.node.get()) ||
+             dynamic_cast<MacroNumBoxNode*>(gn.node.get()) || dynamic_cast<MacroRadioSelectorNode*>(gn.node.get()) ||
+             dynamic_cast<MacroStepGateNode*>(gn.node.get()))
+            ImGui::Dummy(ImVec2(0.0f, 10.0f));
+         if (multiOutModulator || externalSender)
+            ; // these draw their own meters / status in the params panel
          else if (auto* macroKnob = dynamic_cast<MacroKnobNode*>(gn.node.get()))
             DrawMacroKnobBody(macroKnob);
          else if (auto* macroSlider = dynamic_cast<MacroSliderNode*>(gn.node.get()))
@@ -493,8 +567,8 @@ void DrawNodeBodies(FrameCtx& fc)
             ImGui::Dummy(ImVec2(boxW, h));
             ImDrawList* dl = ImGui::GetWindowDrawList();
             ImVec2 br(origin.x + boxW, origin.y + h);
-            dl->AddRectFilled(origin, br, ScopeBgCol(), 4.0f);
-            dl->AddRect(origin, br, ScopeBorderCol(), 4.0f);
+            AudioViz::Fill(dl, origin, br);
+            AudioViz::Border(dl, origin, br);
             char line[64] = "";
             if (auto* o = dynamic_cast<GeometryOpNode*>(gn.node.get()))
             {
@@ -565,10 +639,34 @@ void DrawNodeBodies(FrameCtx& fc)
             else
                snprintf(line, sizeof(line), "%s", T("scene node"));
             dl->AddText(ImVec2(origin.x + 12, origin.y + 10),
-                        isLight ? IM_COL32(30, 36, 52, 255) : IM_COL32(200, 206, 226, 255),
+                        isLight ? tok::U32(tok::pal::c_1E2434FF) : tok::U32(tok::pal::c_C8CEE2FF),
                         NodeTitleWithInstance(gn).c_str());
             dl->AddText(ImVec2(origin.x + 12, origin.y + 28),
-                        isLight ? IM_COL32(95, 105, 125, 255) : IM_COL32(130, 136, 156, 255), line);
+                        isLight ? tok::U32(tok::pal::c_5F697DFF) : tok::U32(tok::pal::c_82889CFF), line);
+            // R11: scene nodes (camera / light / particles) get a small gizmo on the right instead of an empty box.
+            const ImU32 gz = isLight ? tok::U32(tok::pal::c_5F697DFF) : tok::U32(tok::pal::c_82889CFF);
+            const ImVec2 gc(br.x - 30.0f, origin.y + h * 0.5f);
+            if (dynamic_cast<CameraNode*>(gn.node.get()) != nullptr)
+            {
+               dl->AddRect(ImVec2(gc.x - 14, gc.y - 8), ImVec2(gc.x + 4, gc.y + 8), gz, 2.0f, 0, 1.5f);
+               dl->AddTriangle(ImVec2(gc.x + 4, gc.y), ImVec2(gc.x + 14, gc.y - 8), ImVec2(gc.x + 14, gc.y + 8), gz, 1.5f);
+            }
+            else if (dynamic_cast<LightNode*>(gn.node.get()) != nullptr)
+            {
+               dl->AddCircle(gc, 5.0f, gz, 0, 1.5f);
+               for (int r = 0; r < 8; ++r)
+               {
+                  const float a = (float)r * 0.7853982f;
+                  dl->AddLine(ImVec2(gc.x + cosf(a) * 8.0f, gc.y + sinf(a) * 8.0f),
+                              ImVec2(gc.x + cosf(a) * 13.0f, gc.y + sinf(a) * 13.0f), gz, 1.5f);
+               }
+            }
+            else if (dynamic_cast<ParticleSystemNode*>(gn.node.get()) != nullptr)
+            {
+               static const float kDots[7][3] = { {-12,6,1.5f}, {-6,-5,2.0f}, {0,3,1.5f}, {4,-8,1.5f}, {9,2,2.0f}, {13,-4,1.5f}, {-2,10,1.0f} };
+               for (const auto& d : kDots)
+                  dl->AddCircleFilled(ImVec2(gc.x + d[0], gc.y + d[1] * 0.8f), d[2], gz);
+            }
          }
          else if (dynamic_cast<GeometryNode*>(gn.node.get()) != nullptr)
          {
@@ -579,18 +677,18 @@ void DrawNodeBodies(FrameCtx& fc)
             ImGui::Dummy(ImVec2(kPreviewSize, kPreviewSize * 0.45f));
             ImDrawList* dl = ImGui::GetWindowDrawList();
             ImVec2 br(origin.x + kPreviewSize, origin.y + kPreviewSize * 0.45f);
-            dl->AddRectFilled(origin, br, ScopeBgCol(), 4.0f);
-            dl->AddRect(origin, br, ScopeBorderCol(), 4.0f);
+            AudioViz::Fill(dl, origin, br);
+            AudioViz::Border(dl, origin, br);
             const std::string& name = GeometryNode::ShapeNames()[
                std::max(0, std::min(geo->shape, (int)GeometryNode::ShapeNames().size() - 1))];
             dl->AddText(ImVec2(origin.x + 12, origin.y + 14),
-                        isLight ? IM_COL32(30, 36, 52, 255) : IM_COL32(200, 206, 226, 255), name.c_str());
+                        isLight ? tok::U32(tok::pal::c_1E2434FF) : tok::U32(tok::pal::c_C8CEE2FF), name.c_str());
             char tris[48];
             snprintf(tris, sizeof(tris), "%zu triangles", geo->TriangleCount());
             dl->AddText(ImVec2(origin.x + 12, origin.y + 34),
-                        isLight ? IM_COL32(95, 105, 125, 255) : IM_COL32(130, 136, 156, 255), tris);
+                        isLight ? tok::U32(tok::pal::c_5F697DFF) : tok::U32(tok::pal::c_82889CFF), tris);
             dl->AddText(ImVec2(origin.x + 12, origin.y + 54),
-                        isLight ? IM_COL32(95, 105, 125, 255) : IM_COL32(130, 136, 156, 255), T("geometry -> Render 3D"));
+                        isLight ? tok::U32(tok::pal::c_5F697DFF) : tok::U32(tok::pal::c_82889CFF), T("geometry -> Render 3D"));
          }
          else if (auto* draw = dynamic_cast<DrawNode*>(gn.node.get()))
             DrawPaintablePreview(draw);
@@ -654,6 +752,8 @@ void DrawNodeBodies(FrameCtx& fc)
             DrawFieldSampleScope(fsnPreview, 60.0f, kPreviewSize);
          else if (auto* fspPreview = dynamic_cast<FieldSynthNode*>(gn.node.get()))
             DrawFieldSynthScope(fspPreview, 60.0f, kPreviewSize);
+         else if (auto* fnnPreview = dynamic_cast<FieldNotesNode*>(gn.node.get()))
+            DrawFieldNotesRoll(fnnPreview, 60.0f, kPreviewSize);
          else if (isAudioBody)
             DrawAudioNodeBody(gn);
          else
@@ -667,35 +767,55 @@ void DrawNodeBodies(FrameCtx& fc)
          // collapsed (so the "mod"/"pal" collapsed-tag affordance has
          // nothing to stand in for), and there is no mesh for the viewport
          // toggle - see the comment above isAudioBody.
-         if (!isAudioBody && !isComment)
+         // Name-only macros have nothing behind the eye, so their toggle row would hold bypass alone. Bypass
+         // then shares the output pin's row (left edge vs right edge), which makes the body symmetrical and
+         // drops a row. A modulated macro keeps the toggle row: its "mod" tag lives there.
+         const bool isMacroNode =
+            dynamic_cast<MacroKnobNode*>(gn.node.get()) || dynamic_cast<MacroSliderNode*>(gn.node.get()) ||
+            dynamic_cast<MacroBipolarKnobNode*>(gn.node.get()) || dynamic_cast<MacroTriggerNode*>(gn.node.get()) ||
+            dynamic_cast<MacroToggleNode*>(gn.node.get()) || dynamic_cast<MacroNumBoxNode*>(gn.node.get());
+         if (isMacroNode && !isComment)
+            gn.showParams = false;
+         const auto drawBypassToggle = [&]()
+         {
+            if (!BypassToggle(gn.node->bypassed))
+               return;
+            PushUndoCheckpoint();
+            gn.node->bypassed = !gn.node->bypassed;
+            if (dynamic_cast<IAudioSource*>(gn.node.get()) != nullptr ||
+                dynamic_cast<INoteSource*>(gn.node.get()) != nullptr)
+               RebuildAudioTopology();
+         };
+         const bool bypassOnOutputRow = isMacroNode && !isComment && CanBypass(gn) && !gn.hasModulatedParams &&
+                                        !gn.hasPaletteColors;
+         if (bypassOnOutputRow)
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));   // the gap the toggle row gave; also ends the body on an item, not a SetCursorPos
+         if (!isAudioBody && !isComment && !bypassOnOutputRow)
          {
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
             const bool isWide = (dynamic_cast<Render3DNode*>(gn.node.get()) != nullptr ||
                                  dynamic_cast<MaterialNode*>(gn.node.get()) != nullptr);
             if (isWide)
             {
-               const float offset = std::max(0.0f, (kWideNodeWidth - kViewportSize) * 0.5f);
+               const float offset = WideNodeCentreOffset(gn.node.get(), kViewportSize);
                if (offset > 0.0f)
                   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
             }
-            if (EyeToggle(gn.showParams))
-               gn.showParams = !gn.showParams;
-            ImGui::SameLine();
-            if (!CanBypass(gn))
+            // Name-only macros have nothing behind the eye, so the
+            // toggle is dropped and bypass is the row's first control.
+            if (!isMacroNode)
             {
-               // Same footprint as BypassToggle, so the toggles to its right
-               // sit where they do on every other node.
-               ImGui::Dummy(ImVec2(22.0f, 18.0f));
+               if (EyeToggle(gn.showParams))
+                  gn.showParams = !gn.showParams;
             }
-            else if (BypassToggle(gn.node->bypassed))
+            // R8: a node that cannot bypass (2+ inputs) has no hole where the power icon would be; the icons pack left.
+            // The SameLine lives here, not after the eye: with nothing to follow, it would glue the next control
+            // (Output's path field) onto the eye's row.
+            if (CanBypass(gn))
             {
-               PushUndoCheckpoint();
-               gn.node->bypassed = !gn.node->bypassed;
-               if (dynamic_cast<IAudioSource*>(gn.node.get()) != nullptr ||
-                   dynamic_cast<INoteSource*>(gn.node.get()) != nullptr)
-               {
-                  RebuildAudioTopology();
-               }
+               if (!isMacroNode)
+                  ImGui::SameLine();
+               drawBypassToggle();
             }
             // Mini viewport toggle, only for nodes that actually have a mesh to
             // show - excludes CameraNode/LightNode, which appear in the stat-box
@@ -711,8 +831,8 @@ void DrawNodeBodies(FrameCtx& fc)
             }
             ImVec2 modTagMin(0.0f, 0.0f), modTagMax(0.0f, 0.0f);
             ImVec2 palTagMin(0.0f, 0.0f), palTagMax(0.0f, 0.0f);
-            const bool modTag = !gn.showParams && gn.hasModulatedParams;
-            const bool palTag = !gn.showParams && gn.hasPaletteColors;
+            const bool modTag = !paramsOpen && gn.hasModulatedParams;
+            const bool palTag = !paramsOpen && gn.hasPaletteColors;
             if (modTag)
             {
                // make it obvious a collapsed node still has live modulation,
@@ -726,9 +846,9 @@ void DrawNodeBodies(FrameCtx& fc)
                const ImVec2 tagSz(txtSz.x + 8.0f, txtSz.y + 2.0f);
                ImDrawList* dl = ImGui::GetWindowDrawList();
                dl->AddRectFilled(p, ImVec2(p.x + tagSz.x, p.y + tagSz.y),
-                                 isLight ? IM_COL32(255, 235, 200, 200) : IM_COL32(70, 50, 20, 180), 3.0f);
+                                 isLight ? tok::U32(tok::pal::c_FFEBC8C8) : tok::U32(tok::pal::c_463214B4), 3.0f);
                dl->AddText(ImVec2(p.x + 4.0f, p.y + 1.0f),
-                           isLight ? IM_COL32(180, 100, 20, 255) : IM_COL32(255, 190, 90, 255), tagText);
+                           isLight ? tok::U32(tok::pal::c_B46414FF) : tok::U32(tok::pal::c_FFBE5AFF), tagText);
                ImGui::Dummy(tagSz);
                modTagMin = p;
                modTagMax = ImVec2(p.x + tagSz.x, p.y + tagSz.y);
@@ -742,9 +862,9 @@ void DrawNodeBodies(FrameCtx& fc)
                const ImVec2 tagSz(txtSz.x + 8.0f, txtSz.y + 2.0f);
                ImDrawList* dl = ImGui::GetWindowDrawList();
                dl->AddRectFilled(p, ImVec2(p.x + tagSz.x, p.y + tagSz.y),
-                                 isLight ? IM_COL32(200, 245, 235, 200) : IM_COL32(20, 60, 50, 180), 3.0f);
+                                 isLight ? tok::U32(tok::pal::c_C8F5EBC8) : tok::U32(tok::pal::c_143C32B4), 3.0f);
                dl->AddText(ImVec2(p.x + 4.0f, p.y + 1.0f),
-                           isLight ? IM_COL32(20, 140, 110, 255) : IM_COL32(128, 220, 190, 255), tagText);
+                           isLight ? tok::U32(tok::pal::c_148C6EFF) : tok::U32(tok::pal::c_80DCBEFF), tagText);
                ImGui::Dummy(tagSz);
                palTagMin = p;
                palTagMax = ImVec2(p.x + tagSz.x, p.y + tagSz.y);
@@ -775,8 +895,7 @@ void DrawNodeBodies(FrameCtx& fc)
          // untouched, and an empty clip rect swallows any raw draw-list work
          // the params body does around them. Gated on there being a binding at
          // all so the common collapsed node costs exactly what it did before.
-         // gRpcParamProbe: an RPC client asked for this node's parameter keys.
-         const bool registerOnlyParams = !isAudioBody && !isComment && !gn.showParams &&
+         const bool registerOnlyParams = !isAudioBody && !isComment && !paramsOpen &&
                                          (gn.IsParamDriven() || gHeadlessProbeAll || gRpcParamProbe.count(gn.index) != 0);
          ImGuiWindow* paramsWindow = ImGui::GetCurrentWindow();
          const bool savedSkipItems = paramsWindow->SkipItems;
@@ -786,8 +905,9 @@ void DrawNodeBodies(FrameCtx& fc)
             paramsWindow->SkipItems = true;
             ImGui::GetWindowDrawList()->PushClipRect(ImVec2(0.0f, 0.0f), ImVec2(0.0f, 0.0f), false);
          }
-         if (!isAudioBody && !isComment && (gn.showParams || registerOnlyParams))
+         if (!isAudioBody && !isComment && (paramsOpen || registerOnlyParams))
          {
+            bool matched = true;
             if (auto* n = dynamic_cast<ImageSourceNode*>(gn.node.get()))
                DrawImageSourceParams(n);
             else if (auto* n = dynamic_cast<SlideshowNode*>(gn.node.get()))
@@ -838,6 +958,8 @@ void DrawNodeBodies(FrameCtx& fc)
                DrawNoteToCVParams(n);
             else if (auto* n = dynamic_cast<VelocityToCVNode*>(gn.node.get()))
                DrawVelocityToCVParams(n);
+            else if (auto* n = dynamic_cast<MidiOutNode*>(gn.node.get()))
+               DrawMidiOutParams(n);
             else if (auto* n = dynamic_cast<CVRecorderNode*>(gn.node.get()))
                DrawCVRecorderParams(n);
             else if (auto* n = dynamic_cast<MacroKnobNode*>(gn.node.get()))
@@ -917,356 +1039,390 @@ void DrawNodeBodies(FrameCtx& fc)
             else if (dynamic_cast<NullNode*>(gn.node.get()) != nullptr ||
                      dynamic_cast<Null3DNode*>(gn.node.get()) != nullptr)
                ImGui::TextDisabled("%s", T("pass-through"));
-            else if (auto* n = dynamic_cast<GeometryOpNode*>(gn.node.get()))
-               DrawGeometryOpParams(n);
-            else if (auto* n = dynamic_cast<DisplacementNode*>(gn.node.get()))
-               DrawDisplacementParams(n);
-            else if (auto* n = dynamic_cast<AudioDisplacementNode*>(gn.node.get()))
-               DrawAudioDisplacementParams(n);
-            else if (auto* n = dynamic_cast<AudioRibbonNode*>(gn.node.get()))
-               DrawAudioRibbonParams(n);
-            else if (auto* n = dynamic_cast<AudioTextureNode*>(gn.node.get()))
-               DrawAudioTextureParams(n);
-            else if (auto* n = dynamic_cast<AudioColorRampNode*>(gn.node.get()))
-               DrawAudioColorRampParams(n);
-            else if (auto* n = dynamic_cast<SetColorNode*>(gn.node.get()))
-               DrawSetColorParams(n);
-            else if (auto* n = dynamic_cast<InstanceOnPointsNode*>(gn.node.get()))
-               DrawInstanceParams(n);
-            else if (auto* n = dynamic_cast<WrapNode*>(gn.node.get()))
-               DrawWrapParams(n);
-            else if (auto* n = dynamic_cast<DistributePointsOnFacesNode*>(gn.node.get()))
-               DrawDistributePointsOnFacesParams(n);
-            else if (auto* n = dynamic_cast<PointsToVerticesNode*>(gn.node.get()))
-               DrawPointsToVerticesParams(n);
-            else if (auto* n = dynamic_cast<DistributePointsInGridNode*>(gn.node.get()))
-               DrawDistributePointsInGridParams(n);
-            else if (auto* n = dynamic_cast<MergeByDistanceNode*>(gn.node.get()))
-               DrawMergeByDistanceParams(n);
-            else if (auto* n = dynamic_cast<Switcher3DNode*>(gn.node.get()))
-               DrawSwitcher3DParams(n);
-            else if (auto* n = dynamic_cast<CameraNode*>(gn.node.get()))
-               DrawCameraParams(n);
-            else if (auto* n = dynamic_cast<LightNode*>(gn.node.get()))
-               DrawLightParams(n);
-            else if (auto* n = dynamic_cast<Render3DNode*>(gn.node.get()))
-               DrawRender3DParams(n);
-            else if (auto* n = dynamic_cast<ImageAnalyzeNode*>(gn.node.get()))
-               DrawImageAnalyzeParams(n);
-            else if (auto* n = dynamic_cast<NullModulatorNode*>(gn.node.get()))
-               DrawNullModulatorParams(n);
-            else if (auto* n = dynamic_cast<AudioFileNode*>(gn.node.get()))
-               DrawAudioFileParams(n);
-            else if (auto* n = dynamic_cast<AudioAnalyzeNode*>(gn.node.get()))
-               DrawAudioAnalyzeParams(n);
-            else if (auto* n = dynamic_cast<ResynthNode*>(gn.node.get()))
-               DrawResynthParams(n);
-            else if (auto* n = dynamic_cast<CurvesNode*>(gn.node.get()))
-               DrawCurvesParams(n);
-            else if (auto* n = dynamic_cast<PredictiveColoringNode*>(gn.node.get()))
-               DrawPredictiveColoringParams(n);
-            else if (auto* n = dynamic_cast<ColorRampNode*>(gn.node.get()))
-               DrawColorRampParams(n);
-            else if (auto* n = dynamic_cast<RemoveBgNode*>(gn.node.get()))
-               DrawRemoveBgParams(n);
-            else if (auto* n = dynamic_cast<DrawNode*>(gn.node.get()))
-               DrawDrawParams(n);
-            else if (auto* n = dynamic_cast<FeedbackNode*>(gn.node.get()))
-               DrawFeedbackParams(n);
-            else if (auto* n = dynamic_cast<TrailsNode*>(gn.node.get()))
-               DrawTrailsParams(n);
-            else if (auto* n = dynamic_cast<ReactionDiffusionNode*>(gn.node.get()))
-               DrawReactionDiffusionParams(n);
-            else if (auto* n = dynamic_cast<SwitcherNode*>(gn.node.get()))
-               DrawSwitcherParams(n);
-            else if (auto* n = dynamic_cast<ShapeNode*>(gn.node.get()))
-               DrawShapeParams(n);
-            else if (auto* n = dynamic_cast<FormulaNode*>(gn.node.get()))
-               DrawFormulaParams(n);
-            else if (auto* n = dynamic_cast<FieldElementNode*>(gn.node.get()))
-               DrawFieldElementParams(n);
-            else if (auto* n = dynamic_cast<FieldPrimitiveNode*>(gn.node.get()))
-               DrawFieldPrimitiveParams(n);
-            else if (auto* n = dynamic_cast<FieldPixelNode*>(gn.node.get()))
-               DrawFieldPixelParams(n);
-            else if (auto* n = dynamic_cast<FieldSampleNode*>(gn.node.get()))
-               DrawFieldSampleParams(n);
-            else if (auto* n = dynamic_cast<FieldSynthNode*>(gn.node.get()))
-               DrawFieldSynthParams(n);
-            else if (auto* n = dynamic_cast<FieldGraphNode*>(gn.node.get()))
-               DrawFieldGraphParams(n);
-            else if (auto* n = dynamic_cast<TextNode*>(gn.node.get()))
-               DrawTextParams(n);
-            else if (auto* n = dynamic_cast<LayerStackNode*>(gn.node.get()))
-               DrawLayerStackParams(n);
-            else if (auto* n = dynamic_cast<BlendNode*>(gn.node.get()))
-               DrawBlendParams(n);
-            else if (auto* n = dynamic_cast<FilterNode*>(gn.node.get()))
-               DrawFilterParams(n);
-            else if (auto* n = dynamic_cast<OutputNode*>(gn.node.get()))
+            else
+               matched = false;
+            // MSVC caps nested blocks at 128; one long else-if chain overflows it, so the chain is split in two.
+            if (!matched)
             {
-               n->EnsureDefaultPaths(); // the same defaults OutputNode::PressButton uses
-
-               char imgBuf[512];
-               snprintf(imgBuf, sizeof(imgBuf), "%s", n->exportImagePath.c_str());
-               ImGui::SetNextItemWidth(kPreviewSize);
-               if (ImGui::InputText("##imagePath", imgBuf, sizeof(imgBuf)))
+               if (auto* n = dynamic_cast<GeometryOpNode*>(gn.node.get()))
+                  DrawGeometryOpParams(n);
+               else if (auto* n = dynamic_cast<DisplacementNode*>(gn.node.get()))
+                  DrawDisplacementParams(n);
+               else if (auto* n = dynamic_cast<AudioDisplacementNode*>(gn.node.get()))
+                  DrawAudioDisplacementParams(n);
+               else if (auto* n = dynamic_cast<AudioRibbonNode*>(gn.node.get()))
+                  DrawAudioRibbonParams(n);
+               else if (auto* n = dynamic_cast<AudioTextureNode*>(gn.node.get()))
+                  DrawAudioTextureParams(n);
+               else if (auto* n = dynamic_cast<AudioColorRampNode*>(gn.node.get()))
+                  DrawAudioColorRampParams(n);
+               else if (auto* n = dynamic_cast<SetColorNode*>(gn.node.get()))
+                  DrawSetColorParams(n);
+               else if (auto* n = dynamic_cast<InstanceOnPointsNode*>(gn.node.get()))
+                  DrawInstanceParams(n);
+               else if (auto* n = dynamic_cast<WrapNode*>(gn.node.get()))
+                  DrawWrapParams(n);
+               else if (auto* n = dynamic_cast<DistributePointsOnFacesNode*>(gn.node.get()))
+                  DrawDistributePointsOnFacesParams(n);
+               else if (auto* n = dynamic_cast<PointsToVerticesNode*>(gn.node.get()))
+                  DrawPointsToVerticesParams(n);
+               else if (auto* n = dynamic_cast<CurveOpsNode*>(gn.node.get()))
+                  DrawCurveOpsParams(n);
+               else if (auto* n = dynamic_cast<DelaunayMeshNode*>(gn.node.get()))
+                  DrawDelaunayParams(n);
+               else if (auto* n = dynamic_cast<DistributePointsInGridNode*>(gn.node.get()))
+                  DrawDistributePointsInGridParams(n);
+               else if (auto* n = dynamic_cast<MergeByDistanceNode*>(gn.node.get()))
+                  DrawMergeByDistanceParams(n);
+               else if (auto* n = dynamic_cast<Switcher3DNode*>(gn.node.get()))
+                  DrawSwitcher3DParams(n);
+               else if (auto* n = dynamic_cast<CameraNode*>(gn.node.get()))
+                  DrawCameraParams(n);
+               else if (auto* n = dynamic_cast<LightNode*>(gn.node.get()))
+                  DrawLightParams(n);
+               else if (auto* n = dynamic_cast<Render3DNode*>(gn.node.get()))
+                  DrawRender3DParams(n);
+               else if (auto* n = dynamic_cast<ImageAnalyzeNode*>(gn.node.get()))
+                  DrawImageAnalyzeParams(n);
+               else if (auto* n = dynamic_cast<TrackNodeBase*>(gn.node.get()))
+                  DrawTrackParams(n);
+               else if (auto* n = dynamic_cast<NullModulatorNode*>(gn.node.get()))
+                  DrawNullModulatorParams(n);
+               else if (auto* n = dynamic_cast<AudioFileNode*>(gn.node.get()))
+                  DrawAudioFileParams(n);
+               else if (auto* n = dynamic_cast<AudioAnalyzeNode*>(gn.node.get()))
+                  DrawAudioAnalyzeParams(n);
+               else if (auto* n = dynamic_cast<ResynthNode*>(gn.node.get()))
+                  DrawResynthParams(n);
+               else if (auto* n = dynamic_cast<CurvesNode*>(gn.node.get()))
+                  DrawCurvesParams(n);
+               else if (auto* n = dynamic_cast<PredictiveColoringNode*>(gn.node.get()))
+                  DrawPredictiveColoringParams(n);
+               else if (auto* n = dynamic_cast<ColorRampNode*>(gn.node.get()))
+                  DrawColorRampParams(n);
+               else if (auto* n = dynamic_cast<RemoveBgNode*>(gn.node.get()))
+                  DrawRemoveBgParams(n);
+               else if (auto* n = dynamic_cast<DrawNode*>(gn.node.get()))
+                  DrawDrawParams(n);
+               else if (auto* n = dynamic_cast<FeedbackNode*>(gn.node.get()))
+                  DrawFeedbackParams(n);
+               else if (auto* n = dynamic_cast<TrailsNode*>(gn.node.get()))
+                  DrawTrailsParams(n);
+               else if (auto* n = dynamic_cast<ReactionDiffusionNode*>(gn.node.get()))
+                  DrawReactionDiffusionParams(n);
+               else if (auto* n = dynamic_cast<SwitcherNode*>(gn.node.get()))
+                  DrawSwitcherParams(n);
+               else if (auto* n = dynamic_cast<ShapeNode*>(gn.node.get()))
+                  DrawShapeParams(n);
+               else if (auto* n = dynamic_cast<FormulaNode*>(gn.node.get()))
+                  DrawFormulaParams(n);
+               else if (auto* n = dynamic_cast<FieldElementNode*>(gn.node.get()))
+                  DrawFieldElementParams(n);
+               else if (auto* n = dynamic_cast<FieldPrimitiveNode*>(gn.node.get()))
+                  DrawFieldPrimitiveParams(n);
+               else if (auto* n = dynamic_cast<FieldPixelNode*>(gn.node.get()))
+                  DrawFieldPixelParams(n);
+               else if (auto* n = dynamic_cast<SketchNode*>(gn.node.get()))
+                  DrawSketchParams(n);
+               else if (auto* n = dynamic_cast<Sketch3DNode*>(gn.node.get()))
+                  DrawSketch3DParams(n);
+               else if (auto* n = dynamic_cast<FieldSampleNode*>(gn.node.get()))
+                  DrawFieldSampleParams(n);
+               else if (auto* n = dynamic_cast<FieldSynthNode*>(gn.node.get()))
+                  DrawFieldSynthParams(n);
+               else if (auto* n = dynamic_cast<FieldNotesNode*>(gn.node.get()))
+                  DrawFieldNotesParams(n);
+               else if (auto* n = dynamic_cast<FieldGraphNode*>(gn.node.get()))
+                  DrawFieldGraphParams(n);
+               else if (auto* n = dynamic_cast<TextNode*>(gn.node.get()))
+                  DrawTextParams(n);
+               else if (auto* n = dynamic_cast<LayerStackNode*>(gn.node.get()))
+                  DrawLayerStackParams(n);
+               else if (auto* n = dynamic_cast<BlendNode*>(gn.node.get()))
+                  DrawBlendParams(n);
+               else if (auto* n = dynamic_cast<FilterNode*>(gn.node.get()))
+                  DrawFilterParams(n);
+               else if (auto* n = dynamic_cast<OutputNode*>(gn.node.get()))
                {
-                  n->exportImagePath = imgBuf;
-                  std::string low = n->exportImagePath;
-                  for (char& c : low) c = (char)tolower((unsigned char)c);
-                  if (low.length() >= 4 && (low.rfind(".jpg") == low.length() - 4 || low.rfind(".jpeg") == low.length() - 5))
-                     n->imageFormat = 1;
-                  else if (low.length() >= 4 && low.rfind(".png") == low.length() - 4)
-                     n->imageFormat = 0;
-                  gPatchDirty = true;
-               }
-
-               const float halfBtnW = (kPreviewSize - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
-               const bool pngActive = (n->imageFormat == 0);
-               if (pngActive)
-                  ImGui::PushStyleColor(ImGuiCol_Button, AccentEmphasisSelected());
-               if (ImGui::Button(L(".png##imgPng"), ImVec2(halfBtnW, 0)))
-               {
-                  n->imageFormat = 0;
-                  size_t dot = n->exportImagePath.rfind('.');
-                  if (dot != std::string::npos)
-                     n->exportImagePath = n->exportImagePath.substr(0, dot) + ".png";
-                  else
-                     n->exportImagePath += ".png";
-                  gPatchDirty = true;
-               }
-               if (pngActive)
-                  ImGui::PopStyleColor();
-               ImGui::SameLine();
-
-               const bool jpgActive = (n->imageFormat == 1);
-               if (jpgActive)
-                  ImGui::PushStyleColor(ImGuiCol_Button, AccentEmphasisSelected());
-               if (ImGui::Button(L(".jpg##imgJpg"), ImVec2(halfBtnW, 0)))
-               {
-                  n->imageFormat = 1;
-                  size_t dot = n->exportImagePath.rfind('.');
-                  if (dot != std::string::npos)
-                     n->exportImagePath = n->exportImagePath.substr(0, dot) + ".jpg";
-                  else
-                     n->exportImagePath += ".jpg";
-                  gPatchDirty = true;
-               }
-               if (jpgActive)
-                  ImGui::PopStyleColor();
-
-               if (ImGui::Button(L("Export Image"), ImVec2(kPreviewSize, 0)))
-                  ExportImage(n, n->exportImagePath);
-
-               ImGui::Dummy(ImVec2(0, 4));
-
-               char vidBuf[512];
-               snprintf(vidBuf, sizeof(vidBuf), "%s", n->recordVideoPath.c_str());
-               ImGui::SetNextItemWidth(kPreviewSize);
-               if (ImGui::InputText("##videoPath", vidBuf, sizeof(vidBuf)))
-               {
-                  n->recordVideoPath = vidBuf;
-                  std::string low = n->recordVideoPath;
-                  for (char& c : low) c = (char)tolower((unsigned char)c);
-                  if (low.length() >= 4 && low.rfind(".mov") == low.length() - 4)
-                     n->videoFormat = 1;
-                  else if (low.length() >= 4 && low.rfind(".mp4") == low.length() - 4)
-                     n->videoFormat = 0;
-                  gPatchDirty = true;
-               }
-
-               ImGui::BeginDisabled(n->IsRecording());
-               const bool mp4Active = (n->videoFormat == 0);
-               if (mp4Active)
-                  ImGui::PushStyleColor(ImGuiCol_Button, AccentEmphasisSelected());
-               if (ImGui::Button(L(".mp4##vidMp4"), ImVec2(halfBtnW, 0)))
-               {
-                  n->videoFormat = 0;
-                  size_t dot = n->recordVideoPath.rfind('.');
-                  if (dot != std::string::npos)
-                     n->recordVideoPath = n->recordVideoPath.substr(0, dot) + ".mp4";
-                  else
-                     n->recordVideoPath += ".mp4";
-                  gPatchDirty = true;
-               }
-               if (mp4Active)
-                  ImGui::PopStyleColor();
-               ImGui::SameLine();
-
-               const bool movActive = (n->videoFormat == 1);
-               if (movActive)
-                  ImGui::PushStyleColor(ImGuiCol_Button, AccentEmphasisSelected());
-               if (ImGui::Button(L(".mov##vidMov"), ImVec2(halfBtnW, 0)))
-               {
-                  n->videoFormat = 1;
-                  size_t dot = n->recordVideoPath.rfind('.');
-                  if (dot != std::string::npos)
-                     n->recordVideoPath = n->recordVideoPath.substr(0, dot) + ".mov";
-                  else
-                     n->recordVideoPath += ".mov";
-                  gPatchDirty = true;
-               }
-               if (movActive)
-                  ImGui::PopStyleColor();
-               ImGui::EndDisabled();
-
-               // Both of these are read once, at StartRecording, and latched
-               // for the take - the recorder fixes its frame rate and its
-               // audio track up front and cannot change either mid-stream.
-               // Leaving them live meant dragging fps during a take silently
-               // did nothing; now it also has to not desync the pacing that
-               // reads it, so say plainly that the take owns them.
-               ImGui::BeginDisabled(n->IsRecording());
-               ImGui::SetNextItemWidth(kParamWidth);
-               ImGui::SliderInt(L("fps"), &n->recordFps, 1, 60);
-
-               ImGui::Checkbox(L("include audio"), &n->includeAudio);
-               ImGui::EndDisabled();
-               if (n->IsRecording() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                  ImGui::SetTooltip("%s", T("locked for the current take"));
-               if (n->includeAudio && n->AudioInput().IsConnected())
-               {
-                  INode* src = n->AudioInput().GetSource();
-                  std::string srcName = "connected audio";
-                  if (auto* af = dynamic_cast<AudioFileNode*>(src))
-                     srcName = af->FileName().empty() ? "Audio File" : af->FileName();
-                  else
+                  if (n->exportImagePath.empty())
                   {
-                     for (GraphNode& srcGn : gNodes)
+                     n->exportImagePath = AppPaths::DesktopDir() + "/infinite_output." + (n->imageFormat == 1 ? "jpg" : "png");
+                  }
+                  if (n->recordVideoPath.empty())
+                  {
+                     n->recordVideoPath = AppPaths::DesktopDir() + "/infinite_output." + (n->videoFormat == 1 ? "mov" : "mp4");
+                  }
+
+                  char imgBuf[512];
+                  snprintf(imgBuf, sizeof(imgBuf), "%s", n->exportImagePath.c_str());
+                  ImGui::SetNextItemWidth(kPreviewSize);
+                  if (FieldWell::InputText("##imagePath", imgBuf, sizeof(imgBuf)))
+                  {
+                     n->exportImagePath = imgBuf;
+                     std::string low = n->exportImagePath;
+                     for (char& c : low) c = (char)tolower((unsigned char)c);
+                     if (low.length() >= 4 && (low.rfind(".jpg") == low.length() - 4 || low.rfind(".jpeg") == low.length() - 5))
+                        n->imageFormat = 1;
+                     else if (low.length() >= 4 && low.rfind(".png") == low.length() - 4)
+                        n->imageFormat = 0;
+                     gPatchDirty = true;
+                  }
+
+                  const float halfBtnW = (kPreviewSize - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+                  const bool pngActive = (n->imageFormat == 0);
+                  if (pngActive)
+                     PushSelectedButtonColors();
+                  if (ActionButton::Draw(L(".png##imgPng"), ImVec2(halfBtnW, 0)))
+                  {
+                     n->imageFormat = 0;
+                     size_t dot = n->exportImagePath.rfind('.');
+                     if (dot != std::string::npos)
+                        n->exportImagePath = n->exportImagePath.substr(0, dot) + ".png";
+                     else
+                        n->exportImagePath += ".png";
+                     gPatchDirty = true;
+                  }
+                  if (pngActive)
+                     PopSelectedButtonColors();
+                  ImGui::SameLine();
+
+                  const bool jpgActive = (n->imageFormat == 1);
+                  if (jpgActive)
+                     PushSelectedButtonColors();
+                  if (ActionButton::Draw(L(".jpg##imgJpg"), ImVec2(halfBtnW, 0)))
+                  {
+                     n->imageFormat = 1;
+                     size_t dot = n->exportImagePath.rfind('.');
+                     if (dot != std::string::npos)
+                        n->exportImagePath = n->exportImagePath.substr(0, dot) + ".jpg";
+                     else
+                        n->exportImagePath += ".jpg";
+                     gPatchDirty = true;
+                  }
+                  if (jpgActive)
+                     PopSelectedButtonColors();
+
+                  if (ActionButton::Draw(L("Export Image"), ImVec2(kPreviewSize, 0)))
+                     ExportImage(n, n->exportImagePath);
+
+                  ImGui::Dummy(ImVec2(0, 4));
+
+                  char vidBuf[512];
+                  snprintf(vidBuf, sizeof(vidBuf), "%s", n->recordVideoPath.c_str());
+                  ImGui::SetNextItemWidth(kPreviewSize);
+                  if (FieldWell::InputText("##videoPath", vidBuf, sizeof(vidBuf)))
+                  {
+                     n->recordVideoPath = vidBuf;
+                     std::string low = n->recordVideoPath;
+                     for (char& c : low) c = (char)tolower((unsigned char)c);
+                     if (low.length() >= 4 && low.rfind(".mov") == low.length() - 4)
+                        n->videoFormat = 1;
+                     else if (low.length() >= 4 && low.rfind(".mp4") == low.length() - 4)
+                        n->videoFormat = 0;
+                     gPatchDirty = true;
+                  }
+
+                  ImGui::BeginDisabled(n->IsRecording());
+                  const bool mp4Active = (n->videoFormat == 0);
+                  if (mp4Active)
+                     PushSelectedButtonColors();
+                  if (ActionButton::Draw(L(".mp4##vidMp4"), ImVec2(halfBtnW, 0)))
+                  {
+                     n->videoFormat = 0;
+                     size_t dot = n->recordVideoPath.rfind('.');
+                     if (dot != std::string::npos)
+                        n->recordVideoPath = n->recordVideoPath.substr(0, dot) + ".mp4";
+                     else
+                        n->recordVideoPath += ".mp4";
+                     gPatchDirty = true;
+                  }
+                  if (mp4Active)
+                     PopSelectedButtonColors();
+                  ImGui::SameLine();
+
+                  const bool movActive = (n->videoFormat == 1);
+                  if (movActive)
+                     PushSelectedButtonColors();
+                  if (ActionButton::Draw(L(".mov##vidMov"), ImVec2(halfBtnW, 0)))
+                  {
+                     n->videoFormat = 1;
+                     size_t dot = n->recordVideoPath.rfind('.');
+                     if (dot != std::string::npos)
+                        n->recordVideoPath = n->recordVideoPath.substr(0, dot) + ".mov";
+                     else
+                        n->recordVideoPath += ".mov";
+                     gPatchDirty = true;
+                  }
+                  if (movActive)
+                     PopSelectedButtonColors();
+                  ImGui::EndDisabled();
+
+                  // Both of these are read once, at StartRecording, and latched
+                  // for the take - the recorder fixes its frame rate and its
+                  // audio track up front and cannot change either mid-stream.
+                  // Leaving them live meant dragging fps during a take silently
+                  // did nothing; now it also has to not desync the pacing that
+                  // reads it, so say plainly that the take owns them.
+                  ImGui::BeginDisabled(n->IsRecording());
+                  ImGui::SetNextItemWidth(kParamWidth);
+                  ImGui::SliderInt("##recfps", &n->recordFps, 1, 60, "%d fps");
+
+                  ModCheckbox(L("include audio"), &n->includeAudio);
+                  ImGui::EndDisabled();
+                  if (n->IsRecording() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                     ImGui::SetTooltip("%s", T("locked for the current take"));
+                  if (n->includeAudio && n->AudioInput().IsConnected())
+                  {
+                     INode* src = n->AudioInput().GetSource();
+                     std::string srcName = "connected audio";
+                     if (auto* af = dynamic_cast<AudioFileNode*>(src))
+                        srcName = af->FileName().empty() ? "Audio File" : af->FileName();
+                     else
                      {
-                        if (srcGn.node.get() == src)
+                        for (GraphNode& srcGn : gNodes)
                         {
-                           srcName = NodeTitleWithInstance(srcGn);
-                           break;
+                           if (srcGn.node.get() == src)
+                           {
+                              srcName = NodeTitleWithInstance(srcGn);
+                              break;
+                           }
                         }
                      }
+                     ImGui::TextDisabled(T("from: %s"), srcName.c_str());
                   }
-                  ImGui::TextDisabled(T("from: %s"), srcName.c_str());
-               }
 
-               if (n->StopRequested() || n->IsFinalizing())
-               {
-                  // StopRequested(): the actual StopRecordingAsync() call
-                  // runs at the top of next frame, once this "finalizing"
-                  // state has had a chance to reach the screen - see the
-                  // pump next to glfwPollEvents(). IsFinalizing(): the
-                  // encoder join + movie finalize is running on a background
-                  // thread and can take a while on a long/backlogged take,
-                  // but doesn't block this UI - a new take can't be started
-                  // here (the button stays disabled) since StartRecording()
-                  // would otherwise briefly block on WaitForFinalize().
-                  ImGui::BeginDisabled();
-                  ImGui::Button(L("Finalizing..."), ImVec2(kPreviewSize, 0));
-                  ImGui::EndDisabled();
-                  // PendingFrames() reads the live handle, which has already
-                  // been handed off to the background thread once
-                  // IsFinalizing() is true - nothing left here to report.
-                  const int pending = n->StopRequested() ? n->PendingFrames() : 0;
-                  if (pending > 0)
-                     ImGui::TextDisabled(T("finishing up, %d frames left"), pending);
-               }
-               else if (n->IsRecording())
-               {
-                  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
-                  if (ImGui::Button(L("Stop recording"), ImVec2(kPreviewSize, 0)))
-                     n->RequestStopRecording();
-                  ImGui::PopStyleColor();
-                  ImGui::TextColored(ImVec4(1, 0.5f, 0.4f, 1), T("REC  %d frames"), n->RecordedFrames());
-                  const int pending = n->PendingFrames();
-                  const int dropped = n->DroppedFrames();
-                  if (pending > 0)
+                  if (n->StopRequested() || n->IsFinalizing())
                   {
-                     ImGui::SameLine();
-                     ImGui::TextDisabled(T("(%d pending)"), pending);
+                     // StopRequested(): the actual StopRecordingAsync() call
+                     // runs at the top of next frame, once this "finalizing"
+                     // state has had a chance to reach the screen - see the
+                     // pump next to glfwPollEvents(). IsFinalizing(): the
+                     // encoder join + movie finalize is running on a background
+                     // thread and can take a while on a long/backlogged take,
+                     // but doesn't block this UI - a new take can't be started
+                     // here (the button stays disabled) since StartRecording()
+                     // would otherwise briefly block on WaitForFinalize().
+                     ImGui::BeginDisabled();
+                     ActionButton::Draw(L("Finalizing..."), ImVec2(kPreviewSize, 0));
+                     ImGui::EndDisabled();
+                     // PendingFrames() reads the live handle, which has already
+                     // been handed off to the background thread once
+                     // IsFinalizing() is true - nothing left here to report.
+                     const int pending = n->StopRequested() ? n->PendingFrames() : 0;
+                     if (pending > 0)
+                        ImGui::TextDisabled(T("finishing up, %d frames left"), pending);
                   }
-                  if (dropped > 0)
+                  else if (n->IsRecording())
                   {
-                     // Same orange as the VST3 blocklist warning - "this is a
-                     // problem, not an error": the encoder is losing frames,
-                     // but recording is continuing.
-                     ImGui::TextColored(ImVec4(0.9f, 0.55f, 0.25f, 1.0f), T("%d frames dropped - encoder can't keep up"), dropped);
+                     if (ActionButton::Draw(L("Stop recording"), ImVec2(kPreviewSize, 0), ActionButton::Kind::Record))
+                        n->RequestStopRecording();
+                     ImGui::TextColored(ImVec4(1, 0.5f, 0.4f, 1), T("REC  %d frames"), n->RecordedFrames());
+                     const int pending = n->PendingFrames();
+                     const int dropped = n->DroppedFrames();
+                     if (pending > 0)
+                     {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled(T("(%d pending)"), pending);
+                     }
+                     if (dropped > 0)
+                     {
+                        // Same orange as the VST3 blocklist warning - "this is a
+                        // problem, not an error": the encoder is losing frames,
+                        // but recording is continuing.
+                        ImGui::TextColored(tok::V4(tok::palf::v_900_550_250_1000), T("%d frames dropped - encoder can't keep up"), dropped);
+                     }
+                  }
+                  else
+                  {
+                     if (ActionButton::Draw(L("Record video"), ImVec2(kPreviewSize, 0)))
+                        n->StartRecording(n->recordVideoPath);
+                  }
+                  if (!n->RecordStatus().empty())
+                  {
+                     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
+                     ImGui::TextDisabled("%s", n->RecordStatus().c_str());
+                     ImGui::PopTextWrapPos();
+                  }
+
+                  ImGui::Dummy(ImVec2(0, 8));
+                  NodeSeparator();
+                  ImGui::TextDisabled("%s", T("Offline Render"));
+
+                  // A take drives the whole patch's Transport/AudioEngine, not
+                  // just this node - only one can ever be in flight regardless
+                  // of which OutputNode started it, and it can't overlap this
+                  // node's own live recording either (both would fight over the
+                  // same recordVideoPath/EnsureFbo-sized mOut).
+                  const bool thisNodeRendering = gOfflineRender.node == n;
+                  const bool otherSessionActive = gOfflineRender.active && !thisNodeRendering;
+
+                  // Unit/caption lives inside the field's right edge (R1), not outside the node.
+                  auto fieldUnit = [](const char* unit)
+                  {
+                     const ImVec2 mn = ImGui::GetItemRectMin();
+                     const ImVec2 mx = ImGui::GetItemRectMax();
+                     const ImVec2 ts = ImGui::CalcTextSize(unit);
+                     ImVec4 dim = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                     dim.w *= 0.55f;
+                     ImGui::GetWindowDrawList()->AddText(ImVec2(mx.x - ts.x - 8.0f, mn.y + (mx.y - mn.y - ts.y) * 0.5f),
+                                                         ImGui::GetColorU32(dim), unit);
+                  };
+                  ImGui::BeginDisabled(n->IsRecording() || n->IsFinalizing() || gOfflineRender.active);
+                  ImGui::SetNextItemWidth(kParamWidth);
+                  FieldWell::InputInt("##renderfps", &n->offlineFps);
+                  fieldUnit(T("render fps"));
+                  n->offlineFps = std::clamp(n->offlineFps, 1, 240);
+
+                  // Duration is typed, not dragged: a render queue's length is a
+                  // number the user knows ("give me 45 seconds"), and hitting an
+                  // exact value on a 1..600 slider is fiddly. The presets are
+                  // the common takes; the field takes anything up to an hour.
+                  ImGui::SetNextItemWidth(kParamWidth);
+                  FieldWell::InputInt("##renderdur", &n->offlineDurationSeconds);
+                  fieldUnit(T("duration (s)"));
+                  n->offlineDurationSeconds = std::clamp(n->offlineDurationSeconds, 1, 3600);
+                  for (int preset : { 15, 30, 45, 60 })
+                  {
+                     ImGui::PushID(preset);
+                     const bool selected = n->offlineDurationSeconds == preset;
+                     if (ActionButton::Draw((std::to_string(preset) + "s").c_str(), ImVec2(kParamWidth * 0.22f, 0),
+                                            selected ? ActionButton::Kind::Selected : ActionButton::Kind::Plain))
+                        n->offlineDurationSeconds = preset;
+                     ImGui::PopID();
+                     if (preset != 60)
+                        ImGui::SameLine();
+                  }
+
+                  ImGui::SetNextItemWidth(kParamWidth);
+                  FieldWell::InputInt("##renderpre", &n->offlinePrerollFrames);
+                  fieldUnit(T("preroll frames"));
+                  n->offlinePrerollFrames = std::clamp(n->offlinePrerollFrames, 0, 600);
+                  ImGui::EndDisabled();
+
+                  ImGui::TextDisabled(T("%d frames @ %dfps"), n->offlineDurationSeconds * n->offlineFps, n->offlineFps);
+
+                  if (thisNodeRendering)
+                  {
+                     // The floating DrawOfflineRenderProgressWindow carries the
+                     // live progress/Cancel button; this is just a disabled
+                     // placeholder so the button doesn't visually disappear.
+                     ImGui::BeginDisabled();
+                     ActionButton::Draw(L("Rendering..."), ImVec2(kPreviewSize, 0));
+                     ImGui::EndDisabled();
+                  }
+                  else
+                  {
+                     ImGui::BeginDisabled(n->IsRecording() || n->IsFinalizing() || otherSessionActive);
+                     if (ActionButton::Draw(L("Render"), ImVec2(kPreviewSize, 0)))
+                        StartOfflineRenderSession(n);
+                     ImGui::EndDisabled();
                   }
                }
-               else
-               {
-                  if (ImGui::Button(L("Record video"), ImVec2(kPreviewSize, 0)))
-                     n->StartRecording(n->recordVideoPath);
-               }
-               if (!n->RecordStatus().empty())
-               {
-                  ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-                  ImGui::TextDisabled("%s", n->RecordStatus().c_str());
-                  ImGui::PopTextWrapPos();
-               }
-
-               ImGui::Dummy(ImVec2(0, 8));
-               NodeSeparator();
-               ImGui::TextDisabled("%s", T("Offline Render"));
-
-               // A take drives the whole patch's Transport/AudioEngine, not
-               // just this node - only one can ever be in flight regardless
-               // of which OutputNode started it, and it can't overlap this
-               // node's own live recording either (both would fight over the
-               // same recordVideoPath/EnsureFbo-sized mOut).
-               const bool thisNodeRendering = gOfflineRender.node == n;
-               const bool otherSessionActive = gOfflineRender.active && !thisNodeRendering;
-
-               ImGui::BeginDisabled(n->IsRecording() || n->IsFinalizing() || gOfflineRender.active);
-               ImGui::SetNextItemWidth(kParamWidth);
-               ImGui::InputInt(L("render fps"), &n->offlineFps);
-               n->offlineFps = std::clamp(n->offlineFps, 1, 240);
-
-               // Duration is typed, not dragged: a render queue's length is a
-               // number the user knows ("give me 45 seconds"), and hitting an
-               // exact value on a 1..600 slider is fiddly. The presets are
-               // the common takes; the field takes anything up to an hour.
-               ImGui::SetNextItemWidth(kParamWidth);
-               ImGui::InputInt(L("duration (s)"), &n->offlineDurationSeconds);
-               n->offlineDurationSeconds = std::clamp(n->offlineDurationSeconds, 1, 3600);
-               for (int preset : { 15, 30, 45, 60 })
-               {
-                  ImGui::PushID(preset);
-                  const bool selected = n->offlineDurationSeconds == preset;
-                  if (selected)
-                     ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-                  if (ImGui::Button((std::to_string(preset) + "s").c_str(), ImVec2(kParamWidth * 0.22f, 0)))
-                     n->offlineDurationSeconds = preset;
-                  if (selected)
-                     ImGui::PopStyleColor();
-                  ImGui::PopID();
-                  if (preset != 60)
-                     ImGui::SameLine();
-               }
-
-               ImGui::SetNextItemWidth(kParamWidth);
-               ImGui::InputInt(L("preroll frames"), &n->offlinePrerollFrames);
-               n->offlinePrerollFrames = std::clamp(n->offlinePrerollFrames, 0, 600);
-               ImGui::EndDisabled();
-
-               ImGui::TextDisabled(T("%d frames @ %dfps"), n->offlineDurationSeconds * n->offlineFps, n->offlineFps);
-
-               if (thisNodeRendering)
-               {
-                  // The floating DrawOfflineRenderProgressWindow carries the
-                  // live progress/Cancel button; this is just a disabled
-                  // placeholder so the button doesn't visually disappear.
-                  ImGui::BeginDisabled();
-                  ImGui::Button(L("Rendering..."), ImVec2(kPreviewSize, 0));
-                  ImGui::EndDisabled();
-               }
-               else
-               {
-                  ImGui::BeginDisabled(n->IsRecording() || n->IsFinalizing() || otherSessionActive);
-                  if (ImGui::Button(L("Render"), ImVec2(kPreviewSize, 0)))
-                     StartOfflineRenderSession(n);
-                  ImGui::EndDisabled();
-               }
+               else if (auto* n = dynamic_cast<SyphonOutNode*>(gn.node.get()))
+                  DrawSyphonOutParams(n);
+               else if (auto* n = dynamic_cast<NdiOutNode*>(gn.node.get()))
+                  DrawNdiOutParams(n);
             }
-            else if (auto* n = dynamic_cast<SyphonOutNode*>(gn.node.get()))
-               DrawSyphonOutParams(n);
-            else if (auto* n = dynamic_cast<NdiOutNode*>(gn.node.get()))
-               DrawNdiOutParams(n);
          }
          if (registerOnlyParams)
          {
@@ -1276,7 +1432,8 @@ void DrawNodeBodies(FrameCtx& fc)
          }
 
          ImGui::EndGroup();
-         const float contentW = ImGui::GetItemRectSize().x;
+         gParamWidthLive = kParamWidthBase;
+         const float contentW = std::max(ImGui::GetItemRectSize().x, headerRightX - ImGui::GetItemRectMin().x);
 
          // --- output dots, bottom-right: cables start here ---
          // A comment is not in the signal graph, and an out pin on one is worse
@@ -1287,14 +1444,19 @@ void DrawNodeBodies(FrameCtx& fc)
          // edit time and never produces a picture of its own (GetOutputTexture
          // always returns 0), so an out pin on it is exactly as misleading as
          // one on a comment would be.
+         // Audio Out and Spatial Mixer are terminals: nothing can patch from them.
          if (dynamic_cast<OutputNode*>(gn.node.get()) == nullptr && !isComment &&
-             dynamic_cast<FieldGraphNode*>(gn.node.get()) == nullptr)
+             dynamic_cast<FieldGraphNode*>(gn.node.get()) == nullptr &&
+             dynamic_cast<AudioOutputNode*>(gn.node.get()) == nullptr &&
+             dynamic_cast<SpatialMixerNode*>(gn.node.get()) == nullptr)
          {
             // GeometryTableNode draws its row pins (index 4 and up) itself,
             // inline in the table grid in its params panel - only the four
             // aggregates (cx/cy/cz/spread) go through the generic row here.
             // Drawing the same pin id through ed::BeginPin() twice in one
             // frame is not something imgui-node-editor supports.
+            // Section gap: the out pins are their own group, never flush against the last param row.
+            ImGui::Dummy(ImVec2(0.0f, tok::space_2));
             auto* geoTable = dynamic_cast<GeometryTableNode*>(gn.node.get());
             auto* drumSeq = dynamic_cast<DrumSequencerNode*>(gn.node.get());
             const int outputs = geoTable != nullptr ? 4 : (drumSeq != nullptr ? 1 : std::max(1, gn.node->OutputCount()));
@@ -1308,6 +1470,13 @@ void DrawNodeBodies(FrameCtx& fc)
             if (itemW <= contentW)
             {
                float pad = std::max(0.0f, contentW - itemW);
+               if (bypassOnOutputRow)
+               {
+                  // Bypass at the row's left edge, level with the output pin; the pad shrinks by its footprint.
+                  drawBypassToggle();
+                  ImGui::SetCursorScreenPos(ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMin().y));   // beside the toggle; the pad Dummy follows
+                  pad = std::max(0.0f, pad - 22.0f);
+               }
                ImGui::Dummy(ImVec2(pad, 1.0f));
                for (int o = 0; o < outputs; o++)
                {
@@ -1317,27 +1486,25 @@ void DrawNodeBodies(FrameCtx& fc)
             }
             else
             {
-               // Too many pins to fit one row: wrap greedily, rows left-aligned.
-               float rowW = 0.0f;
-               bool firstInRow = true;
+               // Too many pins for one row: an equal-width cell grid (label, pin at the cell's right edge) so the
+               // columns line up, the readout lives in the node body (DrawOutputMeters).
+               float cellW0 = 0.0f;
+               for (int o = 0; o < outputs; o++)
+                  cellW0 = std::max(cellW0, pinW[o]);
+               const float gap = 10.0f;
+               const int cols = std::clamp((int)((contentW + gap) / (cellW0 + gap)), 1, outputs);
+               const float cellW = (contentW - gap * (float)(cols - 1)) / (float)cols;
+               const float rowH = kPinHit + 8.0f;
+               const ImVec2 gridOrigin = ImGui::GetCursorScreenPos();
                for (int o = 0; o < outputs; o++)
                {
-                  float w = pinW[o];
-                  bool wouldOverflow = !firstInRow && (rowW + 10.0f + w > contentW);
-                  if (wouldOverflow)
-                  {
-                     firstInRow = true;
-                     rowW = 0.0f;
-                  }
-                  if (!firstInRow)
-                  {
-                     ImGui::SameLine(0.0f, 10.0f);
-                     rowW += 10.0f;
-                  }
+                  const float x = gridOrigin.x + (float)(o % cols) * (cellW + gap);
+                  const float y = gridOrigin.y + (float)(o / cols) * rowH;
+                  ImGui::SetCursorScreenPos(ImVec2(x + cellW - pinW[o], y));
                   DrawPin(gn.OutputPinId(o), ed::PinKind::Output, gn.node->OutputLabel(o), true);
-                  rowW += w;
-                  firstInRow = false;
                }
+               ImGui::SetCursorScreenPos(ImVec2(gridOrigin.x, gridOrigin.y + (float)((outputs + cols - 1) / cols) * rowH));
+               ImGui::Dummy(ImVec2(contentW, 1.0f));
             }
          }
 
@@ -1348,9 +1515,10 @@ void DrawNodeBodies(FrameCtx& fc)
          ImGui::PopID();
          gInsideNodeCanvas = false;
          ed::EndNode();
+         CacheNodeWidth(gn.node.get(), ed::GetNodeSize(gn.NodeId()).x);
          if (hasCookWarning && ed::GetHoveredNode() == ed::NodeId(gn.NodeId()))
-            ImGui::SetTooltip("%s", warnSrc->CookWarning().c_str());
-         else if (hasLiveIssue && ed::GetHoveredNode() == ed::NodeId(gn.NodeId()))
+            gNodeHoverTip = warnSrc->CookWarning(); // a real fault, so shown even with Help tooltips off
+         else if (hasLiveIssue && CategoryColors::GetTooltips() && ed::GetHoveredNode() == ed::NodeId(gn.NodeId()))
          {
             std::string tip;
             for (const Headless::Issue& w : liveIt->second)
@@ -1361,13 +1529,13 @@ void DrawNodeBodies(FrameCtx& fc)
                if (!w.hint.empty())
                   tip += "\n  -> " + w.hint;
             }
-            ImGui::SetTooltip("%s", tip.c_str());
+            gNodeHoverTip = tip;
          }
          ed::PopStyleColor(2);
          if (isComment)
             ed::PopStyleVar(3);
-         else if (hasCookWarning || hasLiveIssue)
-            ed::PopStyleVar();
+         else
+            ed::PopStyleVar();  // border width: warning widths, or the 1 px hairline
 
          if (b6TrackVis && !b6NodeIsVisible)
          {

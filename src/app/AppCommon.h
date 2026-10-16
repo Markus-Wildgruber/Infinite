@@ -128,6 +128,8 @@ inline std::string TmpPath(const std::string& name)
 #include "core/Patch.h"
 #include "core/AudioCable.h"
 #include "core/NoteCable.h"
+#include "core/CookProbe.h"
+#include "core/Extensions.h"
 
 #ifndef INFINITE_VERSION_STRING
 #define INFINITE_VERSION_STRING "0.0.0"

@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include "core/NodeIssue.h"
+
 // The base interface every Infinite node implements. An image node renders into
 // a GL texture that downstream nodes read through GetOutputTexture(); audio,
 // note, geometry and modulator capabilities are layered on through the mix-ins
@@ -182,6 +184,12 @@ public:
    bool bypassed = false;
    virtual INode* BypassSource() { return nullptr; }
 
+   // The node's current problem, if any (missing file, plugin that would not load, compile error, no input
+   // device). Polled while the node is drawn, so it must be cheap and must not touch the disk or the GPU.
+   virtual NodeIssue Issue() const { return {}; }
+   // What the badge's click does for Fix::Relink: ask for a replacement file. Returns true if the node changed.
+   virtual bool Relink() { return false; }
+
    // Label shown next to an input pin. Defaults to A, B, C... in the editor.
    virtual const char* InputLabel(int /*slot*/) const { return nullptr; }
 
@@ -223,6 +231,12 @@ public:
    // that first and only falls back to this for the note-only types that
    // need it.
    virtual AudioNode* AudioNodeForNotePorts() { return nullptr; }
+
+   // A bypassed node normally drops out of the audio topology. A node that holds state in the
+   // outside world (MIDI Out's sounding notes) overrides this to stay in it: the topology then
+   // tells its audio half about the bypass through AudioNode::SetBypassed, and that half
+   // releases what it holds and goes quiet instead of vanishing mid-note.
+   virtual bool KeepsAudioHalfWhenBypassed() const { return false; }
 
    // A node that must be processed every block even when nothing downstream
    // pulls it - e.g. a Sampler that is currently capturing its audio input.

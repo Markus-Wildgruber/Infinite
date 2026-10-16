@@ -27,6 +27,9 @@
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "app/AppArrange.h"
+#include "app/ui/design/components/FormParts.h"
+#include "app/ui/design/components/MenuParts.h"
+#include "app/ui/design/components/ScreenBlocker.h"
 #include "arrange/ArrangeModel.h"
 #include "audio/AudioAnalysis.h"
 #include "audio/AudioEngine.h"
@@ -476,28 +479,15 @@ namespace app
             ImGui::TextDisabled("%s", gStatus.path.c_str());
          }
          else
-            ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.40f, 1.0f), "%s", gStatus.message.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_950_450_400_1000), "%s", gStatus.message.c_str());
          ImGui::PopTextWrapPos();
-         if (ImGui::Button(L("OK##rendertofileok"), ImVec2(120, 0)))
+         if (ActionButton::Draw(L("OK##rendertofileok"), ImVec2(120, 0)))
             gResultOpen = false;
          ImGui::End();
          PopElevatedPanelStyle();
          return;
       }
-      ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-      ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
-      ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.35f));
-      ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-      ImGui::Begin("##RenderToFileBlocker", nullptr,
-                   ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav |
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-      ImGui::InvisibleButton("##RenderToFileBlockerCatch", io.DisplaySize);
-      ImGui::End();
-      ImGui::PopStyleVar(2);
-      ImGui::PopStyleColor();
+      ScreenBlocker::Draw("##RenderToFileBlocker");
 
       ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always,
                               ImVec2(0.5f, 0.5f));
@@ -513,7 +503,7 @@ namespace app
                      (int)std::llround(gJob.outRate));
       ImGui::ProgressBar(gStatus.progress, ImVec2(280, 0));
       ImGui::BeginDisabled(gJob.cancel);
-      if (ImGui::Button(L("Cancel##rendertofile"), ImVec2(120, 0)))
+      if (ActionButton::Draw(L("Cancel##rendertofile"), ImVec2(120, 0)))
          gJob.cancel = true;
       ImGui::EndDisabled();
       ImGui::End();
@@ -568,7 +558,7 @@ namespace app
       }
       const std::string title = ArrangeSourceTitle(*gn);
       ImGui::Text(gPopupExport ? T("Export the audio of %s") : T("Render %s to a WAV file"), title.c_str());
-      ImGui::Separator();
+      MenuParts::Separator();
       const float fieldW = 160.0f;
       ImGui::SetNextItemWidth(fieldW);
       ImGui::DragFloat(L("Start##r2fstart"), &gPopupStart, 0.05f, 0.0f, 36000.0f, "%.2f s");
@@ -592,8 +582,8 @@ namespace app
       }
       ImGui::SetNextItemWidth(fieldW * 1.6f);
       ImGui::InputTextWithHint(L("##r2fpath"), T("recordings folder"), &gPopupPath);
-      ImGui::SameLine();
-      if (ImGui::Button(L("Browse...##r2fbrowse")))
+      FormParts::Inline();
+      if (ActionButton::Draw(L("Browse...##r2fbrowse")))
       {
          const std::string chosen = Platform::SaveWavDialog(RenderSafeFilePart(title) + ".wav");
          if (!chosen.empty())
@@ -606,12 +596,12 @@ namespace app
       if (!gPopupError.empty())
       {
          ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
-         ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.40f, 1.0f), "%s", gPopupError.c_str());
+         ImGui::TextColored(tok::V4(tok::palf::v_950_450_400_1000), "%s", gPopupError.c_str());
          ImGui::PopTextWrapPos();
       }
       ImGui::Spacing();
       ImGui::BeginDisabled(gJob.stage != FileJob::kIdle || ArrangeRenderBusy());
-      if (ImGui::Button(gPopupExport ? L("Export##r2fgo") : L("Render##r2fgo"), ImVec2(120, 0)))
+      if (ActionButton::Draw(gPopupExport ? L("Export##r2fgo") : L("Render##r2fgo"), ImVec2(120, 0)))
       {
          std::string err;
          const int bits = gPopupFormat == 0 ? 16 : (gPopupFormat == 1 ? 24 : 32);
@@ -625,8 +615,8 @@ namespace app
             gPopupError = err;
       }
       ImGui::EndDisabled();
-      ImGui::SameLine();
-      if (ImGui::Button(L("Cancel##r2fcancel"), ImVec2(120, 0)))
+      FormParts::Inline();
+      if (ActionButton::Draw(L("Cancel##r2fcancel"), ImVec2(120, 0)))
          ImGui::CloseCurrentPopup();
       ImGui::EndPopup();
    }

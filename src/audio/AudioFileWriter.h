@@ -36,8 +36,12 @@ public:
 
    // Opens `path` in the format deduced from extension (or explicitly specified).
    // Returns false if the file couldn't be created or initialized.
+   // wavEncoding picks the WAV sample format; FLAC follows it (Pcm16 -> 16-bit,
+   // Pcm24 and Float32 -> 24-bit); MP3 ignores it.
    bool Open(const std::string& path, double sampleRate, int numChannels, Format format = Format::Auto,
              WavEncoding wavEncoding = WavEncoding::Pcm16);
+   // The same by bit depth: 16 or 24 (PCM, WAV and FLAC), 32 = float WAV (24-bit FLAC).
+   bool Open(const std::string& path, double sampleRate, int numChannels, Format format, int bitDepth);
 
    // Converts `frames` interleaved float samples to the appropriate destination format and appends them.
    void Append(const float* interleaved, int frames);
@@ -65,6 +69,7 @@ private:
    std::string mPath;
    Format mFormat = Format::Wav;
    int mNumChannels = 2;
+   int mBitDepth = 16;
    double mSampleRate = 44100.0;
    int64_t mFramesWritten = 0;
    int64_t mBytesWrittenDirect = 0;

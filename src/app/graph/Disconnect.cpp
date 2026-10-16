@@ -13,6 +13,7 @@
 #include "nodes/GeometryOpNodes.h"
 #include "nodes/MacroNodes.h"
 #include "nodes/Switcher3DNode.h"
+#include "nodes/SpatialMixerNode.h"
 
 namespace app
 {
@@ -175,6 +176,8 @@ namespace app
          return src->GetAudioNode();
       if (auto* noteSrc = dynamic_cast<INoteSource*>(node))
          return noteSrc->GetAudioNode();
+      if (auto* spatial = dynamic_cast<SpatialMixerNode*>(node))
+         return spatial->GetAudioNode(); // terminal output: renders to the device, no output pin
       if (auto* adisp = dynamic_cast<AudioDisplacementNode*>(node))
          return adisp->GetAudioNode();
       if (auto* at = dynamic_cast<AudioTextureNode*>(node))

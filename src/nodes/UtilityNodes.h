@@ -384,6 +384,8 @@ public:
    float dispersion = 0.0f;
    float alphaCutoff = 0.0f;
    bool textureAlpha = false;
+   // Normal slot holds a height map (grayscale), not a tangent-space normal.
+   bool normalBump = false;
    // How the albedo/roughness/metallic/normal/ao/emission/clearcoat/sheen
    // maps sample outside 0..1 UV - 0=Clamp (smear edge pixel, matches every
    // saved patch before this param existed), 1=Repeat, 2=Mirror.
@@ -413,6 +415,7 @@ public:
       v.Float("anisotropy", anisotropy); v.Float("anisotropyRotation", anisotropyRotation);
       v.Float("dispersion", dispersion); v.Float("alphaCutoff", alphaCutoff);
       v.Bool("textureAlpha", textureAlpha);
+      v.Bool("normalBump", normalBump);
       v.Float("normalStrength", normalStrength);
    }
 private:
@@ -569,6 +572,7 @@ public:
    }
 
    int mode = kMerge;
+   const std::string& CookWarning() const override { return mCookWarning; }
 
    unsigned int GetOutputTexture() override { return 0; }
    int GetOutputWidth() const override { return 0; }
@@ -656,6 +660,7 @@ public:
    }
 
 private:
+   std::string mCookWarning;
    void RebuildIfNeeded();
 
    Mesh mCache;
@@ -810,6 +815,7 @@ class MeshToPointsNode : public INode, public IGeometrySource
 {
 public:
    static INode* Create() { return new MeshToPointsNode(); }
+   const std::string& CookWarning() const override { return mCookWarning; }
    // Registered three times under Points/Edges/Faces names sharing one class,
    // the same way the geometry operators are.
    static INode* CreateFor(int sampleMode)
@@ -930,6 +936,7 @@ public:
       v.Float("subsurfaceRadius", subsurfaceRadius);
    }
 private:
+   std::string mCookWarning;
    void RebuildIfNeeded();
 
    std::vector<Particle> mPoints;

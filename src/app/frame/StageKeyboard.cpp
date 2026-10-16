@@ -8,9 +8,11 @@
 #include "nodes/FieldGraphNode.h"
 #include "nodes/ModulatorNodes.h"
 #include "nodes/UtilityNodes.h"
+#include "app/graph/NodeClipboard.h"
 
 namespace app
 {
+   static std::string gOwnNodeClipboardText;
 void DrawKeyboard(FrameCtx& fc)
 {
    ImGuiIO& io = ImGui::GetIO();
@@ -161,6 +163,10 @@ void DrawKeyboard(FrameCtx& fc)
       // Shift+T: the docked arrangement timeline
       if (!typing && shiftOnly && ImGui::IsKeyPressed(ImGuiKey_T, false))
          gArrangePanelOpen = !gArrangePanelOpen;
+
+      // Shift+U: the docked edit history
+      if (!typing && shiftOnly && ImGui::IsKeyPressed(ImGuiKey_U, false))
+         gHistoryOpen = !gHistoryOpen;
 
       // Shift+Y: fit view to content, replacing the old menu-only entry
       if (!typing && shiftOnly && ImGui::IsKeyPressed(ImGuiKey_Y, false))
@@ -382,7 +388,7 @@ void DrawKeyboard(FrameCtx& fc)
             // node - so a single Undo only clawed back the last one removed
             // instead of the whole cluster.
             if (linkCount > 0 || !toDelete.empty())
-               PushUndoCheckpoint();
+               PushUndoCheckpoint("Delete");
             gSuppressUndoCheckpoints = true;
             // One topology rebuild for the whole batch too - RemoveNodeByIndex
             // rebuilds on every call by default, which turned deleting an
@@ -475,7 +481,7 @@ void DrawKeyboard(FrameCtx& fc)
             // own by default, which would otherwise scatter a multi-node
             // duplicate across several undo steps instead of one.
             if (!items.empty())
-               PushUndoCheckpoint();
+               PushUndoCheckpoint("Duplicate");
             gSuppressUndoCheckpoints = true;
             std::map<int, GraphNode*> newByOrig;
             for (const DupItem& item : items)
@@ -592,7 +598,7 @@ void DrawKeyboard(FrameCtx& fc)
             // above for why (several groups/members touched at once would
             // otherwise leave Undo only able to claw back the last one).
             if (anyWork)
-               PushUndoCheckpoint();
+               PushUndoCheckpoint("Ungroup");
 
             for (int memberIndex : detachMembers)
             {
@@ -663,7 +669,7 @@ void DrawKeyboard(FrameCtx& fc)
             {
                // The same path the API uses (Groups.cpp): explicit
                // membership, sized around the members, gates applied.
-               PushUndoCheckpoint();
+               PushUndoCheckpoint("Group");
                std::string err;
                if (GroupNode* grp = CreateGroupForNodes(picked, "Group", err))
                {
@@ -702,7 +708,7 @@ void DrawKeyboard(FrameCtx& fc)
             const int nodeCount = ed::GetSelectedNodes(selNodes.data(), count);
             if (nodeCount > 0)
             {
-               PushUndoCheckpoint();
+               PushUndoCheckpoint("Bypass");
                bool needsAudioRebuild = false;
                for (int i = 0; i < nodeCount; i++)
                {
@@ -771,11 +777,42 @@ void DrawKeyboard(FrameCtx& fc)
                clipboardOrigGroup.push_back(IndexOfGroupNode(GroupOwning(gn->index)));
             }
             CaptureClusterLinks(toCopy, clipboardCluster);
+            // The same selection as text on the system clipboard, so another patch or window can paste it.
+            // gOwnNodeClipboardText lets this process tell its own copy (fast path below) from a foreign one.
+            gOwnNodeClipboardText = NodeClipboardSerialize(toCopy);
+            if (!gOwnNodeClipboardText.empty())
+               ImGui::SetClipboardText(gOwnNodeClipboardText.c_str());
          }
       }
 
-      const bool doPaste = (gRequestPaste || (!typing && !gPerfMatrixFocused && !gArrangeFocused && cmdOrCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))) && !clipboard.empty();
+      const bool pasteAsked = gRequestPaste || (!typing && !gPerfMatrixFocused && !gArrangeFocused && cmdOrCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false));
       gRequestPaste = false;
+      // Nodes copied somewhere else (another patch, another window) arrive as text. Our own copy stays on the
+      // in-process path below, which keeps live node state the text does not.
+      bool doPaste = pasteAsked && !clipboard.empty();
+      if (pasteAsked)
+      {
+         const char* sys = ImGui::GetClipboardText();
+         const std::string sysText = sys != nullptr ? sys : "";
+         if (LooksLikeNodeClipboard(sysText) && sysText != gOwnNodeClipboardText)
+         {
+            doPaste = false;
+            const ImVec2 mouse = ImGui::GetMousePos();
+            const bool overGraph = mouse.x >= gGraphScreenTL.x && mouse.y >= gGraphScreenTL.y &&
+                                   mouse.x <= gGraphScreenTL.x + gGraphScreenSize.x &&
+                                   mouse.y <= gGraphScreenTL.y + gGraphScreenSize.y;
+            const ImVec2 at = overGraph ? ed::ScreenToCanvas(mouse) : gViewCenterCanvas;
+            const NodePasteResult r = NodeClipboardPaste(sysText, at);
+            gPatchStatus = r.message;
+            if (r.ok)
+            {
+               ed::ClearSelection();
+               for (int idx : r.newIndices)
+                  if (GraphNode* gn = FindNodeByIndex(idx))
+                     ed::SelectNode(gn->NodeId(), true);
+            }
+         }
+      }
       if (doPaste)
       {
          // Recomputed fresh against the canvas as it stands right now, so a
@@ -809,7 +846,7 @@ void DrawKeyboard(FrameCtx& fc)
          // default, which would otherwise scatter a multi-node paste across
          // several undo steps instead of one.
          if (!items.empty())
-            PushUndoCheckpoint();
+            PushUndoCheckpoint("Paste");
          gSuppressUndoCheckpoints = true;
          ed::ClearSelection();
          std::map<int, GraphNode*> newByOrig;
@@ -948,6 +985,9 @@ void DrawKeyboard(FrameCtx& fc)
       ed::Suspend();
 
       DrawMinimap();
+      DrawFind();
+      DrawCookOverlay();
+      DrawNotices();
 
       // Deferred from GlobalScaleToggle() above - see comment on
       // gGlobalScaleTooltipHovered. This is the first point after the
@@ -955,12 +995,14 @@ void DrawKeyboard(FrameCtx& fc)
       if (gGlobalScaleTooltipHovered)
       {
          ImGui::BeginTooltip();
-         ImGui::SetWindowFontScale(0.85f);
          ImGui::TextUnformatted(gGlobalScaleTooltipEnabled ? "Global Scale: ON (click to disable)"
                                                             : "Global Scale: OFF (click to enable)");
-         ImGui::SetWindowFontScale(1.0f);
          ImGui::EndTooltip();
       }
+
+      // Deferred from the node draw loop (cook warning, live schema issue).
+      if (!gNodeHoverTip.empty())
+         ImGui::SetTooltip("%s", gNodeHoverTip.c_str());
 
       // Right-click (two-finger click on a Mac trackpad) opens the same
       // type-to-filter picker as double-click, so the keyboard works either way.

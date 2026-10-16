@@ -8,6 +8,24 @@
 // The class/struct keyword must match the definition: MSVC mangles them
 // differently, so a mismatch links against a symbol that does not exist.
 
+// Added with the n1m21n/Infinite merge (node types its app headers name).
+// nodes/SketchNode.h
+class SketchNode;
+// nodes/Sketch3DNode.h
+class Sketch3DNode;
+// nodes/TrackNodeBase.h
+class TrackNodeBase;
+// nodes/FieldNotesNode.h
+class FieldNotesNode;
+// nodes/DelaunayNodes.h
+class DelaunayMeshNode;
+class VoronoiCellsNode;
+// nodes/CurveOpsNode.h
+class CurveOpsNode;
+// nodes/SpatialMixerNode.h
+class SpatialMixerNode;
+// nodes/MidiOutNode.h
+class MidiOutNode;
 // audio/CompensationDelay.h
 class CompensationDelay;
 // audio/EffectDefs.h

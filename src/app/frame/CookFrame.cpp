@@ -12,6 +12,7 @@
 #include "nodes/FieldPrimitiveNode.h"
 #include "nodes/MacroNodes.h"
 #include "nodes/MidiNodes.h"
+#include "nodes/Sketch3DNode.h"
 
 namespace app
 {
@@ -536,7 +537,10 @@ void ApplyModulationAndPalette(int frameId, bool isNormalFrame)
    for (GraphNode& gn : gNodes)
    {
       if (dynamic_cast<IPaletteSource*>(gn.node.get()) != nullptr && !gn.node->bypassed)
+      {
+         CookProbe::Scope probe(gn.node.get());
          gn.node->CookIfNeeded(frameId);
+      }
    }
 
    // Same reasoning as the Palette loop just above: standalone FieldPixel,
@@ -549,8 +553,10 @@ void ApplyModulationAndPalette(int frameId, bool isNormalFrame)
       if (!gn.node->bypassed &&
           (dynamic_cast<FieldPixelNode*>(gn.node.get()) != nullptr ||
            dynamic_cast<FieldPrimitiveNode*>(gn.node.get()) != nullptr ||
+           dynamic_cast<Sketch3DNode*>(gn.node.get()) != nullptr ||
            dynamic_cast<FieldElementNode*>(gn.node.get()) != nullptr))
       {
+         CookProbe::Scope probe(gn.node.get());
          gn.node->CookIfNeeded(frameId);
       }
    }

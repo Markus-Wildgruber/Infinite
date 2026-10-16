@@ -355,7 +355,10 @@ void FrameTest_SAMPLERDRAGTEST(int frameId, GLFWwindow* window)
             if (frameId >= sPhaseFrame + 3)
             {
                auto* samplerNode = static_cast<SamplerNode*>(gNodes[0].node.get());
-               const bool ok = samplerNode->FilePath() == TmpPath("infinite_samplerdrag/sample.wav");
+               // Compared as paths: on Windows the library joins with '\'.
+               std::error_code pathEc;
+               const bool ok = std::filesystem::equivalent(std::filesystem::u8path(samplerNode->FilePath()),
+                                                           std::filesystem::u8path(TmpPath("infinite_samplerdrag/sample.wav")), pathEc);
                printf("SAMPLERDRAG drop onto node: path='%s' %s\n", samplerNode->FilePath().c_str(),
                       ok ? "OK" : "FAIL");
                printf("%s\n", ok ? "SAMPLERDRAGTEST OK" : "SAMPLERDRAGTEST FAIL");
@@ -528,7 +531,10 @@ void FrameTest_MEDIADRAGTEST(int frameId, GLFWwindow* window)
             if (frameId >= sPhaseFrame + 3)
             {
                auto* imageNode = static_cast<ImageSourceNode*>(gNodes[0].node.get());
-               const bool ok = imageNode->LoadedPath() == TmpPath("infinite_mediadrag/fixture.png");
+               // Compared as paths: on Windows the library joins with '\'.
+               std::error_code pathEc;
+               const bool ok = std::filesystem::equivalent(std::filesystem::u8path(imageNode->LoadedPath()),
+                                                           std::filesystem::u8path(TmpPath("infinite_mediadrag/fixture.png")), pathEc);
                printf("MEDIADRAG drop onto node: path='%s' %s\n", imageNode->LoadedPath().c_str(),
                       ok ? "OK" : "FAIL");
                printf("%s\n", ok ? "MEDIADRAGTEST OK" : "MEDIADRAGTEST FAIL");
@@ -1709,8 +1715,9 @@ void FrameTest_MODDROPDOWNUNDOTEST(int frameId, GLFWwindow* window)
             // (and so only registers its discrete slot) while expanded.
             if (gn != nullptr)
                gn->showParams = true;
-            gn = SpawnNode("Audio Filter", "AudioEffects", 1500.0f, 0.0f);
+            gn = SpawnNode("Audio Filter", "AudioEffects", 0.0f, 840.0f);
             sPickFilterIdx = gn != nullptr ? gn->index : -1;
+            gRequestFitView = true; // every fixture node on screen, so each body draws and registers
          }
          if (frameId == kBindFrame)
          {

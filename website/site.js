@@ -16,7 +16,7 @@
 
   const CAT = {
     Source: '#4ADE80', '3D': '#38BDF8', Compositing: '#818CF8', Effects: '#FACC15',
-    Modulators: '#A3E635', Prediction: '#22C55E', Macros: '#FC963C', Utility: '#A3A9BA',
+    Modulators: '#A3E635', Prediction: '#22D388', Macros: '#FC963C', Utility: '#A3A9BA',
     Notes: '#4CD964', Synths: '#6992F6', AudioEffects: '#53C7E3'
   };
   const CAT_LABEL = { AudioEffects: 'Audio FX' };
@@ -69,7 +69,8 @@
         });
       } else {
         a.href = '#download';
-        if (label) label.textContent = OS === 'mobile' ? 'Get it for your computer' : 'Download Infinite';
+        if (OS === 'mobile') a.style.display = 'none'; // a phone cannot install it, so no button at all
+        else if (label) label.textContent = 'Download Infinite';
       }
     });
   }
@@ -148,14 +149,16 @@
     raf = requestAnimationFrame(tick);
   }
 
+
   /* ------------------------------------------------------------ hero word */
   function initHeroWord() {
     const word = $('#hero-word');
     const line = $('#hero-underline');
     if (!word) return;
+    const EMBER = '#B53700'; // one Ember hand word (brand book section 2.3)
     const WORDS = [
-      ['designers', '#3D6FE0'], ['artists', '#D6508C'], ['musicians', '#1F9E8E'],
-      ['VJs', '#7A5CE0'], ['scientists', '#3D6FE0'], ['creatives', '#D6508C'], ['you', '#C2593F']
+      ['designers', EMBER], ['artists', EMBER], ['musicians', EMBER],
+      ['VJs', EMBER], ['scientists', EMBER], ['creatives', EMBER], ['you', EMBER]
     ];
     const show = (w, col) => {
       word.textContent = w;
@@ -175,7 +178,7 @@
     window.addEventListener('resize', fit);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 
-    if (reduced) { show('you', '#C2593F'); return; }
+    if (reduced) { show('you', '#B53700'); return; }
     let i = 0;
     const next = () => {
       const [w, col] = WORDS[i];
@@ -192,7 +195,7 @@
     const coord = $('.hud-tl');
     const hero = $('.hero');
     if (clock) {
-      const BPM = 145, beat = 60 / BPM, t0 = performance.now();
+      const BPM = 120, beat = 60 / BPM, t0 = performance.now();
       const upd = () => {
         const b = Math.floor((performance.now() - t0) / 1000 / beat);
         clock.textContent = `bar ${String(Math.floor(b / 4) % 100 + 1).padStart(2, '0')}.${(b % 4) + 1}  ·  ${BPM} bpm`;
@@ -367,7 +370,7 @@
           if (n >= shown) return;
           const gl = FONT5x7[ln[ci]] || FONT5x7[' '];
           for (let pass = 0; pass < 2; pass++) {
-            g.fillStyle = pass === 0 ? '#22C55E' : '#1F1D1A';
+            g.fillStyle = pass === 0 ? '#22D388' : '#12152A';
             const off = pass === 0 ? 1 : 0;
             for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) {
               if (gl[r][c] === '1') g.fillRect((x0 + ci * 6 + c + off) * px, (li * 9 + r + off) * px, px, px);
@@ -441,28 +444,28 @@
         for (let s = 0; s < 50; s++) stepK(ghost, 0);
         g.lineCap = 'round';
         g.beginPath(); g.arc(cx, cy, R + 9, A0, A0 + SWEEP);
-        g.strokeStyle = 'rgba(45,35,25,0.08)'; g.lineWidth = 4; g.stroke();
+        g.strokeStyle = 'rgba(26,31,54,0.08)'; g.lineWidth = 4; g.stroke();
         const aV = A0 + SWEEP * k.v, aG = A0 + SWEEP * ghost.v;
         g.beginPath(); g.arc(cx, cy, R + 9, Math.min(aV, aG), Math.max(aV, aG));
-        g.setLineDash([2, 6]); g.strokeStyle = 'rgba(34,197,94,0.9)'; g.lineWidth = 4; g.stroke(); g.setLineDash([]);
+        g.setLineDash([2, 6]); g.strokeStyle = 'rgba(34,211,136,0.9)'; g.lineWidth = 4; g.stroke(); g.setLineDash([]);
         g.beginPath(); g.arc(cx + Math.cos(aG) * (R + 9), cy + Math.sin(aG) * (R + 9), 4.5, 0, Math.PI * 2);
-        g.fillStyle = 'rgba(34,197,94,0.35)'; g.fill();
+        g.fillStyle = 'rgba(34,211,136,0.35)'; g.fill();
         // body
         g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2);
         g.fillStyle = '#181B23'; g.fill();
         g.beginPath(); g.arc(cx, cy, R * 0.78, A0, A0 + SWEEP);
         g.strokeStyle = '#383C47'; g.lineWidth = R * 0.12; g.stroke();
         g.beginPath(); g.arc(cx, cy, R * 0.78, A0, aV);
-        g.strokeStyle = '#22C55E'; g.stroke();
+        g.strokeStyle = '#22D388'; g.stroke();
         g.beginPath(); g.moveTo(cx + Math.cos(aV) * R * 0.2, cy + Math.sin(aV) * R * 0.2);
         g.lineTo(cx + Math.cos(aV) * R * 0.62, cy + Math.sin(aV) * R * 0.62);
         g.strokeStyle = '#EEF0F6'; g.lineWidth = Math.max(2, R * 0.08); g.stroke();
-        g.fillStyle = '#5A534C';
+        g.fillStyle = '#404660';
         g.font = `500 ${Math.max(11, Math.min(13, W / 40))}px 'Geist Mono', monospace`;
         g.textAlign = 'center';
         g.fillText(`${k.name} ${String(Math.round(k.v * 100)).padStart(3, ' ')}`, cx, cy + R + 30);
         if (drag === k) {
-          g.fillStyle = '#C2593F';
+          g.fillStyle = '#B53700';
           g.fillText('you', cx, cy - R - 16);
         } else {
           g.fillStyle = '#1B7A4B';
@@ -519,7 +522,12 @@
     if (!cv || !perches.length) return;
     const g = cv.getContext('2d');
     const COLS = 34, ROWS = 24, X0 = -1.25, X1 = 1.25, Y0 = -0.95, Y1 = 0.85, FX = 0.08, FY = 0.80;
-    const INK = '#1F1D1A', EYE = '#E0654A';
+    // the bird takes its colours from the active mode (brand roles --ink and --accent-ink)
+    let INK = '#12152A', EYE = '#D9430E';
+    const roles = () => {
+      const cs = getComputedStyle(document.documentElement);
+      INK = cs.getPropertyValue('--ink').trim() || INK; EYE = cs.getPropertyValue('--accent-ink').trim() || EYE;
+    };
 
     const inEll = (px, py, cx, cy, rx, ry, rot) => {
       const c = Math.cos(rot), s = Math.sin(rot), dx = px - cx, dy = py - cy;
@@ -595,6 +603,7 @@
       g.font = `620 ${(cw * 1.18).toFixed(2)}px 'Geist Mono', ui-monospace, monospace`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
+      roles();
       for (const [i, j, kind] of cl) {
         const h = ((i * 73856093) ^ (j * 19349663) ^ (tick * 83492791)) & 0xFFFF;
         let ch1 = '1', a = kind === 'leg' ? 0.8 : 1;
@@ -666,7 +675,7 @@
       }, { passive: true });
     }
 
-    const BEAT = 60 / 145 * 1000;
+    const BEAT = 60 / 120 * 1000;
     const frame = (now) => {
       raf = 0;
       let flap = null, squash = 0, tilt = 0, busy = false;
@@ -794,6 +803,11 @@
       track.appendChild(frag);
       track.style.setProperty('--dur', `${Math.round(list.length * (1.5 + ti * 0.2))}s`);
     });
+    // animate only while the tapes are on screen
+    if ('IntersectionObserver' in window) {
+      wrap.classList.add('is-off');
+      new IntersectionObserver((es) => es.forEach((en) => wrap.classList.toggle('is-off', !en.isIntersecting)), { rootMargin: '80px' }).observe(wrap);
+    }
     wrap.addEventListener('click', (e) => {
       const b = e.target.closest('.ticker-pill');
       if (b) openNode(b.textContent, b.dataset.cat, b);

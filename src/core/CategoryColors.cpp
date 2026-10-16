@@ -42,7 +42,7 @@ const std::vector<Preset>& RawPresets()
          { "Compositing",  { 0.506f, 0.549f, 0.973f } }, // #818CF8
          { "Effects",      { 0.980f, 0.800f, 0.082f } }, // #FACC15
          { "Modulators",   { 0.639f, 0.902f, 0.208f } }, // #A3E635
-         { "Prediction",   { 0.133f, 0.827f, 0.533f } }, // #22C55E vivid emerald green
+         { "Prediction",   { 0.133f, 0.827f, 0.533f } }, // #22D388 vivid emerald green
          { "Macros",       { 0.988f, 0.588f, 0.235f } }, // #FC963C orange/amber
          { "Utility",      { 0.639f, 0.663f, 0.729f } }, // #A3A9BA muted grey-blue
          { "Notes",        { 0.298f, 0.851f, 0.392f } }, // #4CD964 green
@@ -308,6 +308,8 @@ float gUiScale = -1.0f;
 std::string gUiFont;
 std::string gLanguage;
 bool gTooltips = false; // help tooltips are opt-in
+bool gCookTimes = false;   // canvas Cook times overlay (View menu), off by default
+bool gReduceMotion = false; // chrome eases become instant (UiAnim)
 
 std::string ThemePath()
 {
@@ -344,6 +346,8 @@ void LoadAppearanceOverrides()
    gUiFont.clear();
    gLanguage.clear();
    gTooltips = false;
+   gReduceMotion = false;
+   gCookTimes = false;
 
    const std::string path = AppearancePath();
    if (path.empty())
@@ -423,6 +427,14 @@ void LoadAppearanceOverrides()
       {
          gUiScale = std::strtof(val.c_str(), nullptr);
       }
+      else if (key == "ui.cooktimes")
+      {
+         gCookTimes = (val == "1");
+      }
+      else if (key == "ui.reducemotion")
+      {
+         gReduceMotion = (val == "1");
+      }
       else if (key == "ui.tooltips")
       {
          gTooltips = (val == "1");
@@ -464,6 +476,13 @@ void SetPreset(int index)
       std::ofstream file(path);
       file << Presets()[gCurrent].name << "\n";
    }
+}
+
+void SetPresetTransient(int index)
+{
+   const int count = (int)Presets().size();
+   if (count != 0)
+      gCurrent = std::max(0, std::min(index, count - 1));
 }
 
 const UiTheme& CurrentUiTheme()
@@ -740,6 +759,30 @@ void SetTooltips(bool on, bool saveToFile)
       SaveAppearanceOverrides();
 }
 
+bool GetCookTimes()
+{
+   return gCookTimes;
+}
+
+void SetCookTimes(bool on, bool saveToFile)
+{
+   gCookTimes = on;
+   if (saveToFile)
+      SaveAppearanceOverrides();
+}
+
+bool GetReduceMotion()
+{
+   return gReduceMotion;
+}
+
+void SetReduceMotion(bool on, bool saveToFile)
+{
+   gReduceMotion = on;
+   if (saveToFile)
+      SaveAppearanceOverrides();
+}
+
 std::string GetUiFont()
 {
    return gUiFont;
@@ -799,7 +842,7 @@ void SaveAppearanceOverrides()
        gCableOverridesDark.empty() && gCableOverridesLight.empty() &&
        gNodeOpacityDark < 0.0f && gNodeOpacityLight < 0.0f &&
        gTintWeightDark < 0.0f && gTintWeightLight < 0.0f &&
-       gNodeRounding < 0.0f && gUiScale < 0.0f && gUiFont.empty() && gLanguage.empty() && !gTooltips)
+       gNodeRounding < 0.0f && gUiScale < 0.0f && gUiFont.empty() && gLanguage.empty() && !gTooltips && !gReduceMotion && !gCookTimes)
    {
       std::remove(path.c_str());
       return;
@@ -836,6 +879,10 @@ void SaveAppearanceOverrides()
       file << "ui.lang=" << gLanguage << "\n";
    if (gTooltips)
       file << "ui.tooltips=1\n";
+   if (gReduceMotion)
+      file << "ui.reducemotion=1\n";
+   if (gCookTimes)
+      file << "ui.cooktimes=1\n";
 }
 
 int SemanticRank(const std::string& category)

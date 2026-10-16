@@ -22,6 +22,8 @@
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "app/AppArrange.h"
+#include "app/ui/design/components/FormParts.h"
+#include "app/ui/design/components/MenuParts.h"
 #include "arrange/ArrangeModel.h"
 
 namespace app
@@ -216,7 +218,7 @@ namespace app
       const float rowH = (bottom - top) / (float)(hi - lo + 1);
       const float barH = std::max(1.5f, rowH - (rowH > 3.0f ? 1.0f : 0.0f));
       const double pxPerTick = (double)(clipX1 - clipX0) / (double)clip.length;
-      const ImU32 col = muted ? IM_COL32(255, 255, 255, 80) : IM_COL32(255, 255, 255, 200);
+      const ImU32 col = muted ? tok::U32(tok::clip_midi_note_muted) : tok::U32(tok::clip_midi_note);
       dl->PushClipRect(ImVec2(rectMin.x + 1.0f, rectMin.y + 1.0f), ImVec2(rectMax.x - 1.0f, rectMax.y - 1.0f), true);
       for (const Arrange::MidiNote& n : clip.notes)
       {
@@ -294,7 +296,7 @@ namespace app
             add(gn->uid);
          ImGui::PopID();
       }
-      ImGui::Separator();
+      MenuParts::Separator();
       if (ImGui::MenuItem(L("No instrument yet")))
          add(0);
       ImGui::EndMenu();
@@ -337,12 +339,12 @@ namespace app
       }
       PopDropdownStyle();
       if (cur != 0 && FindNodeByUid(cur) == nullptr)
-         ImGui::TextColored(ImVec4(1.0f, 0.65f, 0.2f, 1.0f), "%s", T("The instrument was deleted - pick another."));
+         ImGui::TextColored(tok::V4(tok::palf::v_1000_650_200_1000), "%s", T("The instrument was deleted - pick another."));
       int notes = 0;
       for (const Arrange::Clip& c : lane->clips)
          notes += (int)c.notes.size();
       ImGui::TextDisabled(T("%d clips, %d notes"), (int)lane->clips.size(), notes);
-      if (ImGui::Button(L("Add Clip at Playhead##midilaneaddclip"), ImVec2(-FLT_MIN, 0)))
+      if (ActionButton::Draw(L("Add Clip at Playhead##midilaneaddclip"), ImVec2(-1.0f, 0)))
       {
          const Arrange::Tick grid = ArrangeSnapGridTicks();
          const Arrange::Tick at = grid > 0 ? Arrange::GridFloor(ArrangePlayTick(), grid) : ArrangePlayTick();
@@ -382,7 +384,7 @@ namespace app
       else
          ImGui::TextDisabled("%s", T("No notes yet - double-click the clip to draw some."));
       ImGui::TextDisabled(T("Plays: %s"), ArrangeMidiInstrumentLabel(lane).c_str());
-      if (ImGui::Button(L("Open Piano Roll##midiclipopen"), ImVec2(-FLT_MIN, 0)))
+      if (ActionButton::Draw(L("Open Piano Roll##midiclipopen"), ImVec2(-1.0f, 0)))
          OpenArrangePianoRoll(clipId);
       // Transpose the whole clip, one undo step per press.
       ImGui::TextDisabled("%s", T("Transpose"));
@@ -392,8 +394,8 @@ namespace app
       for (int i = 0; i < 4; i++)
       {
          if (i > 0)
-            ImGui::SameLine();
-         if (ImGui::Button(labels[i], ImVec2(std::max(24.0f, bw), 0)))
+            FormParts::Inline();
+         if (ActionButton::Draw(labels[i], ImVec2(std::max(24.0f, bw), 0)))
          {
             const int d = steps[i];
             ArrangeEdit([&]()
@@ -518,9 +520,9 @@ namespace app
 
       // ---- toolbar ----
       ImGui::TextDisabled(T("Plays: %s"), instLabel.c_str());
-      ImGui::SameLine(0.0f, 16.0f);
+      FormParts::Inline(0.0f, 16.0f);
       ImGui::TextUnformatted(T("Grid"));
-      ImGui::SameLine();
+      FormParts::Inline();
       ImGui::SetNextItemWidth(84.0f);
       PushDropdownStyle();
       const std::vector<std::string>& grids = MusicTime::QuantizeGridList();
@@ -540,9 +542,9 @@ namespace app
             return rel;
          return Arrange::SnapToGrid(clipStart + rel, grid) - clipStart;
       };
-      ImGui::SameLine(0.0f, 12.0f);
+      FormParts::Inline(0.0f, 12.0f);
       ImGui::BeginDisabled(readOnly || clip.notes.empty() || grid <= 0);
-      if (ImGui::Button(L("Quantize##prq")))
+      if (ActionButton::Draw(L("Quantize##prq")))
       {
          // Selected notes, or every note when none is selected: starts to the
          // nearest grid line, lengths kept.
@@ -558,16 +560,16 @@ namespace app
       ImGui::EndDisabled();
       if (ImGui::IsItemHovered())
          ImGui::SetTooltip("%s", T("Snap the selected notes (all when none is selected) to the grid"));
-      ImGui::SameLine(0.0f, 12.0f);
-      if (ImGui::Button("-##przoomout")) // i18n-ok
+      FormParts::Inline(0.0f, 12.0f);
+      if (ActionButton::Draw("-##przoomout")) // i18n-ok
          gRoll.ppb = std::max(8.0f, gRoll.ppb / 1.25f);
-      ImGui::SameLine();
-      if (ImGui::Button("+##przoomin")) // i18n-ok
+      FormParts::Inline();
+      if (ActionButton::Draw("+##przoomin")) // i18n-ok
          gRoll.ppb = std::min(800.0f, gRoll.ppb * 1.25f);
-      ImGui::SameLine();
-      if (ImGui::Button(L("Fit##przoomfit")))
+      FormParts::Inline();
+      if (ActionButton::Draw(L("Fit##przoomfit")))
          gRoll.fitRequest = true;
-      ImGui::SameLine(0.0f, 12.0f);
+      FormParts::Inline(0.0f, 12.0f);
       {
          int nsel = 0;
          for (char s : gRoll.sel)
@@ -607,14 +609,15 @@ namespace app
       auto yToNote = [&](float y) { return std::clamp((int)std::ceil(gRoll.topNote - (y - gridMin.y) / gRoll.keyH), 0, 127); };
 
       ImDrawList* dl = ImGui::GetWindowDrawList();
-      const ImU32 rowWhite = light ? IM_COL32(246, 247, 250, 255) : IM_COL32(30, 31, 36, 255);
-      const ImU32 rowBlack = light ? IM_COL32(232, 234, 240, 255) : IM_COL32(24, 25, 29, 255);
-      const ImU32 lineFaint = light ? IM_COL32(0, 0, 0, 18) : IM_COL32(255, 255, 255, 14);
-      const ImU32 lineBeat = light ? IM_COL32(0, 0, 0, 40) : IM_COL32(255, 255, 255, 32);
-      const ImU32 lineBar = light ? IM_COL32(0, 0, 0, 85) : IM_COL32(255, 255, 255, 70);
-      const ImU32 textCol = light ? IM_COL32(40, 44, 56, 255) : IM_COL32(205, 208, 220, 255);
-      const ImU32 noteFill = IM_COL32(59, 130, 246, 255);   // the MIDI lane accent
-      const ImU32 noteSelFill = IM_COL32(250, 204, 21, 255); // the timeline's selection gold
+      const ImU32 rowWhite = tok::U32(tok::roll_row_white, light);
+      const ImU32 rowBlack = tok::U32(tok::roll_row_black, light);
+      const ImU32 lineFaint = tok::U32(tok::roll_line_faint, light);
+      const ImU32 lineBeat = tok::U32(tok::roll_line_beat, light);
+      const ImU32 lineBar = tok::U32(tok::roll_line_bar, light);
+      const ImU32 textCol = tok::U32(tok::roll_text, light);
+      const ImU32 noteFill = tok::U32(tok::roll_note);             // the MIDI lane accent
+      const ImU32 noteSelFill = tok::U32(tok::roll_note_selected); // the timeline's selection gold
+      const ImU32 noteInk = tok::U32(tok::roll_note_ink);          // selected outline + note names on notes
 
       // ---- input: wheel ----
       const ImVec2 mouse = io.MousePos;
@@ -673,7 +676,7 @@ namespace app
          }
          const float endX = beatToX(clipBeats);
          if (endX < gridMax.x)
-            dl->AddRectFilled(ImVec2(std::max(endX, gridMin.x), gridMin.y), gridMax, light ? IM_COL32(0, 0, 0, 30) : IM_COL32(0, 0, 0, 90));
+            dl->AddRectFilled(ImVec2(std::max(endX, gridMin.x), gridMin.y), gridMax, tok::U32(tok::roll_past_end, light));
          dl->AddLine(ImVec2(endX, gridMin.y), ImVec2(endX, gridMax.y), noteFill, 1.5f);
       }
 
@@ -696,9 +699,9 @@ namespace app
          fc.w = pastEnd ? 0.25f : (0.45f + 0.55f * n.velocity); // velocity reads as strength
          dl->AddRectFilled(ImVec2(a.x + 0.5f, a.y + 0.5f), ImVec2(b.x - 0.5f, b.y - 0.5f), ImGui::ColorConvertFloat4ToU32(fc), 2.0f);
          dl->AddRect(ImVec2(a.x + 0.5f, a.y + 0.5f), ImVec2(b.x - 0.5f, b.y - 0.5f),
-                     selected ? IM_COL32(255, 255, 255, 230) : IM_COL32(0, 0, 0, light ? 90 : 160), 2.0f, 0, 1.0f);
+                     selected ? noteInk : IM_COL32(0, 0, 0, light ? 90 : 160), 2.0f, 0, 1.0f);
          if (b.x - a.x > 28.0f && gRoll.keyH >= 11.0f)
-            dl->AddText(ImVec2(a.x + 3.0f, a.y + (gRoll.keyH - ImGui::GetFontSize()) * 0.5f), IM_COL32(255, 255, 255, 230),
+            dl->AddText(ImVec2(a.x + 3.0f, a.y + (gRoll.keyH - ImGui::GetFontSize()) * 0.5f), noteInk,
                         MidiNoteName(n.note).c_str());
       }
 
@@ -707,7 +710,7 @@ namespace app
          const double play = Transport::Instance().Beats() - Arrange::TicksToBeats(clipStart);
          const float x = beatToX(play);
          if (x >= gridMin.x && x <= gridMax.x)
-            dl->AddLine(ImVec2(x, gridMin.y), ImVec2(x, gridMax.y), IM_COL32(239, 68, 68, 230), 1.5f);
+            dl->AddLine(ImVec2(x, gridMin.y), ImVec2(x, gridMax.y), tok::U32(tok::roll_playhead), 1.5f);
       }
 
       // ---- grid interaction ----
@@ -890,8 +893,8 @@ namespace app
                if (nb.x >= a.x && na.x <= b.x && nb.y >= a.y && na.y <= b.y)
                   gRoll.sel[i] = 1;
             }
-            dl->AddRectFilled(a, b, IM_COL32(250, 204, 21, 30));
-            dl->AddRect(a, b, IM_COL32(250, 204, 21, 200), 0.0f, 0, 1.0f);
+            dl->AddRectFilled(a, b, tok::U32(tok::roll_marquee_fill));
+            dl->AddRect(a, b, tok::U32(tok::roll_marquee_edge), 0.0f, 0, 1.0f);
          }
       }
       if (gridReleased && gRoll.mode != kRollNone && gRoll.mode != kRollVelocity && gRoll.mode != kRollKeys)
@@ -919,7 +922,7 @@ namespace app
       // ---- ruler (absolute bars of the timeline) ----
       {
          const ImVec2 ra(gridMin.x, p0.y), rb(gridMax.x, gridMin.y);
-         dl->AddRectFilled(ra, rb, light ? IM_COL32(226, 228, 234, 255) : IM_COL32(20, 21, 25, 255));
+         dl->AddRectFilled(ra, rb, tok::U32(tok::roll_ruler_bg, light));
          dl->PushClipRect(ra, rb, true);
          const double barBeats = Arrange::TicksToBeats(Arrange::kTicksPerBar);
          const double absB0 = Arrange::TicksToBeats(clipStart) + gRoll.scrollBeat;
@@ -944,16 +947,15 @@ namespace app
          {
             const float y = noteToY(n);
             const bool black = IsBlackKey(n);
-            const ImU32 kc = black ? (light ? IM_COL32(40, 42, 48, 255) : IM_COL32(14, 14, 17, 255))
-                                   : (light ? IM_COL32(252, 252, 253, 255) : IM_COL32(200, 202, 210, 255));
+            const ImU32 kc = black ? tok::U32(tok::roll_key_black, light) : tok::U32(tok::roll_key_white, light);
             const float w = black ? (kb.x - ka.x) * 0.62f : (kb.x - ka.x);
             dl->AddRectFilled(ImVec2(ka.x, y), ImVec2(ka.x + w, y + gRoll.keyH), kc);
-            dl->AddLine(ImVec2(ka.x, y + gRoll.keyH), ImVec2(kb.x, y + gRoll.keyH), IM_COL32(0, 0, 0, 60), 1.0f);
+            dl->AddLine(ImVec2(ka.x, y + gRoll.keyH), ImVec2(kb.x, y + gRoll.keyH), tok::U32(tok::roll_key_divider), 1.0f);
             if (gRoll.auditionNote == n)
-               dl->AddRectFilled(ImVec2(ka.x, y), ImVec2(ka.x + w, y + gRoll.keyH), IM_COL32(59, 130, 246, 160));
+               dl->AddRectFilled(ImVec2(ka.x, y), ImVec2(ka.x + w, y + gRoll.keyH), tok::U32(tok::roll_key_active));
             if (n % 12 == 0 && gRoll.keyH >= 9.0f)
                dl->AddText(ImVec2(kb.x - ImGui::CalcTextSize("C-1").x - 2.0f, y + (gRoll.keyH - ImGui::GetFontSize()) * 0.5f),
-                           IM_COL32(60, 64, 76, 255), MidiNoteName(n).c_str());
+                           tok::U32(tok::roll_key_label), MidiNoteName(n).c_str());
          }
          dl->PopClipRect();
          ImGui::SetCursorScreenPos(ka);
@@ -976,7 +978,7 @@ namespace app
 
       // ---- velocity lane ----
       {
-         dl->AddRectFilled(velMin, velMax, light ? IM_COL32(236, 238, 243, 255) : IM_COL32(22, 23, 27, 255));
+         dl->AddRectFilled(velMin, velMax, tok::U32(tok::roll_velocity_bg, light));
          dl->PushClipRect(velMin, velMax, true);
          const float h = velMax.y - velMin.y - 4.0f;
          for (size_t i = 0; i < clip.notes.size(); i++)

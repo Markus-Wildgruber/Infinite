@@ -32,7 +32,8 @@ BANNED = [
 ]
 # Field headers AppShared.h needs in full (inline device prompt, MainGraphHost).
 ALLOWED = {"core/field/FieldDevice.h", "core/field/FieldGraphHost.h"}
-DEFAULT_BUDGET = 60  # project headers in AppShared.h's closure; 55 when this was written
+DEFAULT_BUDGET = 64  # project headers in AppShared.h's closure; 55 when this was written, 63 after the design
+                    # system (TokenColors.h, ActionButton.h: stable, generated tokens every UI file uses) joined it
 
 
 def includes(path):

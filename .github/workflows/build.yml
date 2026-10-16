@@ -77,6 +77,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/check-include-split.py
+  design-ratchet:
+    name: Design ratchet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Literal colours only go down; generated tokens current
+        run: python3 tools/design/ratchet.py
 
   macos:
     name: macOS (arm64)

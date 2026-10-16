@@ -51,11 +51,11 @@ namespace app
          ImFont* font = ImGui::GetFont();
          const bool isLight = IsThemeLight();
 
-         const ImU32 bg = isLight ? IM_COL32(236, 240, 248, 255) : IM_COL32(16, 16, 22, 255);
-         const ImU32 dim = isLight ? IM_COL32(90, 90, 110, 255) : IM_COL32(150, 150, 170, 255);
-         const ImU32 bright = isLight ? IM_COL32(20, 20, 30, 255) : IM_COL32(240, 240, 250, 255);
-         const ImU32 grid = isLight ? IM_COL32(0, 0, 0, 22) : IM_COL32(255, 255, 255, 18);
-         const ImU32 track = isLight ? IM_COL32(0, 0, 0, 14) : IM_COL32(255, 255, 255, 10);
+         const ImU32 bg = tok::U32(tok::analysis_bg, isLight);
+         const ImU32 dim = tok::U32(tok::analysis_dim, isLight);
+         const ImU32 bright = tok::U32(tok::analysis_bright, isLight);
+         const ImU32 grid = tok::U32(tok::analysis_grid, isLight);
+         const ImU32 track = tok::U32(tok::analysis_track, isLight);
          const int tr = (int)(gAudioTint.r * 255.0f), tg = (int)(gAudioTint.g * 255.0f), tb = (int)(gAudioTint.b * 255.0f);
          // A = the node's tint, B = neutral: the same identity in the meters
          // and the band bars, so "which colour" always answers "which side".

@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -182,7 +183,7 @@ namespace
       }
       if (release.contains("html_url") && release["html_url"].is_string())
          return release["html_url"].get<std::string>();
-      return "https://n1m21n.github.io/Infinite/#download";
+      return "https://infinitedevices.org/#download";
    }
 
    void WorkerMain()
@@ -339,6 +340,25 @@ bool UpdateAvailable()
 const std::string& LatestVersion()
 {
    return gLatestVersion;
+}
+
+static std::string AutoOffPath()
+{
+   return AppPaths::AppSupportDir() + "/update-check-off";
+}
+
+bool AutoCheckEnabled()
+{
+   std::ifstream f(AutoOffPath());
+   return !f.good();
+}
+
+void SetAutoCheckEnabled(bool on)
+{
+   if (on)
+      std::remove(AutoOffPath().c_str());
+   else
+      std::ofstream(AutoOffPath()) << "off\n";
 }
 
 void Dismiss()

@@ -9,6 +9,9 @@
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "app/AppArrange.h"
+#include "app/ui/design/components/FormParts.h"
+#include "app/ui/design/components/MenuParts.h"
+#include "app/ui/design/components/ScreenBlocker.h"
 #include "arrange/ArrangeModel.h"
 #include "audio/AudioBuffer.h"
 #include "audio/AudioEngine.h"
@@ -1197,20 +1200,7 @@ namespace app
       if (gCapture.stage != CaptureJob::kRendering)
          return;
       ImGuiIO& io = ImGui::GetIO();
-      ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-      ImGui::SetNextWindowSize(io.DisplaySize, ImGuiCond_Always);
-      ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.35f));
-      ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-      ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-      ImGui::Begin("##CaptureNotesBlocker", nullptr,
-                   ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav |
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-      ImGui::InvisibleButton("##CaptureNotesBlockerCatch", io.DisplaySize);
-      ImGui::End();
-      ImGui::PopStyleVar(2);
-      ImGui::PopStyleColor();
+      ScreenBlocker::Draw("##CaptureNotesBlocker");
 
       ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always,
                               ImVec2(0.5f, 0.5f));
@@ -1226,7 +1216,7 @@ namespace app
       ImGui::ProgressBar((float)((double)gCapture.framesDone / (double)std::max<long long>(1, gCapture.framesTotal)),
                          ImVec2(280, 0));
       ImGui::BeginDisabled(gCapture.cancel);
-      if (ImGui::Button(L("Cancel##capturenotes"), ImVec2(120, 0)))
+      if (ActionButton::Draw(L("Cancel##capturenotes"), ImVec2(120, 0)))
          gCapture.cancel = true;
       ImGui::EndDisabled();
       ImGui::End();
@@ -1287,7 +1277,7 @@ namespace app
          return;
       }
       ImGui::Text(T("Capture %s's notes to a new MIDI track"), ArrangeSourceTitle(*gn).c_str());
-      ImGui::Separator();
+      MenuParts::Separator();
       const float fieldW = 180.0f;
       Arrange::Tick t = 0;
       if (ArrangeTickField("Start##capstart", gCapPopupStart, 0, Arrange::kMaxTick, ArrangeTickUnit::Position, fieldW, &t))
@@ -1326,12 +1316,12 @@ namespace app
       if (!gCapPopupError.empty())
       {
          ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
-         ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.40f, 1.0f), "%s", gCapPopupError.c_str());
+         ImGui::TextColored(tok::V4(tok::palf::v_950_450_400_1000), "%s", gCapPopupError.c_str());
          ImGui::PopTextWrapPos();
       }
       ImGui::Spacing();
       ImGui::BeginDisabled(gCapture.stage != CaptureJob::kIdle || ArrangeRenderBusy());
-      if (ImGui::Button(L("Capture##capgo"), ImVec2(120, 0)))
+      if (ActionButton::Draw(L("Capture##capgo"), ImVec2(120, 0)))
       {
          std::string err;
          if (StartCaptureInternal(gCapPopupNode, gCapPopupInstrument, Arrange::TicksToBeats(gCapPopupStart),
@@ -1341,8 +1331,8 @@ namespace app
             gCapPopupError = err;
       }
       ImGui::EndDisabled();
-      ImGui::SameLine();
-      if (ImGui::Button(L("Cancel##capcancel"), ImVec2(120, 0)))
+      FormParts::Inline();
+      if (ActionButton::Draw(L("Cancel##capcancel"), ImVec2(120, 0)))
          ImGui::CloseCurrentPopup();
       ImGui::EndPopup();
    }

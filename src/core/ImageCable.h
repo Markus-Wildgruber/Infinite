@@ -1,6 +1,7 @@
 #pragma once
 
 #include "INode.h"
+#include "CookProbe.h"
 
 // What a cable reads while its source's group is muted (app/graph/Groups.cpp):
 // a shared 1x1 transparent-black texture the app creates on the GL thread the
@@ -48,7 +49,10 @@ public:
       INode* node = Resolved();
       if (node == nullptr)
          return 0;
-      node->CookIfNeeded(frameId);
+      {
+         CookProbe::Scope probe(node);
+         node->CookIfNeeded(frameId);
+      }
       if (GroupGateClosed())
          return gImageCableMutedTexture;
       return node->GetOutputTexture(ResolvedOutput(node));

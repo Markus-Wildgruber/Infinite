@@ -20,6 +20,9 @@
 #include "nodes/FormulaNode.h"
 #include "nodes/OutputNode.h"
 #include "nodes/UtilityNodes.h"
+#include "nodes/FieldNotesNode.h"
+#include "nodes/Sketch3DNode.h"
+#include "nodes/SketchNode.h"
 
 namespace app
 {
@@ -215,6 +218,7 @@ namespace app
    std::vector<LinkInfo> gLinks;
 
    bool gSnapToGrid = true;
+   bool gShowCanvasGrid = false;   // the faint line grid behind the nodes; off by default, Settings > Canvas & Workspace
 
    float gGridSnap = 20.0f;
 
@@ -455,6 +459,8 @@ bool gHeadlessNeedProbe = false;
    // active modulation binding. Session UI state only, like gNodePanelOpen
    // above - not serialized to patch data or tracked by undo.
    bool  gModMatrixOpen = false;
+   bool  gHistoryOpen = false;
+   float gHistoryWidth = 300.0f;
 
    int   gModMatrixDock = 0;
               // 0 = bottom, 1 = right, 2 = left, 3 = top
@@ -712,6 +718,7 @@ bool gHeadlessNeedProbe = false;
    bool     gArrangeRenameJustStarted = false;
  // one-shot: focus the rename field the frame it opens
    bool     gArrangeClipSettingsPanelOpen = false;
+   ImVec2   gArrangeInspectorMin(0, 0), gArrangeInspectorMax(0, 0);   // last drawn Clip Settings rect (wheel/pinch must not reach the timeline)
  // docked per-clip inspector panel, toggled from the toolbar
    // Id (clip, lane or group) the inspector was last opened for via a
    // double-click, so a second double-click on the SAME row/clip closes it
@@ -932,6 +939,10 @@ bool gHeadlessNeedProbe = false;
    bool gFieldPrimitiveEditorOpen = false;
 
    FieldPixelNode* gFieldPixelEditor = nullptr;
+   SketchNode* gSketchEditor = nullptr;
+   bool gSketchEditorOpen = false;
+   Sketch3DNode* gSketch3DEditor = nullptr;
+   bool gSketch3DEditorOpen = false;
 
    bool gFieldPixelEditorOpen = false;
 
@@ -940,6 +951,8 @@ bool gHeadlessNeedProbe = false;
    bool gFieldSampleEditorOpen = false;
 
    FieldSynthNode* gFieldSynthEditor = nullptr;
+   FieldNotesNode* gFieldNotesEditor = nullptr;
+   bool gFieldNotesEditorOpen = false;
 
    bool gFieldSynthEditorOpen = false;
 
@@ -990,8 +1003,10 @@ bool gHeadlessNeedProbe = false;
 #endif
 
    bool gSettingsOpen = false;
+   bool gTemplatesOpen = false;
 
    bool gShowUpdateCheckModal = false;
+   bool gShowAboutModal = false;
 
 
    // Files dropped on the window, consumed on the next frame so the spawn can
@@ -1097,6 +1112,17 @@ bool gHeadlessNeedProbe = false;
    // none, and emitting a link to an undeclared pin makes the editor treat the
    // link as dead and delete it - which silently dropped the modulation.
    std::set<int> gDrawnParamPins;
+   std::map<int, ImVec2> gPinAnchors;
+   std::map<int, int> gPinAlias;
+   void NoteHiddenParamAlias(int nodeIndex, int hiddenParam, int shownParam)
+   {
+      const int base = nodeIndex * GraphNode::kStride + GraphNode::kParamBase;
+      gPinAlias[base + hiddenParam] = base + shownParam;
+   }
+   void NoteHiddenParamAnchor(int nodeIndex, int paramIndex, const ImVec2& screenPos)
+   {
+      gPinAnchors[nodeIndex * GraphNode::kStride + GraphNode::kParamBase + paramIndex] = screenPos;
+   }
 
    // Set while a collapsed node runs its parameter dispatch purely to
    // re-register its params (see the params block in the node loop). Every
@@ -1205,6 +1231,11 @@ bool gHeadlessNeedProbe = false;
    // that existing post-loop suspended block, where real screen-space
    // tooltips are already known to be safe.
    bool gGlobalScaleTooltipHovered = false;
+
+   // Cook-warning / live-issue text for the node under the cursor, set inside
+   // the node draw loop and shown once the editor is suspended (a SetTooltip
+   // inside ed::Begin/End lands offset by the canvas zoom and pan).
+   std::string gNodeHoverTip;
 
    bool gGlobalScaleTooltipEnabled = false;
 

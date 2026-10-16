@@ -1,4 +1,6 @@
 // Split out of main(): see docs/plans/main-split/README.md (Block C)
+#include "app/ui/design/components/MenuParts.h"
+#include "app/ui/design/TokenColors.h"
 #include "app/frame/FrameCtx.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "app/AppArrange.h"
@@ -24,6 +26,7 @@
 #include "nodes/SlicerNode.h"
 #include "nodes/UtilityNodes.h"
 #include "nodes/VideoSourceNode.h"
+#include "nodes/FieldNotesNode.h"
 
 namespace app
 {
@@ -34,7 +37,8 @@ void DrawPopupsA(FrameCtx& fc)
    auto& searchBuf = fc.searchBuf;
    auto& searchJustOpened = fc.searchJustOpened;
 
-      if (ImGui::BeginPopup("##nodecontext"))
+      ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(320.0f, ImMax(120.0f, ImGui::GetMainViewport()->Size.y - 40.0f))); // popups: capped width, scroll past the window
+      if (MenuParts::BeginPopup("##nodecontext"))
       {
          GraphNode* gn = FindNodeByIndex(gContextMenuNodeIndex);
          if (gn == nullptr)
@@ -45,20 +49,20 @@ void DrawPopupsA(FrameCtx& fc)
          {
             // Mute / Solo / Lock (Groups.cpp) - live even while locked.
             DrawGroupContextMenuItems(*gn, g);
-            ImGui::Separator();
-            if (ImGui::MenuItem(L("Rename"), nullptr, false, !g->locked))
+            MenuParts::Separator();
+            if (MenuParts::Item(L("Rename"), nullptr, false, !g->locked))
             {
                PushUndoCheckpoint();
                g->renaming = true;
                g->renameJustStarted = true;
             }
-            if (ImGui::MenuItem(L("Ungroup"), nullptr, false, !g->locked))
+            if (MenuParts::Item(L("Ungroup"), nullptr, false, !g->locked))
             {
                ed::ClearSelection();
                ed::SelectNode(gn->NodeId());
                gRequestUngroup = true;
             }
-            if (ImGui::MenuItem(L("Duplicate"), MODKEY "+D"))
+            if (MenuParts::Item(L("Duplicate"), MODKEY "+D"))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -70,18 +74,18 @@ void DrawPopupsA(FrameCtx& fc)
             // Timeline (ArrangeTools.cpp / ArrangeRenderToTrack.cpp): a group
             // clip makes the group play only inside its clips; render to
             // track bounces the audio that leaves the group.
-            ImGui::Separator();
-            if (ImGui::MenuItem(L("Add to Timeline")))
+            MenuParts::Separator();
+            if (MenuParts::Item(L("Add to Timeline")))
                AddNodeToArrangeTimeline(gn->index);
-            if (ImGui::MenuItem(L("Render to track...")))
+            if (MenuParts::Item(L("Render to track...")))
                OpenRenderToTrackPopup(gn->index);
-            if (ImGui::MenuItem(L("Render to file...")))
+            if (MenuParts::Item(L("Render to file...")))
                OpenRenderToFilePopup(gn->index);
-            ImGui::Separator();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.20f, 0.20f, 0.25f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.85f, 0.20f, 0.20f, 0.40f));
-            if (ImGui::MenuItem(L("Delete Group"), "Backspace", false, !g->locked))
+            MenuParts::Separator();
+            ImGui::PushStyleColor(ImGuiCol_Text, tok::V4(tok::palf::v_950_350_350_1000));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, tok::V4(tok::palf::v_850_200_200_250));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, tok::V4(tok::palf::v_850_200_200_400));
+            if (MenuParts::Item(L("Delete Group"), "Backspace", false, !g->locked))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -98,19 +102,19 @@ void DrawPopupsA(FrameCtx& fc)
             // deleted by hand (Groups.cpp).
             const bool noteLocked = NodeEditLocked(gn->index, nullptr);
             ImGui::BeginDisabled(noteLocked);
-            if (ImGui::MenuItem(L("Edit Note")))
+            if (MenuParts::Item(L("Edit Note")))
             {
                PushUndoCheckpoint();
                gCommentEdit.target = c;
                gCommentEdit.justOpened = true;
             }
-            if (ImGui::BeginMenu(L("Font Size")))
+            if (MenuParts::SubMenu(L("Font Size")))
             {
                const char* sizeLabels[] = { "Small", "Normal", "Large", "Extra Large" };
                for (int sIdx = 0; sIdx < 4; sIdx++)
                {
                   const bool selected = (c->fontSize == sIdx);
-                  if (ImGui::MenuItem(sizeLabels[sIdx], nullptr, selected))
+                  if (MenuParts::Item(sizeLabels[sIdx], nullptr, selected))
                   {
                      PushUndoCheckpoint();
                      c->fontSize = sIdx;
@@ -119,7 +123,7 @@ void DrawPopupsA(FrameCtx& fc)
                }
                ImGui::EndMenu();
             }
-            if (ImGui::MenuItem(L("Change Colour...")))
+            if (MenuParts::Item(L("Change Colour...")))
             {
                PushUndoCheckpoint();
                gColor.target = c->color;
@@ -128,7 +132,7 @@ void DrawPopupsA(FrameCtx& fc)
                gColor.justOpened = true;
             }
             ImGui::EndDisabled();
-            if (ImGui::MenuItem(L("Duplicate"), MODKEY "+D"))
+            if (MenuParts::Item(L("Duplicate"), MODKEY "+D"))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -139,11 +143,11 @@ void DrawPopupsA(FrameCtx& fc)
             }
             // Add to group <label> / Remove from group (Groups.cpp).
             DrawNodeGroupMembershipMenu(*gn);
-            ImGui::Separator();
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.20f, 0.20f, 0.25f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.85f, 0.20f, 0.20f, 0.40f));
-            if (ImGui::MenuItem(L("Delete Note"), "Backspace", false, !noteLocked))
+            MenuParts::Separator();
+            ImGui::PushStyleColor(ImGuiCol_Text, tok::V4(tok::palf::v_950_350_350_1000));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, tok::V4(tok::palf::v_850_200_200_250));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, tok::V4(tok::palf::v_850_200_200_400));
+            if (MenuParts::Item(L("Delete Note"), "Backspace", false, !noteLocked))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -160,7 +164,7 @@ void DrawPopupsA(FrameCtx& fc)
             // A locked group's member: no bypass, no delete (Groups.cpp).
             const bool nodeLocked = NodeEditLocked(gn->index, nullptr);
             const char* bypassLabel = gn->node->bypassed ? "Enable Node" : "Bypass Node";
-            if (ImGui::MenuItem(bypassLabel, "B", false, !nodeLocked))
+            if (MenuParts::Item(bypassLabel, "B", false, !nodeLocked))
             {
                PushUndoCheckpoint();
                gn->node->bypassed = !gn->node->bypassed;
@@ -170,7 +174,7 @@ void DrawPopupsA(FrameCtx& fc)
                   RebuildAudioTopology();
                }
             }
-            if (ImGui::MenuItem(L("Duplicate"), MODKEY "+D"))
+            if (MenuParts::Item(L("Duplicate"), MODKEY "+D"))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -185,12 +189,12 @@ void DrawPopupsA(FrameCtx& fc)
             {
                if (gn->showParams)
                {
-                  if (ImGui::MenuItem(L("Hide params")))
+                  if (MenuParts::Item(L("Hide params")))
                      gn->showParams = false;
                }
                else
                {
-                  if (ImGui::MenuItem(L("Show params")))
+                  if (MenuParts::Item(L("Show params")))
                      gn->showParams = true;
                }
             }
@@ -198,18 +202,18 @@ void DrawPopupsA(FrameCtx& fc)
             {
                if (gn->showMiniViewport)
                {
-                  if (ImGui::MenuItem(L("Hide viewport")))
+                  if (MenuParts::Item(L("Hide viewport")))
                      gn->showMiniViewport = false;
                }
                else
                {
-                  if (ImGui::MenuItem(L("Show viewport")))
+                  if (MenuParts::Item(L("Show viewport")))
                      gn->showMiniViewport = true;
                }
             }
             if (CanShowInViewportPanel(*gn))
             {
-               if (ImGui::MenuItem(L("Open in viewport panel")))
+               if (MenuParts::Item(L("Open in viewport panel")))
                {
                   if (std::find(gViewportPanelNodes.begin(), gViewportPanelNodes.end(), gn->index) ==
                       gViewportPanelNodes.end())
@@ -219,25 +223,25 @@ void DrawPopupsA(FrameCtx& fc)
             }
             if (dynamic_cast<IModulator*>(gn->node.get()) != nullptr)
             {
-               if (ImGui::MenuItem(L("Show modulation matrix")))
+               if (MenuParts::Item(L("Show modulation matrix")))
                   gModMatrixOpen = true;
             }
             if (IsNodeVideoCompatible(*gn) && IsNodeAudioCompatible(*gn))
             {
                // Picture and sound from one node (Video Source): the user
                // picks the lane; the audio clip reads its audio output.
-               if (ImGui::BeginMenu(L("Add to Timeline")))
+               if (MenuParts::SubMenu(L("Add to Timeline")))
                {
-                  if (ImGui::MenuItem(L("Video")))
+                  if (MenuParts::Item(L("Video")))
                      AddNodeToArrangeTimeline(gn->index, Arrange::kLaneVideo);
-                  if (ImGui::MenuItem(L("Audio")))
+                  if (MenuParts::Item(L("Audio")))
                      AddNodeToArrangeTimeline(gn->index, Arrange::kLaneAudio);
                   ImGui::EndMenu();
                }
             }
             else if (IsNodeVideoCompatible(*gn) || IsNodeAudioCompatible(*gn))
             {
-               if (ImGui::MenuItem(L("Add to Timeline")))
+               if (MenuParts::Item(L("Add to Timeline")))
                   AddNodeToArrangeTimeline(gn->index);
             }
             // Bounce this node's audio to a new timeline track
@@ -268,11 +272,11 @@ void DrawPopupsA(FrameCtx& fc)
             ProjectorWindow* projector = FindProjectorWindow(gn->index);
             if (CanShowInViewportPanel(*gn) && projector != nullptr)
             {
-               if (ImGui::BeginMenu(L("Output window")))
+               if (MenuParts::SubMenu(L("Output window")))
                {
-                  if (ImGui::MenuItem(L("Fullscreen"), "F11", projector->fullscreen))
+                  if (MenuParts::Item(L("Fullscreen"), "F11", projector->fullscreen))
                      ToggleProjectorFullscreen(*projector);
-                  if (ImGui::BeginMenu(L("Display")))
+                  if (MenuParts::SubMenu(L("Display")))
                   {
                      int monitorCount = 0;
                      GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
@@ -281,27 +285,27 @@ void DrawPopupsA(FrameCtx& fc)
                         const char* name = glfwGetMonitorName(monitors[i]);
                         char label[64];
                         snprintf(label, sizeof(label), "%d: %s", i + 1, name != nullptr ? name : "Display");
-                        if (ImGui::MenuItem(label, nullptr, projector->monitorIndex == i))
+                        if (MenuParts::Item(label, nullptr, projector->monitorIndex == i))
                            MoveProjectorToMonitor(*projector, i);
                      }
                      ImGui::EndMenu();
                   }
-                  ImGui::Separator();
-                  if (ImGui::MenuItem(L("Close window")))
+                  MenuParts::Separator();
+                  if (MenuParts::Item(L("Close window")))
                      CloseProjectorWindowFor(gn->index);
                   ImGui::EndMenu();
                }
             }
             else if (CanShowInViewportPanel(*gn))
             {
-               if (ImGui::MenuItem(L("Open in new window")))
+               if (MenuParts::Item(L("Open in new window")))
                   OpenProjectorWindow(window, *gn);
             }
 
-            ImGui::Separator();
+            MenuParts::Separator();
 
             // Information & Hierarchy
-            if (ImGui::MenuItem(L("Help")))
+            if (MenuParts::Item(L("Help")))
             {
                gHelpPopupNodeIndex = gn->index;
                ImGui::CloseCurrentPopup();
@@ -310,13 +314,13 @@ void DrawPopupsA(FrameCtx& fc)
             // Add to group <label> / Remove from group (Groups.cpp).
             DrawNodeGroupMembershipMenu(*gn);
 
-            ImGui::Separator();
+            MenuParts::Separator();
 
             // Destructive Action: Delete Node with HIG danger hover styling
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.35f, 0.35f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.85f, 0.20f, 0.20f, 0.25f));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.85f, 0.20f, 0.20f, 0.40f));
-            if (ImGui::MenuItem(L("Delete Node"), "Backspace", false, !nodeLocked))
+            ImGui::PushStyleColor(ImGuiCol_Text, tok::V4(tok::palf::v_950_350_350_1000));
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, tok::V4(tok::palf::v_850_200_200_250));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, tok::V4(tok::palf::v_850_200_200_400));
+            if (MenuParts::Item(L("Delete Node"), "Backspace", false, !nodeLocked))
             {
                if (!ed::IsNodeSelected(gn->NodeId()))
                {
@@ -327,7 +331,7 @@ void DrawPopupsA(FrameCtx& fc)
             }
             ImGui::PopStyleColor(3);
          }
-         ImGui::EndPopup();
+         MenuParts::EndPopup();
       }
 
       // Node "Help" popup, opened via the context menu above. A separate
@@ -340,7 +344,7 @@ void DrawPopupsA(FrameCtx& fc)
          gOpenNodeHelpPopup = false;
       }
       ImGui::SetNextWindowSizeConstraints(ImVec2(280, 0), ImVec2(420, FLT_MAX));
-      if (ImGui::BeginPopup("##nodehelp"))
+      if (MenuParts::BeginPopup("##nodehelp"))
       {
          gNodeHelpShown = true;
          GraphNode* gn = FindNodeByIndex(gHelpPopupNodeIndex);
@@ -356,12 +360,12 @@ void DrawPopupsA(FrameCtx& fc)
          else
          {
             ImGui::TextUnformatted(NodeTitle(*gn).c_str());
-            ImGui::Separator();
+            MenuParts::Separator();
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 380.0f);
             ImGui::TextWrapped("%s", HelpT(NodeHelpText(*gn)));
             ImGui::PopTextWrapPos();
          }
-         ImGui::EndPopup();
+         MenuParts::EndPopup();
       }
 
       // Modulation-binding popup (Absolute/Bipolar/depth/Unbind), requested by
@@ -386,7 +390,9 @@ void DrawPopupsA(FrameCtx& fc)
          gModRangeTypedPendingInit = false;
          gModRangeTypedNoAutoSelect = false;
       }
-      if (ImGui::BeginPopup("##modbind"))
+      ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(320.0f, ImMax(120.0f, ImGui::GetMainViewport()->Size.y - 40.0f))); // popups: capped width, scroll past the window
+      const bool modbindOpen = MenuParts::BeginPopup("##modbind");
+      if (modbindOpen)
       {
          Modulation& mod = Modulation::Instance();
          GestureRecorder& rec = GestureRecorder::Instance();
@@ -456,7 +462,7 @@ void DrawPopupsA(FrameCtx& fc)
                   {
                      if (gModRangeTypedNoAutoSelect)
                      {
-                        state->Stb.cursor = state->CurLenW;
+                        state->ReloadUserBufAndMoveToEnd();
                         state->ClearSelection();
                      }
                      else
@@ -535,10 +541,10 @@ void DrawPopupsA(FrameCtx& fc)
                // A bool wants a toggle and an enum wants a selector; a knob
                // is only the right default for a continuous param.
                const int perfKind = destRef->isBool ? 3 : (destRef->isEnum ? 7 : 0);
-               if (ImGui::MenuItem(L("Add to Performance Matrix")))
+               if (MenuParts::Item(L("Add to Performance Matrix")))
                   AddToPerformanceMatrix(nodeIndex, paramIndex, perfKind);
                DrawParamMidiLearnMenuItem(nodeIndex, paramIndex);
-               if (ImGui::MenuItem(L("View in Modulation Matrix")))
+               if (MenuParts::Item(L("View in Modulation Matrix")))
                {
                   gModMatrixOpen = true;
                   gModMatrixHighlightNode = nodeIndex;
@@ -546,7 +552,7 @@ void DrawPopupsA(FrameCtx& fc)
                   gModMatrixHighlightUntil = ImGui::GetTime() + 1.5;
                   gModMatrixScrollPending = true;
                }
-               ImGui::Separator();
+               MenuParts::Separator();
 
                // Double-clicking a field, or hovering it and typing a
                // digit/'-', swaps it for a focused text box seeded from
@@ -568,10 +574,10 @@ void DrawPopupsA(FrameCtx& fc)
                   }
                   mod.SetRange(nodeIndex, paramIndex, lo, hi);
                }
-               ImGui::Separator();
-               if (ImGui::MenuItem(L("Full range")))
+               MenuParts::Separator();
+               if (MenuParts::Item(L("Full range")))
                   mod.SetRange(nodeIndex, paramIndex, destRef->minValue, destRef->maxValue);
-               if (ImGui::MenuItem(L("Around current")))
+               if (MenuParts::Item(L("Around current")))
                {
                   const float span = (destRef->maxValue - destRef->minValue) * 0.25f;
                   const float centre = destRef->value != nullptr ? *destRef->value : src.centre;
@@ -579,11 +585,11 @@ void DrawPopupsA(FrameCtx& fc)
                               std::clamp(centre - span, destRef->minValue, destRef->maxValue),
                               std::clamp(centre + span, destRef->minValue, destRef->maxValue));
                }
-               if (ImGui::MenuItem(L("Invert")))
+               if (MenuParts::Item(L("Invert")))
                   mod.SetRange(nodeIndex, paramIndex, src.hi, src.lo);
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem(L("Unbind")))
+            MenuParts::Separator();
+            if (MenuParts::Item(L("Unbind")))
             {
                PushUndoCheckpoint();
                mod.Unbind(nodeIndex, paramIndex);
@@ -597,12 +603,12 @@ void DrawPopupsA(FrameCtx& fc)
             }
             else
             {
-               if (ImGui::MenuItem(L("Edit Expression")))
+               if (MenuParts::Item(L("Edit Expression")))
                   BeginTypedEditFromCurrent(editKey, nodeIndex, paramIndex, destRef->value, valueFmt, /*hasExpr=*/true);
                const int perfKind = destRef->isBool ? 3 : (destRef->isEnum ? 7 : 0);
-               if (ImGui::MenuItem(L("Add to Performance Matrix")))
+               if (MenuParts::Item(L("Add to Performance Matrix")))
                   AddToPerformanceMatrix(nodeIndex, paramIndex, perfKind);
-               ImGui::Separator();
+               MenuParts::Separator();
                float lo, hi;
                if (!mod.ExpressionRangeFor(nodeIndex, paramIndex, lo, hi))
                {
@@ -620,14 +626,14 @@ void DrawPopupsA(FrameCtx& fc)
                   hi = std::clamp(hi, destRef->minValue, destRef->maxValue);
                   mod.SetExpressionRange(nodeIndex, paramIndex, lo, hi);
                }
-               ImGui::Separator();
-               if (ImGui::MenuItem(L("Full range")))
+               MenuParts::Separator();
+               if (MenuParts::Item(L("Full range")))
                   mod.ClearExpressionRange(nodeIndex, paramIndex);
-               if (ImGui::MenuItem(L("Invert")))
+               if (MenuParts::Item(L("Invert")))
                   mod.SetExpressionRange(nodeIndex, paramIndex, hi, lo);
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem(L("Unbind")))
+            MenuParts::Separator();
+            if (MenuParts::Item(L("Unbind")))
             {
                PushUndoCheckpoint();
                mod.ClearExpression(nodeIndex, paramIndex);
@@ -640,8 +646,8 @@ void DrawPopupsA(FrameCtx& fc)
                // Armed but nothing dragged yet - nothing to configure
                // speed/range against, only the option to back out.
                ImGui::TextDisabled("%s", T("Waiting for movement..."));
-               ImGui::Separator();
-               if (ImGui::MenuItem(L("Cancel Recording")))
+               MenuParts::Separator();
+               if (MenuParts::Item(L("Cancel Recording")))
                   rec.CancelArm(nodeIndex, paramIndex);
             }
             else
@@ -658,11 +664,11 @@ void DrawPopupsA(FrameCtx& fc)
                   rec.SetPlaybackSpeed(nodeIndex, paramIndex, speed);
                   rangeChanged = false;
                }
-               ImGui::Separator();
+               MenuParts::Separator();
                const int perfKind = destRef != nullptr ? (destRef->isBool ? 3 : (destRef->isEnum ? 7 : 0)) : 0;
-               if (ImGui::MenuItem(L("Add to Performance Matrix")))
+               if (MenuParts::Item(L("Add to Performance Matrix")))
                   AddToPerformanceMatrix(nodeIndex, paramIndex, perfKind);
-               ImGui::Separator();
+               MenuParts::Separator();
                const float defLo = destRef != nullptr ? destRef->minValue : 0.0f;
                const float defHi = destRef != nullptr ? destRef->maxValue : 1.0f;
                float lo, hi;
@@ -676,17 +682,17 @@ void DrawPopupsA(FrameCtx& fc)
                drawRangeField(1, "##rhi", "##rhityped", isInt ? "hi %.0f" : "hi %.3f", defLo, defHi, hi);
                if (rangeChanged)
                   rec.SetPlaybackRange(nodeIndex, paramIndex, lo, hi);
-               ImGui::Separator();
-               if (ImGui::MenuItem(L("Full range")))
+               MenuParts::Separator();
+               if (MenuParts::Item(L("Full range")))
                   rec.ClearPlaybackRange(nodeIndex, paramIndex);
-               if (ImGui::MenuItem(L("Invert")))
+               if (MenuParts::Item(L("Invert")))
                   rec.SetPlaybackRange(nodeIndex, paramIndex, hi, lo);
-               ImGui::Separator();
-               if (ImGui::MenuItem(L("Record Again")))
+               MenuParts::Separator();
+               if (MenuParts::Item(L("Record Again")))
                   rec.ArmParam(nodeIndex, paramIndex);
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem(L("Unbind")))
+            MenuParts::Separator();
+            if (MenuParts::Item(L("Unbind")))
             {
                rec.CancelArm(nodeIndex, paramIndex);
                rec.StopPlayback(nodeIndex, paramIndex);
@@ -707,17 +713,17 @@ void DrawPopupsA(FrameCtx& fc)
                const int perfKind = destRef->isBool ? 3 : (destRef->isEnum ? 7 : 0);
                if (!destRef->isBool)
                {
-                  if (ImGui::MenuItem(L("Enter Value")))
+                  if (MenuParts::Item(L("Enter Value")))
                      BeginTypedEditFromCurrent(editKey, nodeIndex, paramIndex, destRef->value, valueFmt, /*hasExpr=*/false);
                }
-               if (ImGui::MenuItem(L("Add to Performance Matrix")))
+               if (MenuParts::Item(L("Add to Performance Matrix")))
                   AddToPerformanceMatrix(nodeIndex, paramIndex, perfKind);
                DrawParamMidiLearnMenuItem(nodeIndex, paramIndex);
                if (!destRef->isBool)
                {
-                  if (ImGui::MenuItem(L("Enter Expression")))
+                  if (MenuParts::Item(L("Enter Expression")))
                      BeginTypedEditFromCurrent(editKey, nodeIndex, paramIndex, destRef->value, valueFmt, /*hasExpr=*/true);
-                  if (ImGui::MenuItem(L("Start Recording")))
+                  if (MenuParts::Item(L("Start Recording")))
                   {
                      PushUndoCheckpoint();
                      rec.ArmParam(nodeIndex, paramIndex);
@@ -725,7 +731,7 @@ void DrawPopupsA(FrameCtx& fc)
                }
             }
          }
-         ImGui::EndPopup();
+         MenuParts::EndPopup();
       }
 
       // double-click empty canvas -> searchable spawner
@@ -757,7 +763,7 @@ void DrawPopupsA(FrameCtx& fc)
          const std::string dragDisplayName = (gSampleDragKind == LibraryDragKind::FieldPreset)
             ? gFieldDragPresetName : gSampleDragName;
          ImGui::GetForegroundDrawList()->AddText(ImVec2(mp.x + 14.0f, mp.y + 14.0f),
-                                                  IM_COL32(230, 235, 245, 255), dragDisplayName.c_str());
+                                                  tok::U32(tok::pal::c_E6EBF5FF), dragDisplayName.c_str());
 
          if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
          {
@@ -812,6 +818,17 @@ void DrawPopupsA(FrameCtx& fc)
                if (entry.nodeType == "Field Synth")
                {
                   if (FieldSynthNode* target = FindNodeUnderCanvasPoint<FieldSynthNode>(canvasMouse))
+                  {
+                     PushUndoCheckpoint();
+                     target->presetIndex = entry.presetIndex;
+                     target->LoadPreset(entry.presetIndex);
+                     gPatchDirty = true;
+                     handled = true;
+                  }
+               }
+               else if (entry.nodeType == "Field Notes")
+               {
+                  if (FieldNotesNode* target = FindNodeUnderCanvasPoint<FieldNotesNode>(canvasMouse))
                   {
                      PushUndoCheckpoint();
                      target->presetIndex = entry.presetIndex;

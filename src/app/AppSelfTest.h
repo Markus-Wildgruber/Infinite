@@ -154,6 +154,7 @@ bool RunMidiFileFixture();
 bool RunMpeFixture();
 
 bool RunShapeResonatorFixture();
+bool RunSpatialFixture();
 
 bool RunSpectrumSlideFixture();
 
@@ -185,6 +186,8 @@ int RunFieldSampleTest();
 
 int RunFieldPinDeclTest();
 
+int RunFieldNotesTest();
+
 void RunRecSyncTest();
 
 void RunAudioRingTest();
@@ -194,6 +197,7 @@ void RunVideoExactTest();
 void RunRecExportTest(int width, int height, bool starved, const char* label);
 
 bool RunAudioPdcTest();
+bool RunMidiOutTest();
 bool RunI18nTest();
 
 #if defined(__linux__)
@@ -204,6 +208,8 @@ int RunCVRecorderTest();
 
 int RunMidiCC14Test();
 int RunNdiTest();
+int RunExtensionsTest();
+int RunTrackingTest();
 
 int RunAudioParamSweepTest();
 
@@ -238,6 +244,8 @@ int RunVST3BlocklistTest();
 #endif
 
 void RunRpcBatchTest();
+void RunHistoryTest();
+void RunClipboardTest();
 
 void RunPatchWatchTest();
 

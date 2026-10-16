@@ -34,6 +34,8 @@
 #include "nodes/UtilityNodes.h"
 #include "nodes/VideoSourceNode.h"
 #include "nodes/WavetableNode.h"
+#include "nodes/CurveOpsNode.h"
+#include "nodes/DelaunayNodes.h"
 
 namespace app
 {
@@ -515,6 +517,8 @@ void FrameTest_MATERIALSWEEPTEST(int frameId, GLFWwindow* window)
          probe.material.dispersion = 0.18f;
          probe.material.alphaCutoff = 0.4f;
          probe.material.textureAlpha = true;
+         probe.material.normalStrength = 1.7f;
+         probe.material.normalBump = 1;
 
          int frame = 22000;
          auto cook = [&](IGeometrySource* g) {
@@ -536,7 +540,8 @@ void FrameTest_MATERIALSWEEPTEST(int frameId, GLFWwindow* window)
                    near(a.iridescence, b.iridescence) && near(a.iridescenceIor, b.iridescenceIor) &&
                    near(a.iridescenceThickness, b.iridescenceThickness) && near(a.anisotropy, b.anisotropy) &&
                    near(a.anisotropyRotation, b.anisotropyRotation) && near(a.dispersion, b.dispersion) &&
-                   near(a.alphaCutoff, b.alphaCutoff) && a.textureAlpha == b.textureAlpha;
+                   near(a.alphaCutoff, b.alphaCutoff) && a.textureAlpha == b.textureAlpha &&
+                   near(a.normalStrength, b.normalStrength) && a.normalBump == b.normalBump;
          };
 
          struct Result { std::string name; bool ok; };
@@ -868,6 +873,40 @@ void FrameTest_POINTCLOUDSWEEPTEST(int frameId, GLFWwindow* window)
                 vertsMsg.find("vertices only") != std::string::npos);
          report("vertices-only input satisfies kMeshVertices",
                 DescribeGeometryMismatch(&verts, GeometryRequirement::kMeshVertices).empty());
+
+         // Pin contract: points-only and curve-only nodes flag the wrong
+         // domain and make nothing from it.
+         {
+            DelaunayMeshNode dn;
+            dn.input = &verts;
+            const bool meshEmpty = dn.GetMesh().vertices.empty();
+            report("Delaunay Mesh flags a mesh and ignores it",
+                   meshEmpty && dn.CookWarning().find("point cloud") != std::string::npos);
+            dn.input = &pts;
+            dn.GetMesh();
+            report("Delaunay Mesh accepts a point cloud without warning", dn.CookWarning().empty());
+            VoronoiCellsNode vn;
+            vn.input = &verts;
+            vn.GetMesh();
+            report("Voronoi Cells flags a mesh", !vn.CookWarning().empty());
+            CurveOpsNode cn;
+            cn.input = &verts;
+            const bool curveEmpty = cn.GetCurve() == nullptr;
+            report("Curve Ops flags a mesh and emits no curve",
+                   curveEmpty && cn.CookWarning().find("curve") != std::string::npos);
+            cn.input = &pts;
+            cn.GetCurve();
+            report("Curve Ops flags a point cloud", !cn.CookWarning().empty());
+            cn.input = &curve;
+            cn.GetCurve();
+            report("Curve Ops accepts a curve without warning", cn.CookWarning().empty());
+            GeometryOpNode arr; arr.op = GeometryOpNode::kArray; arr.input = &pts; arr.CookIfNeeded(1001);
+            report("Array flags a point cloud", !arr.CookWarning().empty());
+            GeometryOpNode xf; xf.op = GeometryOpNode::kTransform; xf.input = &pts; xf.CookIfNeeded(1002);
+            report("Transform accepts a point cloud", xf.CookWarning().empty());
+            JoinGeometryNode jn; jn.inputs[0] = &pts; jn.GetMesh();
+            report("Join flags a non-surface input", !jn.CookWarning().empty());
+         }
 
          // R484: Switcher 3D and Set Color forward cloud / curve.
          Switcher3DNode sw;

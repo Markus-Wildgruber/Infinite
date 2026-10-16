@@ -15,6 +15,7 @@
 #include "nodes/OutputNode.h"
 #include "nodes/SamplerNode.h"
 #include "nodes/WavetableNode.h"
+#include "nodes/SpatialMixerNode.h"
 
 namespace app
 {
@@ -119,8 +120,11 @@ namespace app
 
       if (AudioNode* audioNode = AudioNodeOfAny(node))
       {
-         if (!node->bypassed)
+         const bool keepWhenBypassed = node->bypassed && node->KeepsAudioHalfWhenBypassed();
+         if (keepWhenBypassed || !node->bypassed)
          {
+            if (node->KeepsAudioHalfWhenBypassed())
+               audioNode->SetBypassed(node->bypassed);
             entry.node = audioNode;
             entry.noteOnly = dynamic_cast<INoteSource*>(node) != nullptr || node->AudioNodeForNotePorts() != nullptr;
             if (auto* aen = dynamic_cast<AudioEffectNode*>(node))
@@ -137,7 +141,7 @@ namespace app
             {
                entry.stageId = kAudioStageSynths;
             }
-            else if (dynamic_cast<MixerNode*>(node))
+            else if (dynamic_cast<MixerNode*>(node) || dynamic_cast<SpatialMixerNode*>(node))
             {
                entry.stageId = kAudioStageMixer;
             }
@@ -494,6 +498,23 @@ namespace app
                }
             }
          }
+      }
+
+      // Spatial Mixer is a terminal like Audio Out, except it also owns the
+      // AudioNode that renders its inputs: walk it into `order`, then its own
+      // rendered buffer is the terminal. Its binaural render must never be a
+      // source for anything else (it has no output pin).
+      for (GraphNode& gn : gNodes)
+      {
+         auto* spatial = dynamic_cast<SpatialMixerNode*>(gn.node.get());
+         if (spatial == nullptr || timelineRouting || spatial->ConnectedCount() == 0)
+            continue;
+         CollectAudioChain(spatial, visited, order, bufferIndexOf, nextBufferIndex);
+         const int idx = AudioBufferIndexOf(spatial, 0, bufferIndexOf);
+         if (idx < 0)
+            continue;
+         terminals.push_back({ idx, &spatial->PdcAnchor() });
+         terminals.back().live = spatial->live;
       }
 
       for (GraphNode& gn : gNodes)

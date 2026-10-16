@@ -1,7 +1,11 @@
 ---
 name: infinite-patch-authoring
-description: Write, check and render Infinite patches (.inf text files) headless, without the UI. Use whenever the user asks you to build, change or debug an Infinite patch, wire nodes, add modulation, or render a frame, video or audio measurement from a patch file.
+description: "Write, check and render Infinite .inf patches headless. Use whenever the user asks to build, change or debug a patch, wire nodes, add modulation, or render from a patch file."
 ---
+
+## When to use (full scope)
+
+Write, check and render Infinite patches (.inf text files) headless, without the UI. Use whenever the user asks you to build, change or debug an Infinite patch, wire nodes, add modulation, or render a frame, video or audio measurement from a patch file.
 
 # Authoring Infinite patches headless
 
@@ -116,14 +120,14 @@ Do not edit between the markers; run the script. Use the `node` line exactly as 
 first, then the type name), then `--describe "<type>"` for parameters.
 
 <!-- generated:begin -->
-309 node types. `node <index> <category> <type>`; inputs are `slot name:kind`, outputs `label:kind`; `p` is the number of saved parameters; `bypass` marks single-input nodes that can be bypassed.
+322 node types. `node <index> <category> <type>`; inputs are `slot name:kind`, outputs `label:kind`; `p` is the number of saved parameters; `bypass` marks single-input nodes that can be bypassed.
 
 
 ### 3D
 
 | Type | Inputs | Outputs | p | Notes |
 |---|---|---|---|---|
-| `Array` | geo:geometry | out:geometry | 65 | bypass |
+| `Array` | geo:geometry | out:geometry | 67 | bypass |
 | `Arrow 3D` | texture:image | out:geometry | 50 | bypass |
 | `Audio Displacement` | geo:geometry, audio:audio | out:geometry | 32 |  |
 | `Audio Ribbon` | input:audio | out:geometry | 23 | bypass |
@@ -133,9 +137,12 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Cone` | texture:image | out:geometry | 50 | bypass |
 | `Cube` | texture:image | out:geometry | 50 | bypass |
 | `Curve` | none | out:geometry | 32 | bypass |
+| `Curve Ops` | curve:geometry | out:geometry | 9 | bypass |
 | `Cylinder` | texture:image | out:geometry | 50 | bypass |
-| `Delete` | geo:geometry | out:geometry | 65 | bypass |
-| `Delete Selected` | geo:geometry | out:geometry | 65 | bypass |
+| `Decimate` | geo:geometry | out:geometry | 67 | bypass |
+| `Delaunay Mesh` | points:geometry | out:geometry | 4 | bypass |
+| `Delete` | geo:geometry | out:geometry | 67 | bypass |
+| `Delete Selected` | geo:geometry | out:geometry | 67 | bypass |
 | `Depth Projection` | depth:image, color:image | out:geometry | 35 |  |
 | `Difference` | geo_a:geometry, geo_b:geometry, geo_c:geometry, geo_d:geometry | out:geometry | 23 |  |
 | `Disc` | texture:image | out:geometry | 50 | bypass |
@@ -143,11 +150,11 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Distribute Points in Grid` | none | out:geometry | 8 | bypass |
 | `Distribute Points on Faces` | geo:geometry | out:geometry | 22 | bypass |
 | `Dodecahedron` | texture:image | out:geometry | 50 | bypass |
-| `Explode` | geo:geometry | out:geometry | 65 | bypass |
-| `Extrude` | geo:geometry | out:geometry | 65 | bypass |
-| `Extrude Selected` | geo:geometry | out:geometry | 65 | bypass |
-| `Field Modifier` | geo:geometry | geo:geometry | 11 | bypass |
-| `Field Primitive` | none | geo:geometry | 13 | bypass |
+| `Explode` | geo:geometry | out:geometry | 67 | bypass |
+| `Extrude` | geo:geometry | out:geometry | 67 | bypass |
+| `Extrude Selected` | geo:geometry | out:geometry | 67 | bypass |
+| `Field Modifier` | geo:geometry | out:geometry | 11 | bypass |
+| `Field Primitive` | none | out:geometry | 13 | bypass |
 | `Gear 3D` | texture:image | out:geometry | 50 | bypass |
 | `Geometry` | texture:image | out:geometry | 50 | bypass |
 | `Group 3D` | geo_a:geometry, geo_b:geometry, geo_c:geometry, geo_d:geometry, geo_e:geometry, geo_f:geometry, geo_g:geometry, geo_h:geometry | out:geometry | 0 |  |
@@ -161,16 +168,16 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Klein Bottle` | texture:image | out:geometry | 50 | bypass |
 | `Light` | none | out:light | 10 | bypass |
 | `Mapping` | geo:geometry | out:geometry | 11 | bypass |
-| `Material` | geo:geometry, albedo:image, roughness:image, metallic:image, normal:image, ao:image, emission:image, clearcoat:image, sheen:image | out:geometry | 29 |  |
+| `Material` | geo:geometry, albedo:image, roughness:image, metallic:image, normal:image, ao:image, emission:image, clearcoat:image, sheen:image | out:geometry | 30 |  |
 | `Merge by Distance` | geo:geometry | out:geometry | 1 | bypass |
 | `Mesh to Edges` | geo:geometry | out:geometry | 22 | bypass |
 | `Mesh to Faces` | geo:geometry | out:geometry | 22 | bypass |
 | `Mesh to Points` | geo:geometry | out:geometry | 22 | bypass |
 | `Metaballs` | cloud:geometry | out:geometry | 28 | bypass |
-| `Mirror` | geo:geometry | out:geometry | 65 | bypass |
+| `Mirror` | geo:geometry | out:geometry | 67 | bypass |
 | `Mobius Strip` | texture:image | out:geometry | 50 | bypass |
 | `Model 3D` | texture:image | out:geometry | 27 | bypass |
-| `Normals` | geo:geometry | out:geometry | 65 | bypass |
+| `Normals` | geo:geometry | out:geometry | 67 | bypass |
 | `Null 3D` | geo:geometry | out:geometry | 0 | bypass |
 | `Ocean` | texture:image | out:geometry | 29 | bypass |
 | `Octahedron` | texture:image | out:geometry | 50 | bypass |
@@ -182,27 +189,29 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Render 3D` | geo_a:geometry, geo_b:geometry, geo_c:geometry, geo_d:geometry, camera:camera, light_1:light, light_2:light, light_3:light, env:environment | out:image | 39 |  |
 | `Resynthesize 3D` | geo:geometry | out:geometry | 13 | bypass |
 | `Rounded Cube` | texture:image | out:geometry | 50 | bypass |
-| `Screw` | geo:geometry | out:geometry | 65 | bypass |
-| `Select` | geo:geometry | out:geometry | 65 | bypass |
+| `Screw` | geo:geometry | out:geometry | 67 | bypass |
+| `Select` | geo:geometry | out:geometry | 67 | bypass |
 | `Set Vertex Color` | geo:geometry, texture:image, palette:palette | out:geometry | 6 |  |
-| `Smooth` | geo:geometry | out:geometry | 65 | bypass |
-| `Solidify` | geo:geometry | out:geometry | 65 | bypass |
+| `Sketch 3D` | none | out:geometry | 4 | bypass |
+| `Smooth` | geo:geometry | out:geometry | 67 | bypass |
+| `Solidify` | geo:geometry | out:geometry | 67 | bypass |
 | `Sphere` | texture:image | out:geometry | 50 | bypass |
 | `Star 3D` | texture:image | out:geometry | 50 | bypass |
-| `Subdivide` | geo:geometry | out:geometry | 65 | bypass |
+| `Subdivide` | geo:geometry | out:geometry | 67 | bypass |
 | `Supershape` | texture:image | out:geometry | 50 | bypass |
 | `Switcher 3D` | geo_a:geometry, geo_b:geometry, geo_c:geometry, geo_d:geometry | out:geometry | 5 |  |
 | `Tetrahedron` | texture:image | out:geometry | 50 | bypass |
 | `Text 3D` | texture:image | out:geometry | 29 | bypass |
 | `Torus` | texture:image | out:geometry | 50 | bypass |
 | `Torus Knot` | texture:image | out:geometry | 50 | bypass |
-| `Transform` | geo:geometry | out:geometry | 65 | bypass |
-| `Transform Selected` | geo:geometry | out:geometry | 65 | bypass |
-| `Triangulate` | geo:geometry | out:geometry | 65 | bypass |
+| `Transform` | geo:geometry | out:geometry | 67 | bypass |
+| `Transform Selected` | geo:geometry | out:geometry | 67 | bypass |
+| `Triangulate` | geo:geometry | out:geometry | 67 | bypass |
 | `Tube` | texture:image | out:geometry | 50 | bypass |
-| `Twist` | geo:geometry | out:geometry | 65 | bypass |
+| `Twist` | geo:geometry | out:geometry | 67 | bypass |
 | `Union` | geo_a:geometry, geo_b:geometry, geo_c:geometry, geo_d:geometry | out:geometry | 23 |  |
-| `Wireframe` | geo:geometry | out:geometry | 65 | bypass |
+| `Voronoi Cells` | points:geometry | out:geometry | 4 | bypass |
+| `Wireframe` | geo:geometry | out:geometry | 67 | bypass |
 | `Wrap` | source:geometry, target:geometry | out:geometry | 26 |  |
 
 ### AudioEffects
@@ -263,6 +272,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `chroma key` | input:image | out:image | 5 | bypass |
 | `color adjustments` | input:image | out:image | 23 | bypass |
 | `coloroverlay` | input:image | out:image | 2 | bypass |
+| `dither` | input:image | out:image | 3 | bypass |
 | `dropshadow` | input:image | out:image | 4 | bypass |
 | `exposure` | input:image | out:image | 1 | bypass |
 | `gradientmap` | input:image | out:image | 3 | bypass |
@@ -294,7 +304,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `edge outline` | input:image | out:image | 3 | bypass |
 | `edge sobel` | input:image | out:image | 2 | bypass |
 | `emboss` | input:image | out:image | 4 | bypass |
-| `gaussianblur` | input:image | out:image | 1 | bypass |
+| `gaussianblur` | input:image | out:image | 2 | bypass |
 | `glitch` | input:image | out:image | 5 | bypass |
 | `halftone` | input:image | out:image | 3 | bypass |
 | `kaleidoscope` | input:image | out:image | 5 | bypass |
@@ -339,7 +349,9 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Compare` | input:modulator, input_2:modulator | out:modulator | 4 |  |
 | `Constant` | none | out:modulator | 1 | bypass |
 | `Envelope` | in:modulator | out:modulator | 6 | bypass |
+| `Face Track` | input:image | present:modulator, head x:modulator, head y:modulator, yaw:modulator, pitch:modulator, roll:modulator, eye L:modulator, eye R:modulator, brows:modulator, mouth:modulator, smile:modulator, gaze x:modulator, gaze y:modulator | 3 | bypass |
 | `Geometry Table` | geo:geometry | cx:modulator, cy:modulator, cz:modulator, spread:modulator, x1:modulator, y1:modulator, z1:modulator, x2:modulator, y2:modulator, z2:modulator, x3:modulator, y3:modulator, z3:modulator, x4:modulator, y4:modulator, z4:modulator | 10 | bypass |
+| `Hand Track` | input:image | present:modulator, palm x:modulator, palm y:modulator, index x:modulator, index y:modulator, thumb x:modulator, thumb y:modulator, pinch:modulator, open:modulator, roll:modulator, size:modulator, fist:modulator, point:modulator, peace:modulator, thumbs up:modulator, ok:modulator, rock:modulator | 3 | bypass |
 | `Image Analyze` | input:image | result:modulator, bright:modulator, contrast:modulator, red:modulator, green:modulator, blue:modulator, sat:modulator, hue:modulator, motion:modulator, cx:modulator, cy:modulator | 14 | bypass |
 | `Invert` | in:modulator | out:modulator | 3 | bypass |
 | `LFO` | none | out:modulator | 5 | bypass |
@@ -353,9 +365,10 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Palette` | ref:image | out:palette | 14 | bypass |
 | `Path` | curve:geometry, geo:geometry | x:modulator, y:modulator, z:modulator, t:modulator | 14 |  |
 | `Pattern` | none | out:modulator | 24 | bypass |
+| `Pose Track` | input:image | present:modulator, body x:modulator, body y:modulator, head x:modulator, head y:modulator, wrist L x:modulator, wrist L y:modulator, wrist R x:modulator, wrist R y:modulator, arm L:modulator, arm R:modulator, spread:modulator, lean:modulator, size:modulator | 3 | bypass |
 | `Random` | none | out:modulator | 5 | bypass |
 | `Range to Range` | in:modulator | out:modulator | 6 | bypass |
-| `Smoothing` | in:modulator | out:modulator | 2 | bypass |
+| `Smoothing` | in:modulator | out:modulator | 6 | bypass |
 | `Sound Analyze` | none | f0:modulator, attack:modulator, decay:modulator, sustain:modulator, release:modulator, bright:modulator, noise:modulator, p1:modulator, p2:modulator, p3:modulator, p4:modulator, p5:modulator, p6:modulator, p7:modulator, p8:modulator, transient:modulator, transientDecay:modulator, air:modulator, keyLevel:modulator, keyTilt:modulator | 8 | bypass |
 | `Velocity to CV` | notes:note | out:modulator | 2 | bypass |
 | `Vibrato` | none | out:modulator | 1 | bypass |
@@ -368,6 +381,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Audio to MIDI` | audio:audio | notes:note | 9 | bypass |
 | `Bouncing Balls` | none | out:note | 9 | bypass |
 | `Chorder` | none | out:note | 9 | bypass |
+| `Field Notes` | notes:note | notes:note | 6 | bypass |
 | `Gate` | notes:note | out:note | 1 | bypass |
 | `Glide` | notes:note | out:note | 1 | bypass |
 | `Humanizer` | notes:note | out:note | 2 | bypass |
@@ -430,6 +444,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Ring` | none | out:image | 20 | bypass |
 | `Rounded Rect` | none | out:image | 20 | bypass |
 | `Shape` | none | out:image | 20 | bypass |
+| `Sketch` | none | out:image | 8 | bypass |
 | `Slideshow` | none | out:image | 7 | bypass |
 | `Star` | none | out:image | 20 | bypass |
 | `Superellipse` | none | out:image | 20 | bypass |
@@ -472,6 +487,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `Blend Audio` | a:audio, b:audio | out:audio | 1 |  |
 | `Field Graph` | none | out:image | 7 | bypass |
 | `Gain` | audio:audio | out:audio | 1 | bypass |
+| `MIDI Out` | notes:note | out:image | 16 | bypass |
 | `Mixer` | in_1:audio, in_2:audio, in_3:audio, in_4:audio, in_5:audio, in_6:audio, in_7:audio, in_8:audio | out:audio | 49 |  |
 | `NDI In` | none | out:image | 1 | hardware: refused headless, bypass |
 | `NDI Out` | in:image | out:image | 1 | bypass |
@@ -479,6 +495,7 @@ first, then the type name), then `--describe "<type>"` for parameters.
 | `OSC Send` | in:modulator | out:image | 5 | bypass |
 | `Output` | in:image, audio:audio | out:image | 9 |  |
 | `Projection` | in:image | out:image | 135 | bypass |
+| `Spatial Mixer` | input:audio, input_2:audio, input_3:audio, input_4:audio, input_5:audio, input_6:audio, input_7:audio, input_8:audio, input_9:audio, input_10:audio, input_11:audio, input_12:audio | out:image | 107 |  |
 | `Splitter` | audio:audio | out:audio | 0 | bypass |
 | `Syphon In` | none | out:image | 3 | hardware: refused headless, bypass |
 | `Syphon Out` | in:image | out:image | 1 | bypass |

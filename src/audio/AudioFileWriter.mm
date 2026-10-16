@@ -16,6 +16,13 @@
 
 namespace
 {
+   // 24-bit PCM as a sign-extended int32 in [-8388607, 8388607].
+   int32_t FloatToPcm24(float v)
+   {
+      const float clamped = std::clamp(v, -1.0f, 1.0f);
+      return (int32_t)std::lround((double)clamped * 8388607.0);
+   }
+
    int16_t FloatToPcm16(float v)
    {
       const float clamped = std::clamp(v, -1.0f, 1.0f);
@@ -71,6 +78,12 @@ int64_t AudioFileWriter::BytesWritten() const
    return mBytesWrittenDirect;
 }
 
+bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numChannels, Format format, int bitDepth)
+{
+   const WavEncoding enc = bitDepth >= 32 ? WavEncoding::Float32 : (bitDepth == 24 ? WavEncoding::Pcm24 : WavEncoding::Pcm16);
+   return Open(path, sampleRate, numChannels, format, enc);
+}
+
 bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numChannels, Format format,
                            WavEncoding wavEncoding)
 {
@@ -84,6 +97,7 @@ bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numCh
    mPath = path;
    mSampleRate = sampleRate;
    mNumChannels = std::max(1, numChannels);
+   mBitDepth = wavEncoding == WavEncoding::Pcm16 ? 16 : 24; // FLAC has no float: Float32 WAV maps to 24-bit
    mFramesWritten = 0;
    mBytesWrittenDirect = 0;
 
@@ -110,6 +124,8 @@ bool AudioFileWriter::Open(const std::string& path, double sampleRate, int numCh
          outFormat.mSampleRate = sampleRate;
          outFormat.mFormatID = kAudioFormatFLAC;
          outFormat.mChannelsPerFrame = (UInt32)mNumChannels;
+         if (mBitDepth == 24)
+            outFormat.mFormatFlags = 3; // encoder's source-bit-depth flag: 24-bit
 
          ExtAudioFileRef extRef = NULL;
          NSString* nsPath = [NSString stringWithUTF8String:path.c_str()];

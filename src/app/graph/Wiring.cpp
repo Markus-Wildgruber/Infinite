@@ -64,6 +64,12 @@
 #include "nodes/UtilityNodes.h"
 #include "nodes/VideoSourceNode.h"
 #include "nodes/WaveTerrainNode.h"
+#include "nodes/CurveOpsNode.h"
+#include "nodes/DelaunayNodes.h"
+#include "nodes/FieldNotesNode.h"
+#include "nodes/MidiOutNode.h"
+#include "nodes/TrackNodeBase.h"
+#include "nodes/OscNodes.h"
 
 namespace app
 {
@@ -370,7 +376,8 @@ namespace app
          return 1;
       if (dynamic_cast<DrawNode*>(gn.node.get()) != nullptr)
          return 1;
-      if (dynamic_cast<ImageAnalyzeNode*>(gn.node.get()) != nullptr)
+      if (dynamic_cast<ImageAnalyzeNode*>(gn.node.get()) != nullptr ||
+          dynamic_cast<TrackNodeBase*>(gn.node.get()) != nullptr)
          return 1;
       if (dynamic_cast<PaletteNode*>(gn.node.get()) != nullptr)
          return 1; // the reference image, when it comes from the graph
@@ -438,6 +445,10 @@ namespace app
       if (dynamic_cast<DistributePointsOnFacesNode*>(gn.node.get()) != nullptr)
          return 1;
       if (dynamic_cast<PointsToVerticesNode*>(gn.node.get()) != nullptr)
+         return 1;
+      if (dynamic_cast<DelaunayMeshNode*>(gn.node.get()) != nullptr)
+         return 1;
+      if (dynamic_cast<CurveOpsNode*>(gn.node.get()) != nullptr)
          return 1;
       if (dynamic_cast<MergeByDistanceNode*>(gn.node.get()) != nullptr)
          return 1;
@@ -550,6 +561,8 @@ namespace app
          return slot == 0 ? &draw->Input() : nullptr;
       if (auto* an = dynamic_cast<ImageAnalyzeNode*>(gn.node.get()))
          return slot == 0 ? &an->Input() : nullptr;
+      if (auto* ht = dynamic_cast<TrackNodeBase*>(gn.node.get()))
+         return slot == 0 ? &ht->Input() : nullptr;
       if (auto* pal = dynamic_cast<PaletteNode*>(gn.node.get()))
          return slot == 0 ? &pal->Input() : nullptr;
       if (auto* fp = dynamic_cast<FieldPixelNode*>(gn.node.get()))
@@ -736,7 +749,8 @@ namespace app
       auto* dstMaterial = dynamic_cast<MaterialNode*>(dstNode->node.get());
       auto* dstDisplacement = dynamic_cast<DisplacementNode*>(dstNode->node.get());
       auto* dstSetColor = dynamic_cast<SetColorNode*>(dstNode->node.get());
-      const bool dstWantsImage = dynamic_cast<ImageAnalyzeNode*>(dstNode->node.get()) != nullptr;
+      const bool dstWantsImage = dynamic_cast<ImageAnalyzeNode*>(dstNode->node.get()) != nullptr ||
+                                 dynamic_cast<TrackNodeBase*>(dstNode->node.get()) != nullptr;
 
       const bool srcIsImage = !srcIsModulator && srcPalette == nullptr &&
                               srcGeometry == nullptr && srcCamera == nullptr &&
@@ -1040,7 +1054,7 @@ namespace app
          return false;
       }
 
-      PushUndoCheckpoint();
+      PushUndoCheckpoint("Connect cable");
       WireInputSlot(*srcNode, *dstNode, dstSlot, srcOutputIndex);
       if (srcIsAudioNode || srcIsNoteSource ||
           dstNode->node->AudioInputSlot(dstSlot) != nullptr ||
@@ -1532,6 +1546,14 @@ namespace app
       gn.uid = gNextNodeUid++;
       gn.spawnX = x;
       gn.spawnY = y;
+      // The analysers and the external senders (MIDI Out, OSC Send) are their params and status line; collapsed
+      // they show nothing. Load, paste and undo restore the saved flag over this, so only a fresh spawn opens.
+      gn.showParams = dynamic_cast<ImageAnalyzeNode*>(gn.node.get()) != nullptr ||
+                      dynamic_cast<TrackNodeBase*>(gn.node.get()) != nullptr ||
+                      dynamic_cast<AudioAnalyzeNode*>(gn.node.get()) != nullptr ||
+                      dynamic_cast<GeometryTableNode*>(gn.node.get()) != nullptr ||
+                      dynamic_cast<MidiOutNode*>(gn.node.get()) != nullptr ||
+                      dynamic_cast<OscSendNode*>(gn.node.get()) != nullptr;
       gNodes.push_back(std::move(gn));
       NoteNodeAppended();
       return &gNodes.back();
@@ -1598,6 +1620,8 @@ namespace app
          fs->Apply();
       if (auto* fsn = dynamic_cast<FieldSynthNode*>(node))
          fsn->Apply();
+      if (auto* fnn = dynamic_cast<FieldNotesNode*>(node))
+         fnn->Apply();
       // Re-instantiates the plugin from the identity VisitParams just restored
       // and queues its saved fullState; the actual load finishes
       // asynchronously, a frame or two later, in CookIfNeeded.

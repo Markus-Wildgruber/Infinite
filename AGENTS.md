@@ -43,6 +43,7 @@ One owner per topic: if two files seem to disagree, the skill named in this tabl
 | `shortcuts-sweep` | Sweep | Keyboard shortcuts checks |
 | `audio-node-ui` | UI | Layout/widget grammar for audio node UI |
 | `node-ui-pillars` | UI | Symmetry/contrast rules for all node UI (load before any node UI edit) |
+| `infinite-design-system` | UI | How every element looks/moves: tokens, components, icons, motion, CI ratchet (load before any style/icon/chrome change) |
 | `node-param-audit` | Params | Which controls are modulatable (ParamRef inventory) |
 | `param-truth-audit` | Params | Does the DSP do what the control's range/gate/label claims |
 | `rhythmic-quantization-standard` | Timing | Standardized rhythmic divisions & quantize table |
@@ -51,6 +52,7 @@ One owner per topic: if two files seem to disagree, the skill named in this tabl
 | `codebase-navigation` | Process | How to search this codebase completely; living map of wiring hotspots |
 | `bug-blast-radius` | Process | The 9-question impact analysis before fixing any bug (sole owner of the 9 questions) |
 | `infinite-patch-authoring` | Process | Write, validate, explain and render `.inf` patches headless; node facts are generated (`tools/gen-patch-skill.py`) |
+| `tool-first` | Process | Write a script/tool instead of by-hand work; inventory of existing tools in `tools/` and `scripts/` |
 | `write-fix-brief` | Process | Turn a bug report / findings / idea into a verified implementation prompt |
 | `invariant-interaction-audit` | Process | Before shipping any guarantee: can a sibling control or call site undo it |
 | `infinite-code-review` | Process | Review code against Infinite's four standards |
@@ -83,4 +85,5 @@ One owner per topic: if two files seem to disagree, the skill named in this tabl
 1. **Clean Room / Licensing**: Infinite is MIT licensed. Never open, read, grep, or reference GPL/AGPL source code (e.g. Kronos, Cmajor, SuperCollider, BespokeSynth). Citing open academic papers (e.g. Kronos paper Norilo 2015) is permitted. The one exception is `prior-art-scout`: it may read a copyleft project's *discussions* (issues, PR threads, commit messages, docs), but never its source or diffs. Licence tags are in `prior-art-scout/peers.md`.
 2. **Syntax Rules**: Bare names, no sigils (e.g. `P.y += bass * 2`, never `@P.y += bass * 2`).
 3. **Three platforms**: every `Platform::` function has macOS, Windows and Linux sides (`windows-parity`, `linux-parity`).
-4. **Execution Rule**: Before making changes or running procedures related to any category above, always view and execute against the corresponding skill file.
+4. **Brand book**: anything on a brand surface (website, films, thumbnails, social, docs) follows `docs/brand/BRAND.md`; values come from `docs/brand/brand.json`, visual version `docs/brand/brand-book.html` (rebuild with `python3 tools/brand/build_brand_book.py`); every brand file is made by a tool in `tools/brand/` (table at the top of BRAND.md), and `tools/brand/brand_lint.py` checks a surface before it ships. The app's own UI follows `infinite-design-system`. If they disagree on a brand surface, the brand book wins.
+5. **Execution Rule**: Before making changes or running procedures related to any category above, always view and execute against the corresponding skill file.

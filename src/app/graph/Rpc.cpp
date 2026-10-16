@@ -13,6 +13,7 @@
 #include "nodes/UtilityNodes.h"
 #include "nodes/Geometry3DNodes.h"
 #include "nodes/OutputNode.h"
+#include "app/AppArrange.h"
 
 namespace app
 {

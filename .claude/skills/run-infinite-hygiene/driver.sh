@@ -149,6 +149,8 @@ TIER1_CHECKS=(
   "AUTOSAVEMARKERTEST:1"
   "PATCHWATCHTEST:12"
   "RPCBATCHTEST:12"
+  "HISTORYTEST:12"
+  "CLIPBOARDTEST:10"
 )
 
 # INFINITE_MIDIPARSETEST is a Linux-only fixture (#if defined(__linux__) in
@@ -232,6 +234,7 @@ GROUP_UI=(
   "DRAGTEST:35"
   "KBCURSORTEST:260"
   "NAVTEST:30"
+  "FINDTEST:190"
   "UXLEFTOVERSTEST:25"
   "TEXTFOCUSTEST:12"
   "THEMECONTRASTTEST:10"
@@ -239,6 +242,10 @@ GROUP_UI=(
   "WTDRAGTEST:80"
   "NODETITLETEST:10"
   "UISCALETEST:40"
+  "UITYPETEST:10"
+  "UILAYOUTTEST:10"
+  "UIINTERACTTEST:10"
+  "UICOMPTEST:10"
 )
 
 GROUP_MODULATION=(
@@ -257,6 +264,7 @@ GROUP_MODULATION=(
   "PREDBINDTEST:120"
   "DRIFTTEST:40"
   "MODDROPDOWNUNDOTEST:66"
+  "KEYEDSTARTEST:26"
 )
 
 GROUP_VIDEO=(
@@ -277,6 +285,7 @@ GROUP_MEDIA=(
   "MIDIBENDTEST:1"
   "VST3SCANTEST:1"
   "BROWSERSORTTEST:1"
+  "LIBREFRESHTEST:1"
 )
 if [ "$OS" = "Linux" ]; then
   GROUP_MEDIA+=("VST3EDITORSHOTTEST:1" "VST3BLOCKLISTTEST:1")
@@ -335,6 +344,7 @@ FULL_TESTS=(
   "LAUNCHERCARDTEST:1"
   "PATCHLAYOUTTEST:1"
   "PATCHLAYOUTLIVETEST:25"
+  "KEYEDSTARTEST:26"
   "GROUPTEST:46"
   "COMMENTTEST:15"
   "HIDETEST:35"
@@ -391,6 +401,7 @@ FULL_TESTS=(
   "DRAGTEST:35"
   "KBCURSORTEST:260"
   "NAVTEST:30"
+  "FINDTEST:190"
   "THEMECONTRASTTEST:10"
   "KBDISCRETETEST:420"
   "WTDRAGTEST:80"
@@ -415,6 +426,8 @@ FULL_TESTS=(
   "AUTOSAVEMARKERTEST:1"
   "PATCHWATCHTEST:12"
   "RPCBATCHTEST:12"
+  "HISTORYTEST:12"
+  "CLIPBOARDTEST:10"
   "REMOVEBGTEST:1"
   "CURVESLUTTEST:10"
   "METALLICDECAYTEST:1"
@@ -719,6 +732,20 @@ for spec in "${SELECTED_TESTS[@]}"; do
     fi
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Design lints + component-gallery goldens run whenever the ui group did (tools/design/).
+if [[ " ${SELECTED_TESTS[*]:-} " == *" FINDTEST:190 "* ]]; then
+  step "Design lints and gallery goldens"
+  for lint in "contrast.py" "motion_lint.py" "ratchet.py" "golden.py"; do
+    if lint_out=$(python3 "$ROOT/tools/design/$lint" 2>&1); then
+      echo "  [pass]  design/$lint  — $(echo "$lint_out" | tail -1)"; PASS=$((PASS+1))
+    else
+      echo "  [FAIL]  design/$lint"; echo "$lint_out" | tail -8 | sed 's/^/          /'
+      FAIL=$((FAIL+1)); FAILED_NAMES+=("design/$lint")
+    fi
+  done
+fi
 
 # ---------------------------------------------------------------------------
 step "Summary"

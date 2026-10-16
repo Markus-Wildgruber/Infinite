@@ -1,4 +1,6 @@
 // Generic node parameter bodies, part 2: curves, palettes, ramps, analyze (moved verbatim from main.cpp).
+#include "app/ui/design/TokenColors.h"
+#include "app/ui/design/components/FieldWell.h"
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "audio/dsp/AudioFilterKernel.h"
@@ -18,6 +20,11 @@
 #include "nodes/PredictiveColoringNode.h"
 #include "nodes/RampNode.h"
 #include "nodes/RemoveBgNode.h"
+#include "app/ui/design/components/FormParts.h"
+#include "app/ui/design/components/AudioViz.h"
+#include "app/ui/design/components/GlyphToggle.h"
+#include "app/ui/design/Glyphs.gen.h"
+#include "nodes/TrackNodeBase.h"
 
 namespace app
 {
@@ -41,12 +48,15 @@ namespace app
       const bool hovered = ImGui::IsItemHovered();
       const bool active = ImGui::IsItemActive();
 
+      // R12: plotted values and handles live in an inset box so nothing touches or crosses the frame.
+      const float pad = 6.0f;
+      const float inner = size - 2.0f * pad;
       auto toScreen = [&](float x, float y) {
-         return ImVec2(origin.x + x * size, origin.y + (1.0f - y) * size);
+         return ImVec2(origin.x + pad + x * inner, origin.y + pad + (1.0f - y) * inner);
       };
       auto toCurve = [&](ImVec2 p) {
-         return ImVec2(std::min(1.0f, std::max(0.0f, (p.x - origin.x) / size)),
-                       std::min(1.0f, std::max(0.0f, 1.0f - (p.y - origin.y) / size)));
+         return ImVec2(std::min(1.0f, std::max(0.0f, (p.x - origin.x - pad) / inner)),
+                       std::min(1.0f, std::max(0.0f, 1.0f - (p.y - origin.y - pad) / inner)));
       };
 
       std::vector<CurveShape::Point>& pts = shape.points;
@@ -111,19 +121,19 @@ namespace app
       ImDrawList* dl = ImGui::GetWindowDrawList();
       ImVec2 br(origin.x + size, origin.y + size);
       const bool isLight = IsThemeLight();
-      dl->AddRectFilled(origin, br, ScopeBgCol(), 4.0f);
+      AudioViz::Fill(dl, origin, br);
       for (int i = 1; i < 4; i++)
       {
          float f = (float)i / 4.0f;
-         dl->AddLine(ImVec2(origin.x + size * f, origin.y), ImVec2(origin.x + size * f, br.y), ScopeGridCol());
-         dl->AddLine(ImVec2(origin.x, origin.y + size * f), ImVec2(br.x, origin.y + size * f), ScopeGridCol());
+         dl->AddLine(ImVec2(origin.x + pad + inner * f, origin.y), ImVec2(origin.x + pad + inner * f, br.y), ScopeGridCol());
+         dl->AddLine(ImVec2(origin.x, origin.y + pad + inner * f), ImVec2(br.x, origin.y + pad + inner * f), ScopeGridCol());
       }
-      dl->AddLine(origin, ImVec2(br.x, br.y), ScopeMidLineCol()); // identity reference
+      dl->AddLine(toScreen(0.0f, 0.0f), toScreen(1.0f, 1.0f), ScopeMidLineCol()); // identity reference
       if (crosshair)
       {
          ImVec2 mid = toScreen(0.5f, 0.5f);
-         dl->AddLine(ImVec2(mid.x, origin.y), ImVec2(mid.x, br.y), isLight ? IM_COL32(100, 110, 130, 200) : IM_COL32(120, 124, 140, 200));
-         dl->AddLine(ImVec2(origin.x, mid.y), ImVec2(br.x, mid.y), isLight ? IM_COL32(100, 110, 130, 200) : IM_COL32(120, 124, 140, 200));
+         dl->AddLine(ImVec2(mid.x, origin.y), ImVec2(mid.x, br.y), isLight ? tok::U32(tok::pal::c_646E82C8) : tok::U32(tok::pal::c_787C8CC8));
+         dl->AddLine(ImVec2(origin.x, mid.y), ImVec2(br.x, mid.y), isLight ? tok::U32(tok::pal::c_646E82C8) : tok::U32(tok::pal::c_787C8CC8));
       }
 
       const int kSegments = 64;
@@ -138,16 +148,16 @@ namespace app
       {
          ImVec2 sp = toScreen(pts[i].x, pts[i].y);
          dl->AddCircleFilled(sp, i == nearest ? 6.0f : 4.5f, lineCol);
-         dl->AddCircle(sp, i == nearest ? 6.0f : 4.5f, isLight ? IM_COL32(240, 242, 248, 255) : IM_COL32(18, 18, 26, 255), 0, 1.5f);
+         dl->AddCircle(sp, i == nearest ? 6.0f : 4.5f, isLight ? tok::U32(tok::pal::c_F0F2F8FF) : tok::U32(tok::pal::c_12121AFF), 0, 1.5f);
       }
       if (liveX >= 0.0f)
       {
          float clampedX = std::min(1.0f, std::max(0.0f, liveX));
          ImVec2 dot = toScreen(clampedX, shape.Evaluate(clampedX));
-         dl->AddCircleFilled(dot, 5.0f, isLight ? IM_COL32(220, 130, 20, 255) : IM_COL32(255, 200, 60, 255));
-         dl->AddCircle(dot, 5.0f, isLight ? IM_COL32(240, 242, 248, 255) : IM_COL32(18, 18, 26, 255), 0, 1.5f);
+         dl->AddCircleFilled(dot, 5.0f, isLight ? tok::U32(tok::pal::c_DC8214FF) : tok::U32(tok::pal::c_FFC83CFF));
+         dl->AddCircle(dot, 5.0f, isLight ? tok::U32(tok::pal::c_F0F2F8FF) : tok::U32(tok::pal::c_12121AFF), 0, 1.5f);
       }
-      dl->AddRect(origin, br, ScopeBorderCol(), 4.0f);
+      AudioViz::Border(dl, origin, br);
    }
 
 
@@ -156,12 +166,12 @@ namespace app
       DropdownButton("channel", CurvesNode::ChannelNames(), n->activeChannel,
                      [n](int i) { n->activeChannel = i; });
       const bool isLight = IsThemeLight();
-      ImU32 lineCol = isLight ? IM_COL32(30, 40, 60, 255) : IM_COL32(230, 235, 250, 255);
-      if (n->activeChannel == CurvesNode::kRed)   lineCol = isLight ? IM_COL32(220, 40, 40, 255) : IM_COL32(255, 110, 110, 255);
-      if (n->activeChannel == CurvesNode::kGreen) lineCol = isLight ? IM_COL32(25, 160, 60, 255) : IM_COL32(120, 230, 130, 255);
-      if (n->activeChannel == CurvesNode::kBlue)  lineCol = isLight ? IM_COL32(30, 100, 230, 255) : IM_COL32(120, 170, 255, 255);
+      ImU32 lineCol = isLight ? tok::U32(tok::pal::c_1E283CFF) : tok::U32(tok::pal::c_E6EBFAFF);
+      if (n->activeChannel == CurvesNode::kRed)   lineCol = isLight ? tok::U32(tok::pal::c_DC2828FF) : tok::U32(tok::pal::c_FF6E6EFF);
+      if (n->activeChannel == CurvesNode::kGreen) lineCol = isLight ? tok::U32(tok::pal::c_19A03CFF) : tok::U32(tok::pal::c_78E682FF);
+      if (n->activeChannel == CurvesNode::kBlue)  lineCol = isLight ? tok::U32(tok::pal::c_1E64E6FF) : tok::U32(tok::pal::c_78AAFFFF);
       DrawCurveEditor(n->Shape(n->activeChannel), lineCol);
-      if (ImGui::Button("Reset channel", ImVec2(kPreviewSize, 0)))
+      if (ActionButton::Draw("Reset channel", ImVec2(kPreviewSize, 0)))
          n->ResetChannel(n->activeChannel);
       ModSlider("mix", &n->mix, 0.0f, 1.0f);
    }
@@ -186,21 +196,21 @@ namespace app
       ImGui::TextDisabled("%s", statusBuf);
 
       const char* learnLabel = learning ? "Stop Learning" : (hasLearned ? "Learn Again" : "Learn");
-      if (ImGui::Button(learnLabel, ImVec2(hasLearned && !learning ? 95 : 120, 0)))
+      if (ActionButton::Draw(learnLabel, ImVec2(hasLearned && !learning ? 95 : 120, 0)))
       {
          PushUndoCheckpoint();
          n->SetLearning(!learning);
       }
       if (hasLearned && !learning)
       {
-         ImGui::SameLine();
-         if (ImGui::Button("Reset", ImVec2(50, 0)))
+         FormParts::Inline();
+         if (ActionButton::Draw("Reset", ImVec2(50, 0)))
          {
             PushUndoCheckpoint();
             n->ResetProfile();
          }
       }
-      ImGui::SameLine();
+      // Confidence reads on its own status line under the buttons, not squeezed beside Learn.
       char confText[32];
       // While learning, show THIS take's own local progress - not the blended confidence, which
       // is mostly settled shared/house-style weight and barely moves as this instance learns.
@@ -210,8 +220,8 @@ namespace app
          snprintf(confText, sizeof(confText), "learning - %d%%", (int)std::round(badgeVal * 100.0f));
       else
          snprintf(confText, sizeof(confText), "%d%% conf", (int)std::round(badgeVal * 100.0f));
-      ImGui::TextColored(badgeVal > 0.6f ? (isLight ? ImVec4(0.1f, 0.6f, 0.2f, 1.0f) : ImVec4(0.2f, 0.85f, 0.35f, 1.0f))
-                                    : (isLight ? ImVec4(0.7f, 0.4f, 0.1f, 1.0f) : ImVec4(0.9f, 0.7f, 0.2f, 1.0f)),
+      ImGui::TextColored(badgeVal > 0.6f ? (isLight ? tok::V4(tok::palf::v_100_600_200_1000) : tok::V4(tok::palf::v_200_850_350_1000))
+                                    : (isLight ? tok::V4(tok::palf::v_700_400_100_1000) : tok::V4(tok::palf::v_900_700_200_1000)),
                          "%s", confText);
 
       PushCheckboxStyle();
@@ -228,7 +238,7 @@ namespace app
    {
       const bool isLight = IsThemeLight();
       const float in = n->input ? n->input->Value01() : n->constantIn;
-      DrawCurveEditor(n->curve, isLight ? IM_COL32(30, 110, 230, 255) : IM_COL32(230, 235, 250, 255), /*resetOnEmptyRightClick=*/true,
+      DrawCurveEditor(n->curve, isLight ? tok::U32(tok::pal::c_1E6EE6FF) : tok::U32(tok::pal::c_E6EBFAFF), /*resetOnEmptyRightClick=*/true,
                      /*crosshair=*/true, /*liveX=*/in);
       if (n->input == nullptr)
          ModSlider("in (no cable)", &n->constantIn, 0.0f, 1.0f);
@@ -244,12 +254,13 @@ namespace app
       DropdownButton("output", RemoveBgNode::OutputModeNames(), n->outputMode,
                      [n](int i) { n->outputMode = i; });
 
-      if (ImGui::Button("Remove Background", ImVec2(kPreviewSize, 0)))
+      if (ActionButton::Draw("Remove Background", ImVec2(kPreviewSize, 0)))
          n->RequestMask();
 
       ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
       ImGui::TextDisabled("%s", n->Status().c_str());
-      ImGui::TextDisabled("engine: %s", Platform::MattingBackend().c_str());
+      if (ImGui::IsItemHovered())
+         ImGui::SetTooltip("engine: %s", Platform::MattingBackend().c_str());
       ImGui::PopTextWrapPos();
 
       ModSlider("feather", &n->feather, 0.0f, 4.0f);
@@ -281,7 +292,7 @@ namespace app
       ModSlider("drift x", &n->driftX, -0.02f, 0.02f);
       ModSlider("drift y", &n->driftY, -0.02f, 0.02f);
       ModSlider("hue shift", &n->hueShift, -0.05f, 0.05f);
-      if (ImGui::Button("Clear", ImVec2(kPreviewSize, 0)))
+      if (ActionButton::Draw("Clear", ImVec2(kPreviewSize, 0)))
          n->Clear();
    }
 
@@ -301,7 +312,7 @@ namespace app
       ModSlider("height", &n->height, 64.0f, 2048.0f, "%.0f");
       ColorSwatch("low", n->lowColor, n);
       ColorSwatch("high", n->highColor, n);
-      if (ImGui::Button("Reseed", ImVec2(kPreviewSize, 0)))
+      if (ActionButton::Draw("Reseed", ImVec2(kPreviewSize, 0)))
          n->Reseed();
    }
 
@@ -316,7 +327,7 @@ namespace app
       const float h = 118.0f;
       ImDrawList* dl = ImGui::GetWindowDrawList();
       dl->AddRectFilled(origin, ImVec2(origin.x + kPreviewSize, origin.y + h),
-                        IM_COL32(18, 18, 24, 255), 4.0f);
+                        tok::U32(tok::pal::c_121218FF), 4.0f);
 
       const int count = std::max(1, n->SwatchCount());
       const float pad = 6.0f;
@@ -339,11 +350,11 @@ namespace app
          const float weight = n->SwatchWeight(i);
          dl->AddRectFilled(ImVec2(tl.x, br.y + 4.0f),
                            ImVec2(tl.x + (chipW - 2.0f) * std::min(1.0f, weight), br.y + 7.0f),
-                           IM_COL32(150, 156, 176, 255));
+                           tok::U32(tok::pal::c_969CB0FF));
 
          char idx[8];
          snprintf(idx, sizeof(idx), "%d", i + 1);
-         dl->AddText(ImVec2(tl.x + 2.0f, br.y + 9.0f), IM_COL32(118, 124, 144, 255), idx);
+         dl->AddText(ImVec2(tl.x + 2.0f, br.y + 9.0f), tok::U32(tok::pal::c_767C90FF), idx);
       }
 
       const char* status;
@@ -352,19 +363,19 @@ namespace app
       else if (!n->LoadedPath().empty())
          status = "from file";
       else
-         status = "choose a photo, or cable one to 'ref'";
+         status = "choose a photo or cable 'ref'";
       dl->AddText(ImVec2(origin.x + pad, origin.y + h - 18.0f),
-                  IM_COL32(126, 132, 152, 255), status);
+                  tok::U32(tok::pal::c_7E8498FF), status);
 
       dl->AddRect(origin, ImVec2(origin.x + kPreviewSize, origin.y + h),
-                  IM_COL32(70, 74, 90, 255), 4.0f);
+                  tok::U32(tok::pal::c_464A5AFF), 4.0f);
       ImGui::Dummy(ImVec2(kPreviewSize, h));
    }
 
 
    void DrawPaletteParams(PaletteNode* n)
    {
-      if (ImGui::Button("Choose reference...", ImVec2(kPreviewSize, 0)))
+      if (ActionButton::Draw("Choose reference...", ImVec2(kPreviewSize, 0)))
          n->LoadViaDialog();
 
       if (!n->LastError().empty())
@@ -397,7 +408,7 @@ namespace app
       // checkbox renumbers every pin after it, which silently repoints this
       // node's modulation the moment the box is ticked.
       ModSlider("rate", &n->sampleRate, 1.0f, 60.0f, "%.0f");
-      if (ImGui::Button("Re-extract", ImVec2(kPreviewSize, 0)))
+      if (ActionButton::Draw("Re-extract", ImVec2(kPreviewSize, 0)))
          n->RequestExtract();
 
       // Shaping runs on the stored cluster centres, so these are live: they
@@ -453,6 +464,8 @@ namespace app
       const float barH = 26.0f;
       const float trackH = 22.0f;
       const float gap = 4.0f;
+      const float pad = 7.0f; // R12: stop handles (radius up to 7) stay inside the frame
+      const float inner = size - 2.0f * pad;
 
       ImVec2 origin = ImGui::GetCursorScreenPos();
       ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -466,28 +479,28 @@ namespace app
          float c0[3], c1[3];
          n->Evaluate(t0, c0);
          n->Evaluate(t1, c1);
-         ImVec2 tl(origin.x + t0 * size, origin.y);
-         ImVec2 br(origin.x + t1 * size + 1.0f, origin.y + barH);
+         ImVec2 tl(origin.x + pad + t0 * inner, origin.y);
+         ImVec2 br(origin.x + pad + t1 * inner + (i + 1 == kSegments ? 0.0f : 1.0f), origin.y + barH);
          ImU32 col0 = IM_COL32((int)(c0[0] * 255), (int)(c0[1] * 255), (int)(c0[2] * 255), 255);
          ImU32 col1 = IM_COL32((int)(c1[0] * 255), (int)(c1[1] * 255), (int)(c1[2] * 255), 255);
          dl->AddRectFilledMultiColor(tl, br, col0, col1, col1, col0);
       }
-      dl->AddRect(origin, ImVec2(origin.x + size, origin.y + barH), IM_COL32(70, 74, 90, 255), 3.0f);
+      dl->AddRect(ImVec2(origin.x + pad, origin.y), ImVec2(origin.x + size - pad, origin.y + barH), tok::U32(tok::pal::c_464A5AFF), 3.0f);
 
       // stop track
       ImVec2 trackOrigin(origin.x, origin.y + barH + gap);
       ImVec2 trackBr(origin.x + size, trackOrigin.y + trackH);
-      dl->AddRectFilled(trackOrigin, trackBr, IM_COL32(16, 16, 22, 255), 3.0f);
-      dl->AddRect(trackOrigin, trackBr, IM_COL32(70, 74, 90, 255), 3.0f);
+      dl->AddRectFilled(trackOrigin, trackBr, tok::U32(tok::pal::c_101016FF), 3.0f);
+      dl->AddRect(trackOrigin, trackBr, tok::U32(tok::pal::c_464A5AFF), 3.0f);
 
       ImGui::SetCursorScreenPos(trackOrigin);
       ImGui::InvisibleButton("##colorramp", ImVec2(size, trackH));
       const bool hovered = ImGui::IsItemHovered();
       const bool active = ImGui::IsItemActive();
 
-      auto toScreenX = [&](float x) { return trackOrigin.x + x * size; };
+      auto toScreenX = [&](float x) { return trackOrigin.x + pad + x * inner; };
       auto toX = [&](float screenX) {
-         return std::min(1.0f, std::max(0.0f, (screenX - trackOrigin.x) / size));
+         return std::min(1.0f, std::max(0.0f, (screenX - trackOrigin.x - pad) / inner));
       };
 
       static ColorRampNode* sDragNode = nullptr;
@@ -561,7 +574,7 @@ namespace app
          float r = (i == nearest || isSel) ? 7.0f : 5.5f;
          ImVec2 tip(x, trackOrigin.y + 2.0f);
          dl->AddTriangleFilled(ImVec2(x - r, tip.y + r * 1.6f), ImVec2(x + r, tip.y + r * 1.6f), tip,
-                               isSel ? IM_COL32(255, 220, 120, 255) : IM_COL32(220, 224, 236, 255));
+                               isSel ? tok::U32(tok::pal::c_FFDC78FF) : tok::U32(tok::pal::c_DCE0ECFF));
          ImVec2 chipTl(x - r * 0.6f, tip.y + r * 1.6f + 1.0f);
          dl->AddRectFilled(chipTl, ImVec2(chipTl.x + r * 1.2f, chipTl.y + 5.0f), fill);
       }
@@ -589,7 +602,7 @@ namespace app
          ColorSwatch(label, n->stopColor[idx], n);
          ImGui::SameLine(size - 18.0f);
          ImGui::BeginDisabled(n->stopCount <= 2);
-         if (ImGui::SmallButton("x"))
+         if (GlyphToggle::Draw("##delstop", IconsInfinite::Close, IconsInfinite::Close, false))
          {
             PushUndoCheckpoint();
             n->RemoveStop(idx);
@@ -602,7 +615,7 @@ namespace app
       n->MarkDirty();
 
       ImGui::BeginDisabled(n->stopCount >= ColorRampNode::kMaxStops);
-      if (ImGui::Button("+ stop", ImVec2(size, 0)))
+      if (ActionButton::Draw("+ stop", ImVec2(size, 0)))
       {
          PushUndoCheckpoint();
          float x = n->stopCount > 0 ? std::min(1.0f, n->stopPos[order[n->stopCount - 1]] + 0.1f) : 0.5f;
@@ -630,6 +643,7 @@ namespace app
       const float b = n->RawB();
       const float res = n->Value(ImageAnalyzeNode::kResult);
 
+      gParamWidthLive = kParamWidthBase;   // two-column body keeps its column width; only single-column bodies stretch to the header (R3)
       const float colW = kParamWidth;
       const float gutter = 16.0f;
 
@@ -638,8 +652,8 @@ namespace app
       ImGui::ColorButton("##ImageAnalyzeSwatch", col, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(24, 24));
       ImGui::SameLine();
       ImGui::BeginGroup();
+      ImGui::Dummy(ImVec2(0.0f, 4.0f));
       ImGui::Text("Result: %.3f", res);
-      ImGui::ProgressBar(std::clamp(res, 0.0f, 1.0f), ImVec2(kPreviewSize * 0.55f, 0), "");
       ImGui::EndGroup();
 
       // --- Left Column ---
@@ -647,7 +661,7 @@ namespace app
 
       NodeSeparator("sample", colW);
       DropdownButton("sample mode", ImageAnalyzeNode::SampleModeNames(), n->sampleMode,
-                     [n](int i) { PushUndoCheckpoint(); n->sampleMode = i; }, colW);
+                     [n](int i) { PushUndoCheckpoint(); n->sampleMode = i; }, colW, /*showCaption=*/false);
 
       if (n->sampleMode == ImageAnalyzeNode::kPointProbe ||
           n->sampleMode == ImageAnalyzeNode::kBoxRegion ||
@@ -661,33 +675,26 @@ namespace app
 
       NodeSeparator("operation", colW);
       DropdownButton("operation", ImageAnalyzeNode::MathOpNames(), n->mathOp,
-                     [n](int i) { PushUndoCheckpoint(); n->mathOp = i; }, colW);
+                     [n](int i) { PushUndoCheckpoint(); n->mathOp = i; }, colW, /*showCaption=*/false);
 
       if (n->mathOp == ImageAnalyzeNode::kCustomExpression)
       {
          char buf[256];
          snprintf(buf, sizeof(buf), "%s", n->customFormula.c_str());
          ImGui::SetNextItemWidth(colW);
-         if (ImGui::InputText("formula", buf, sizeof(buf)))
+         if (FieldWell::InputText("formula", buf, sizeof(buf)))
          {
             n->customFormula = buf;
          }
          if (!n->ExpressionError().empty())
          {
-            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "err: %s", n->ExpressionError().c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_400_400_1000), "err: %s", n->ExpressionError().c_str());
          }
          else
          {
             ImGui::TextDisabled("vars: r, g, b, a, lum, sat, hue, delta, t");
          }
       }
-
-      NodeSeparator("shaping", colW);
-      ModSlider("gain", &n->gain, 0.0f, 8.0f, "%.3f", colW);
-      ModSlider("offset", &n->offset, -1.0f, 1.0f, "%.3f", colW);
-      ModSlider("power", &n->power, 0.1f, 5.0f, "%.3f", colW);
-      ModCheckbox("invert", &n->invert);
-      ModCheckbox("clamp 0..1", &n->clamp01);
 
       NodeSeparator("sampling", colW);
       ModSlider("smoothing", &n->smoothing, 0.0f, 0.99f, "%.3f", colW);
@@ -700,29 +707,98 @@ namespace app
       ImGui::SameLine(0.0f, gutter);
       ImGui::BeginGroup();
 
-      NodeSeparator("outputs", colW);
-      const float labelW = 60.0f;
-      const float barW = colW - labelW;
-      for (int i = 0; i < ImageAnalyzeNode::kOutputCount; i++)
-      {
-         const float v = n->Value(i);
-         ImGui::Text("%-9s", n->OutputLabel(i));
-         ImGui::SameLine(labelW);
-         ImGui::ProgressBar(std::clamp(v, 0.0f, 1.0f), ImVec2(barW, 0), "");
-      }
+      NodeSeparator("shaping", colW);
+      ModSlider("gain", &n->gain, 0.0f, 8.0f, "%.3f", colW);
+      ModSlider("offset", &n->offset, -1.0f, 1.0f, "%.3f", colW);
+      ModSlider("power", &n->power, 0.1f, 5.0f, "%.3f", colW);
+      ModCheckbox("invert", &n->invert);
+      ModCheckbox("clamp 0..1", &n->clamp01);
 
       ImGui::EndGroup();
+
+      NodeSeparator("outputs", colW * 2 + gutter);
+      DrawOutputMeters(n, colW, 2, gutter);
+   }
+
+
+   // The small live view every tracking node shows: the frame the tracker saw, with what it found drawn on top,
+   // so it is clear what is being tracked (and that the image is reaching the node at all).
+   static void DrawTrackPreview(TrackNodeBase* n, float w)
+   {
+      const float aspect = std::max(0.5f, std::min(2.0f, n->PreviewAspect()));
+      const float h = std::min(w / aspect, w * 0.8f);
+      const float iw = std::min(w, h * aspect);
+      const ImVec2 tl = ImGui::GetCursorScreenPos();
+      ImGui::Dummy(ImVec2(w, h));
+      ImDrawList* dl = ImGui::GetWindowDrawList();
+      const ImVec2 br(tl.x + w, tl.y + h);
+      dl->AddRectFilled(tl, br, ImGui::GetColorU32(ImGuiCol_FrameBg), 4.0f);
+      const ImVec2 a(tl.x + (w - iw) * 0.5f, tl.y), b(a.x + iw, br.y);
+      const unsigned int tex = n->PreviewTexture();
+      if (tex == 0)
+      {
+         const char* msg = n->Input().IsConnected() ? "waiting for a frame" : "connect an image";
+         const ImVec2 ts = ImGui::CalcTextSize(msg);
+         dl->AddText(ImVec2(tl.x + (w - ts.x) * 0.5f, tl.y + (h - ts.y) * 0.5f), ImGui::GetColorU32(ImGuiCol_TextDisabled), msg);
+         return;
+      }
+      const bool mir = n->mirror;
+      dl->PushClipRect(tl, br, true);
+      dl->AddImage((ImTextureID)(intptr_t)tex, a, b, ImVec2(mir ? 1.f : 0.f, 1.f), ImVec2(mir ? 0.f : 1.f, 0.f));
+      std::vector<float> xy;
+      n->GetOverlay(xy);
+      const int np = (int)xy.size() / 2;
+      if (np > 0)
+      {
+         auto pt = [&](int i) { return ImVec2(a.x + (mir ? 1.f - xy[i * 2] : xy[i * 2]) * iw, a.y + xy[i * 2 + 1] * h); };
+         const ImU32 shadow = tok::U32(tok::pal::c_00000096);
+         const ImU32 ink = tok::U32(tok::action_go, CategoryColors::IsThemeLight());
+         for (const auto& l : n->OverlayLines())
+            if (l.first < np && l.second < np)
+               dl->AddLine(pt(l.first), pt(l.second), shadow, 3.0f);
+         for (const auto& l : n->OverlayLines())
+            if (l.first < np && l.second < np)
+               dl->AddLine(pt(l.first), pt(l.second), ink, 1.5f);
+         for (int i = 0; i < np; i++)
+         {
+            const bool key = n->OverlayKeyPoint(i);
+            dl->AddCircleFilled(pt(i), key ? 4.0f : 2.0f, shadow, 10);
+            dl->AddCircleFilled(pt(i), key ? 3.0f : 1.2f, key ? ImGui::GetColorU32(ImGuiCol_Text) : ink, 10);
+         }
+      }
+      dl->PopClipRect();
+   }
+
+   void DrawTrackParams(TrackNodeBase* n)
+   {
+      const float colW = kParamWidth;
+      const float gutter = 16.0f;
+      if (n->PackMissing())
+         ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", T("Install the Tracking pack: Settings > Extensions"));
+      else
+         ImGui::TextDisabled("%s", n->Status().c_str());
+
+      NodeSeparator("tracking", colW * 2 + gutter);
+      ImGui::BeginGroup();
+      DrawTrackPreview(n, colW);
+      ImGui::EndGroup();
+      ImGui::SameLine(0.0f, gutter);
+      ImGui::BeginGroup();
+      ModCheckbox("mirror", &n->mirror);
+      ModSlider("smoothing", &n->smoothing, 0.0f, 1.0f, "%.2f", colW);
+      ModSlider("hold ms", &n->holdMs, 0.0f, 1000.0f, "%.0f", colW);
+      ImGui::EndGroup();
+
+      NodeSeparator("outputs", colW * 2 + gutter);
+      DrawOutputMeters(n, colW, 2, gutter);
    }
 
 
    void DrawNullModulatorParams(NullModulatorNode* n)
    {
-      const float v = n->Value01();
-      ImGui::Text("Value: %.3f", v);
-      ImGui::ProgressBar(std::clamp(v, 0.0f, 1.0f), ImVec2(kPreviewSize * 0.85f, 0), "");
       if (!n->input)
       {
-         ModSlider("constant in", &n->constantIn, 0.0f, 1.0f);
+         ModSlider("constant", &n->constantIn, 0.0f, 1.0f);
       }
       else
       {

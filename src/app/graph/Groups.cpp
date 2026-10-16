@@ -27,6 +27,7 @@
 //
 // Lock refuses hand edits: see NodeEditLocked and its call sites.
 #include "app/AppShared.h"
+#include "app/ui/design/components/FormParts.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "audio/AudioEngine.h"
 #include "core/ImageCable.h"
@@ -836,7 +837,7 @@ namespace app
             dl->AddRectFilled(mn, mx, activeCol, 3.0f);
          else if (hovered)
             dl->AddRectFilled(mn, mx, ImGui::GetColorU32(ImGuiCol_ButtonHovered, 0.6f), 3.0f);
-         const ImU32 iconCol = active ? IM_COL32(255, 255, 255, 255) : ImGui::GetColorU32(ImGuiCol_Text);
+         const ImU32 iconCol = active ? tok::U32(tok::pal::c_FFFFFFFF) : ImGui::GetColorU32(ImGuiCol_Text);
          drawIcon(dl, ImVec2((mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f), sz * 0.9f, iconCol);
          if (hovered)
          {
@@ -855,23 +856,23 @@ namespace app
    void DrawGroupHeaderButtons(GraphNode& gn, GroupNode* g)
    {
       (void)gn;
-      ImGui::SameLine(0.0f, 10.0f);
+      FormParts::Inline(0.0f, 10.0f);
       if (HeaderIconButton("##grpmute", g->mute ? T("Unmute group (M)") : T("Mute group (M)"), g->mute,
-                           IM_COL32(200, 120, 40, 230),
+                           tok::U32(tok::group_mute),
                            [&](ImDrawList* dl, ImVec2 c, float s, ImU32 col) { Tabler::DrawVolume(dl, c, s, col, g->mute); }))
          ToggleGroupFlag(g, &GroupNode::mute);
-      ImGui::SameLine(0.0f, 4.0f);
+      FormParts::Inline(0.0f, 4.0f);
       if (HeaderIconButton("##grpsolo", g->solo ? T("Unsolo group") : T("Solo group (other groups go quiet)"), g->solo,
-                           IM_COL32(200, 170, 40, 230),
+                           tok::U32(tok::action_solo, IsThemeLight()),
                            [&](ImDrawList* dl, ImVec2 c, float s, ImU32 col) {
                               const ImVec2 ts = ImGui::CalcTextSize("S");
                               dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), col, "S");
                               (void)s;
                            }))
          ToggleGroupFlag(g, &GroupNode::solo);
-      ImGui::SameLine(0.0f, 4.0f);
+      FormParts::Inline(0.0f, 4.0f);
       if (HeaderIconButton("##grplock", g->locked ? T("Unlock group") : T("Lock group (no edits by hand)"), g->locked,
-                           IM_COL32(120, 120, 140, 230),
+                           tok::U32(tok::inert),
                            [&](ImDrawList* dl, ImVec2 c, float s, ImU32 col) { Tabler::DrawLock(dl, c, s, col, !g->locked); }))
          ToggleGroupFlag(g, &GroupNode::locked);
    }

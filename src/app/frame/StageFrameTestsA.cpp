@@ -1921,6 +1921,9 @@ void DrawFrameTestsA(FrameCtx& fc)
       // R571 slice 4: with the Shortcuts window open, Tab drives ImGui nav and Space must not reach the transport.
       FrameTest_NAVTEST(frameId, window);
 
+      // Cmd/Ctrl+F find on a 400-node patch.
+      FrameTest_FINDTEST(frameId, window);
+
       // R573: every theme's text and dim text clear 4.5:1 against its window and panel backgrounds.
       FrameTest_THEMECONTRASTTEST(frameId, window);
 
@@ -1956,6 +1959,10 @@ void DrawFrameTestsA(FrameCtx& fc)
 
       if (getenv("INFINITE_RPCBATCHTEST") != nullptr && frameId == 4)
          RunRpcBatchTest();
+      if (getenv("INFINITE_HISTORYTEST") != nullptr && frameId == 4)
+         RunHistoryTest();
+      if (getenv("INFINITE_CLIPBOARDTEST") != nullptr && frameId == 4)
+         RunClipboardTest();
 
       if (getenv("INFINITE_PATCHWATCHTEST") != nullptr && frameId == 4) // needs the ImGui context, so in-loop
          RunPatchWatchTest();
@@ -2418,6 +2425,9 @@ void DrawFrameTestsA(FrameCtx& fc)
       // loader must come out laid out from drawn sizes - nothing stacked at 0,0,
       // no overlapping boxes, the picture chain ordered by wiring depth.
       FrameTest_PATCHLAYOUTLIVETEST(frameId, window);
+
+      // Keyed mod/expr on a Star: lands on the named control, survives a shape change.
+      FrameTest_KEYEDSTARTEST(frameId, window);
 
       FrameTest_ROUNDTRIPTEST(frameId, window);
 

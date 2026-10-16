@@ -3,6 +3,7 @@
 // envelope), the region knobs, and "Apply to" - writing derived settings onto
 // a synth in the patch through its own saved param fields.
 #include "app/AppShared.h"
+#include "app/ui/design/components/FormParts.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "audio/AudioAnalysis.h"
 #include "audio/SynthModes.h"
@@ -409,10 +410,10 @@ namespace app
       BeginAudioBody(gn.index, gn.category, kAudioNodeWidth, stat);
 
       const bool isLight = IsThemeLight();
-      const ImU32 bg = isLight ? IM_COL32(236, 240, 248, 255) : IM_COL32(16, 16, 22, 255);
-      const ImU32 dim = isLight ? IM_COL32(90, 90, 110, 255) : IM_COL32(150, 150, 170, 255);
-      const ImU32 bright = isLight ? IM_COL32(20, 20, 30, 255) : IM_COL32(240, 240, 250, 255);
-      const ImU32 grid = isLight ? IM_COL32(0, 0, 0, 22) : IM_COL32(255, 255, 255, 18);
+      const ImU32 bg = tok::U32(tok::analysis_bg, isLight);
+      const ImU32 dim = tok::U32(tok::analysis_dim, isLight);
+      const ImU32 bright = tok::U32(tok::analysis_bright, isLight);
+      const ImU32 grid = tok::U32(tok::analysis_grid, isLight);
       const int tr = (int)(gAudioTint.r * 255.0f), tg = (int)(gAudioTint.g * 255.0f), tb = (int)(gAudioTint.b * 255.0f);
       const ImU32 tint = IM_COL32(tr, tg, tb, 235);
       const ImU32 tintDim = IM_COL32(tr, tg, tb, 80);
@@ -424,7 +425,7 @@ namespace app
             const size_t slash = s.find_last_of("/\\");
             return slash == std::string::npos ? s : s.substr(slash + 1);
          };
-         if (ImGui::Button("Load...", ImVec2(90, 0)))
+         if (ActionButton::Draw("Load...", ImVec2(90, 0)))
          {
             const std::string path = Platform::OpenAudioDialog();
             if (!path.empty())
@@ -435,7 +436,7 @@ namespace app
                gPatchDirty = true;
             }
          }
-         ImGui::SameLine();
+         FormParts::Inline();
          {
             const float w = std::max(40.0f, gAudioContentX + gAudioContentW - ImGui::GetCursorScreenPos().x);
             const std::string label = n->path.empty() ? std::string("Load a sound, or drop a file on this node") : fileName(n->path);
@@ -886,7 +887,7 @@ namespace app
          PushDropdownStyle();
          const std::string caption = (ci >= 0 ? names[(size_t)ci] : std::string("add a synth to apply to")) + "##saTarget";
          ImGui::BeginDisabled(targetIdx.empty());
-         if (ImGui::Button(caption.c_str(), ImVec2(pickW, 0)))
+         if (NodeDropdownField(caption.c_str(), ImVec2(pickW, 0)))
          {
             const int nodeIndex = gn.index;
             gDropdown.options = names;
@@ -902,9 +903,9 @@ namespace app
          }
          ImGui::EndDisabled();
          PopDropdownStyle();
-         ImGui::SameLine(0.0f, gap);
+         FormParts::Inline(0.0f, gap);
          ImGui::BeginDisabled(!have || ci < 0);
-         if (ImGui::Button("Apply##saApply", ImVec2(applyW, 0)))
+         if (ActionButton::Draw("Apply##saApply", ImVec2(applyW, 0)))
          {
             if (GraphNode* target = FindNodeByIndex(chosen))
             {

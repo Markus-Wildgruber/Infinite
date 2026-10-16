@@ -1,7 +1,10 @@
 // Node help text tables, shortcuts and help windows (moved verbatim from main.cpp).
+#include "app/ui/design/TokenColors.h"
+#include "app/ui/design/components/SectionCard.h"
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "arrange/ArrangeModel.h"
+#include "app/ui/design/components/FormParts.h"
 
 namespace app
 {
@@ -32,11 +35,12 @@ namespace app
          { "Image Source", I18N_KEY("Loads a still image. Opens the native file picker and decodes anything macOS can read - PNG, JPEG, TIFF, HEIC, RAW and more.") },
          { "Slideshow", I18N_KEY("Plays the supported images in one folder in alphabetical order. Hold and transition time follow the global transport; Native Size keeps source pixels 1:1, Best Fit stretches to fill, and Proportional Fit preserves aspect.") },
          { "Video", I18N_KEY("Plays a video file. Position follows the transport, so it pauses with everything else. Loop and speed (including reverse) are available. Also outputs the clip's own audio track, if it has one, on the same transport-driven clock as the picture (audioEnabled/volume).") },
-         { "Noise", I18N_KEY("Procedural noise: value, fBm, ridged, Voronoi, Worley edges and white. Domain warping, octaves and colour mapping included.") },
+         { "Noise", I18N_KEY("Procedural noise: value, fBm, ridged, Voronoi, Worley edges, white, plus gradient Perlin and Simplex (single and fBm) that are identical on every GPU. Domain warping, octaves and colour mapping included.") },
          { "Shape", I18N_KEY("The base 2D vector-primitive node - pick any of its 20 shapes from the dropdown, with fill, stroke, feather and background controls. Each shape also has its own directly-spawnable named node (Circle, Hexagon, Star, ...) that just starts on that shape.") },
          { "Draw", I18N_KEY("Paint straight onto the node preview. Six procedural brushes, eraser, spacing and jitter. Patch an image in to paint over it. Record, then draw - replaying redraws the stroke in time, and the canvas size follows the input when one is patched in.") },
          { "Formula", I18N_KEY("A live GLSL shader. Pick a preset or press 'Edit GLSL...' to write your own; four knobs (uA-uD) are exposed for modulation.") },
          { "Field Modifier", I18N_KEY("Runs a per-vertex Field kernel over geometry, modifying P, N, uv, Cd and custom attributes with rate-inferred execution.") },
+         { "Sketch 3D", I18N_KEY("Builds 3D geometry from a JavaScript sketch you write: draw(t) calls box, sphere, cylinder, cone, torus, tube and beginShape/vertex/endShape, moved with translate, rotate and scale (push/pop to nest). param(\"name\", default, lo, hi) makes a modulatable knob. Patch it into Render 3D or any geometry operator. A mistake shows its line number and the last working mesh stays. No file or network access.") },
          { "Field Primitive", I18N_KEY("Generates procedural 3D point geometry from scratch using a per-element Field kernel (Circle, Spiral, Grid Lattice, Fibonacci Sphere, Helix, Torus Knot).") },
          { "Field Effect", I18N_KEY("Runs a Field kernel once per audio sample, on the audio thread - write your own sample-domain audio effect. `in` is the audio input pin, `state` declares per-voice memory, `param` exposes a modulatable knob. `reduce.rms(in, loHz, hiHz)` publishes a band-limited RMS meter reading once per block.") },
          { "Field Graph", I18N_KEY("Runs a Field kernel once, at edit time, to build part of the graph itself - emit(\"Type Name\", k0, k1, ...) spawns a node and hands back a handle, connect()/set()/place() wire it up, set its params and position it. Press Regenerate to re-run: it diffs against what it built last time (by emit-site identity) instead of deleting and respawning, so hand-edits to params on the spawned nodes survive an unrelated Regenerate.") },
@@ -48,7 +52,7 @@ namespace app
          { "Curves", I18N_KEY("Shadow / midtone / highlight lift plus an S-curve control, per RGB channel or all together. Drag points on the curve to bend it, click empty curve to add a point, right-click a point to remove it.") },
 
          // ---------------- Color ----------------
-         { "Color Ramp", I18N_KEY("Recolors any 0-1 grayscale input through user-authored stops, up to 32 of them, with linear or constant interpolation. Unlike Gradient Map, it has no shape of its own - the shape comes from upstream.") },
+         { "Color Ramp", I18N_KEY("Recolors any 0-1 grayscale input through user-authored stops, up to 32 of them, with linear, constant, Oklab or OKLCh interpolation (the Oklab modes mix perceptually, so blue-to-yellow stays bright instead of going grey; OKLCh also keeps saturation by travelling around the hue wheel). Unlike Gradient Map, it has no shape of its own - the shape comes from upstream.") },
          { "Predictive Coloring", I18N_KEY("Learns what 'graded' footage looks like for you and grades incoming frames toward it. Press Learn on already-graded footage to build a target profile (or leave self normalize on to auto-level/contrast without one); mix blends the grade in. Wander makes the grade gently drift among looks the profile has actually seen instead of solving to the exact same answer every frame - 0 is the old fixed behavior, higher wanders more, scaled down automatically for a thin or low-confidence profile.") },
 
          // ---------------- Compositing ----------------
@@ -68,7 +72,7 @@ namespace app
          { "Math", I18N_KEY("Combines two modulators - add, subtract, multiply, divide, min, max, average, difference - with gain and offset. Unpatched inputs fall back to a constant, shown as an editable slider; a patched input just shows as 'patched'.") },
          { "Compare", I18N_KEY("Outputs 1 when the comparison holds, 0 otherwise - >, >=, <, <=, ==, != between two modulators, with a tolerance for the equality checks.") },
          { "Range to Range", I18N_KEY("Remaps one modulator's input range onto a different output range - patch in a 0..1 LFO and remap it to -2..2, for example.") },
-         { "Smoothing", I18N_KEY("An exponential moving average over another modulator, to damp jittery or steppy sources like Random or Pattern.") },
+         { "Smoothing", I18N_KEY("Smooths another modulator to damp jittery or steppy sources like Random or Pattern. Per frame is the original moving average (response depends on frame rate); Time uses a time constant in seconds, the same at any frame rate; Spring follows the input like a mass on a spring, with frequency and damping, and can overshoot.") },
          { "Envelope", I18N_KEY("Applies an ADSR contour to an incoming modulator instead of generating its own trigger: rising above threshold starts attack/decay/sustain, falling back below it starts release. Patch an LFO in and its swing gets shaped by the ADSR, retriggering once per LFO cycle. Output collapses toward 0.5 as the envelope level falls - at level 0 the input has no say, at level 1 it passes through unchanged - so with nothing patched in, 'in' holds steady at its own constant value.") },
          { "Mod Curve", I18N_KEY("Remaps a modulator through a draggable transfer curve - click empty space to add a point, drag to move it, right-click to remove it (or right-click empty space to reset to a straight line). The gridline marks 0.5, where a bipolar binding's 'no modulation' point lives, and the moving dot shows where the input currently sits on the curve. mix blends between the raw input and the curved output, so 0 is a true bypass.") },
          { "Drift", I18N_KEY("Learns where you leave each knob and how fast you move it, then keeps the knob going after you let go, settles it into your usual places and wanders between them at your pace. Speed scales the learned pace, Stray widens or narrows the wandering, Momentum is how long a release carries on, Link lets your live hand activity stir it: quiet knobs wake up while you play and settle when you stop. Shift-drag a driven knob to take over; the dot on the knob shows how much history backs it and the faint marks show where it is likely to go next. Freeze stores the learned profile in the patch.") },
@@ -83,6 +87,9 @@ namespace app
          { "Null Modulator", I18N_KEY("Pass-through modulation node that accepts an incoming modulator and forwards it to its output. Useful for monitoring, signal routing, or placeholders.") },
          { "Palette", I18N_KEY("Samples colours from a reference image, loaded here or patched in - a patched cable overrides the loaded file, but the file is kept so unplugging falls back to it. Drag its 'out' onto the square dot beside any colour swatch to bind it - each new cable takes the next swatch, and clicking a bound swatch steps it. Its image output is a gradient of the palette.") },
          { "Audio File", I18N_KEY("Plays an audio file into the patch. follow transport (on by default) locks it to the transport clock: the file plays at the transport's time minus offset (seconds), so play, seek and loop always land on the same sample, and Play / Pause / Restart drive the transport itself. Off, it keeps its own playhead. monitor decides only the direct route: off, a cable straight into an Audio Out is not heard, but every other node it feeds - a switch, a mixer, Audio Analyze - still gets the full signal, so you can hear it only through, say, an A/B switch. pitch is varispeed (it also changes the timing when following the transport).") },
+         { "Hand Track", I18N_KEY("Tracks one hand from an image or camera wire and turns it into modulators: palm and fingertip position, pinch, open, roll and size, plus six gestures (fist, point, peace, thumbs up, ok, rock) that read 1 while you make them. A small preview shows what is tracked. Needs the Tracking pack (Settings > Extensions).") },
+         { "Face Track", I18N_KEY("Tracks one face from an image or camera wire: head position, turn, nod and tilt, each eye open or closed, brows, mouth open, smile, and where the eyes look. A small preview shows what is tracked. Needs the Tracking pack (Settings > Extensions).") },
+         { "Pose Track", I18N_KEY("Tracks one person's body from an image or camera wire: head, both wrists, how high each arm is raised, how far apart the wrists are, lean and distance. Keep the upper body in view. A small preview shows what is tracked. Needs the Tracking pack (Settings > Extensions).") },
          { "Image Analyze", I18N_KEY("Turns an image or video into control values and modulation channels. Supports UV point probes, ROI boxes, 22 math/color operations, custom algebraic formulas, and multiple modulation output taps.") },
           { "Audio Analyze", I18N_KEY("Extracts level, band and onset values from audio for modulation - patch any audio source into it (Audio In, Audio File, a Filter, a Mixer, an Oscillator) and every output can drive any slider in the graph. With nothing patched in it falls back to its own Start listening button, a live tap on the system's default input device. It passes its input straight through, so it can sit inline in a chain as well as hang off one as a tap. Outputs: level, low/mid/high, onset, and b1-b8, eight raw frequency bands running low to high.") },
          { "Plugin", I18N_KEY("Hosts a third-party Audio Unit effect. Drag one in from the Plugins panel (Rescan there indexes what is installed; the list is cached, so launching never rescans), or drop a .component bundle from Finder. \"open\" shows the plugin's own editor in a separate window. The sliders on the body are plugin parameters you chose to expose: turn \"configure\" on and touch a control in the plugin's own window and it appears here as a mapped row - or pick one from the dropdown, since not every plugin's editor tells the host what was touched. Each mapped row is a real param with its own modulation pin, so a Ramp or Envelope can drive it. Right-click a row to unmap it. With nothing loaded, or bypassed, audio passes through unchanged.") },
@@ -125,6 +132,13 @@ namespace app
          { "Spectrum Slide", I18N_KEY("Morphs the sound into the one on the 'to' pin by sliding its spectral peaks toward the other's positions instead of cross-fading, so a 440 Hz tone becomes 880 Hz by passing through 660 Hz. Slide sets how far along the way; with nothing on 'to' it passes the sound through. Latency is 42.7 ms (2048 samples).") },
          { "Spec Blur", I18N_KEY("Streaming phase vocoder (N=2048, hop 512) that smears spectral magnitude in time. Transients dissolve into a harmonic cloud with tilt, phase diffusion and freeze. Latency is 42.7 ms (2048 samples); default mix is pinned at 1.0.") },
          { "MIDI Notes", I18N_KEY("Reads note events from a connected MIDI input device and outputs them as a note cable - the entry point for playing a synth or sampler from an external keyboard/controller. Turn on mpe for an MPE controller (Seaboard, Osmose, Linnstrument): each held note follows its own pitch bend.") },
+#if defined(_WIN32)
+         { "MIDI Out", I18N_KEY("Plays a hardware MIDI synth from a note cable. Pick the device and the channel (1-16); notes sent here do not reach Audio Out, so the synth makes its own sound. Four CC rows send a controller number and a modulatable value, only when it changes, so any LFO or macro can turn a knob on the synth. 'clock' makes Infinite the master clock (24 pulses per beat, with Start, Stop, Continue and song position) and switches itself off while Infinite follows an incoming clock. 'offset' shifts everything by -50 to +50 ms to line up with the synth's latency. Every note still held is released when you delete or bypass the node, change device, stop the transport or press panic. Windows cannot publish a virtual MIDI port: to reach another app, install loopMIDI, create a port, and pick it here. Timing is about 1 ms.") },
+#elif defined(__linux__)
+         { "MIDI Out", I18N_KEY("Plays a hardware MIDI synth from a note cable. Pick the device and the channel (1-16); notes sent here do not reach Audio Out, so the synth makes its own sound. Four CC rows send a controller number and a modulatable value, only when it changes, so any LFO or macro can turn a knob on the synth. 'clock' makes Infinite the master clock (24 pulses per beat, with Start, Stop, Continue and song position) and switches itself off while Infinite follows an incoming clock. 'offset' shifts everything by -50 to +50 ms to line up with the synth's latency. Every note still held is released when you delete or bypass the node, change device, stop the transport or press panic. Pick \"Infinite (virtual)\" to publish an ALSA port called Infinite that other apps can subscribe to (aconnect or the DAW's MIDI settings).") },
+#else
+         { "MIDI Out", I18N_KEY("Plays a hardware MIDI synth from a note cable. Pick the device and the channel (1-16); notes sent here do not reach Audio Out, so the synth makes its own sound. Four CC rows send a controller number and a modulatable value, only when it changes, so any LFO or macro can turn a knob on the synth. 'clock' makes Infinite the master clock (24 pulses per beat, with Start, Stop, Continue and song position) and switches itself off while Infinite follows an incoming clock. 'offset' shifts everything by -50 to +50 ms to line up with the synth's latency. Every note still held is released when you delete or bypass the node, change device, stop the transport or press panic. Pick \"Infinite (virtual)\" to publish a source called Infinite that DAWs and other apps list as a MIDI input.") },
+#endif
          { "Keyboard", I18N_KEY("A hardware-free note source: click-and-drag the on-screen piano, or hover the node and type on your laptop keyboard (Logic/GarageBand's Musical Typing layout - ZXCVBNM... is one octave, QWERTY... the octave above) to test a patch with no MIDI controller at all.") },
          { "Note Transpose", I18N_KEY("Shifts every incoming note's pitch by a fixed number of semitones.") },
          { "Pitch Bend", I18N_KEY("A hand-driven bend wheel, patched inline in the note chain like Note Transpose. Unlike a transpose (which can only re-pitch a note as it attacks), moving this knob slides every note currently held through it in real time - drag it while a chord rings and the chord bends, no need to route it onto a synth's own bend knob. Default range is +/-2 semitones, the standard wheel range.") },
@@ -206,7 +220,7 @@ namespace app
          { "Render 3D", I18N_KEY("Rasterizes the geometry/camera/light/material graph into an image. Antialiasing is reduced automatically at large output sizes to stay within GPU limits. Scenes over ~2 million triangles get noticeably heavier to render. An HDRI node patched into the env input replaces the procedural sky gradient for background, reflections and ambient light.") },
          { "Model 3D", I18N_KEY("Loads a 3D model file - obj, ply, stl, usd or usdz.") },
          { "Null 3D", I18N_KEY("A pass-through node for geometry: its output is exactly its input mesh, unchanged. Useful as a stable junction point to branch geometry to several destinations.") },
-         { "Group 3D", I18N_KEY("Carries up to eight geometry inputs through one pin into Render 3D (or into another Group 3D), so a scene is not limited to Render 3D's four geometry pins. Nothing is merged: each input keeps its own material, texture, mapping and transform. It only means something to Render 3D - use Join Geometry to combine meshes into one.") },
+         { "Group 3D", I18N_KEY("Carries up to eight geometry inputs through one pin into Render 3D (or into another Group 3D), so a scene is not limited to Render 3D's four geometry pins. Nothing is merged: each input keeps its own material, texture, mapping and transform. It only means something to Render 3D (or another Group 3D): anything else downstream, like Transform, sees no mesh and shows an empty preview. To move or edit several shapes as one, use Join Geometry instead.") },
          { "Switcher 3D", I18N_KEY("Cycles between up to four connected geometry inputs every N beats or seconds, forwarding whichever one is active. Can be pinned to one input with 'manual'. Unlike the 2D Switcher, there is no crossfade - it always hard-cuts, since interpolating between two arbitrary meshes' topology isn't generally well-defined.") },
 
          // ---------------- Join Geometry boolean modes (also spawnable directly) ----------------
@@ -217,6 +231,7 @@ namespace app
          // ---------------- GeometryOp operators ----------------
          { "Transform", I18N_KEY("Moves, rotates and scales the input mesh by a fixed offset - the geometry equivalent of the 2D Transform effect.") },
          { "Array", I18N_KEY("Duplicates the input mesh in a line or radial ring. Count sets how many copies; radial mode spaces them by Radius, linear mode by Offset X/Y/Z; each copy can additionally rotate/scale a step further than the last.") },
+         { "Decimate", I18N_KEY("Reduces triangle count while keeping the overall shape (quadric error edge collapse). 'keep' is the fraction of triangles to leave; 'lock border' holds open edges in place. UVs, colours and hard shading survive; very low settings stop when no safe collapse remains.") },
          { "Subdivide", I18N_KEY("Subdivision surface. Each level roughly quadruples the triangle count, so higher levels get expensive fast; Smooth controls how much it rounds corners.") },
          { "Solidify", I18N_KEY("Gives a flat or open surface real Thickness, turning it into a solid shell. 'keep original' also retains the source surface.") },
          { "Extrude", I18N_KEY("Extrudes every face of the input mesh along its own normal by Distance, with Inset shrinking each face first.") },
@@ -236,6 +251,9 @@ namespace app
          // ---------------- Point distribution / vertex (3D) ----------------
          { "Distribute Points on Faces", I18N_KEY("Scatters points across the input mesh's surface, area-weighted so large faces get proportionally more - even coverage, unlike Mesh to Points, which walks the vertex list and therefore clumps wherever the topology does (a UV Sphere's poles). Density sets how many; 'method' chooses plain Random or Poisson (blue-noise, honouring Min Distance so no two points crowd together).") },
          { "Distribute Points in Grid", I18N_KEY("Generates a flat rectangular lattice of points from nothing - no geometry input. Count X/Y and Spacing X/Y set the grid, Jitter randomises each point off its cell centre. Ordering matches Image to Points exactly (row-major, cell-centre UV), so a grid and an Image to Points at the same counts line up point-for-point.") },
+         { "Curve Ops", I18N_KEY("Curve in, curve out. Resample spaces points evenly along the length, Simplify drops points that barely change the shape (within 'tolerance'), Smooth relaxes corners while the ends stay put, Offset draws a parallel curve at a signed distance in the XY plane with round outer corners. The result can still drive a Path and shows as a thin tube.") },
+         { "Delaunay Mesh", I18N_KEY("Point cloud in (a mesh is flagged red and ignored; use Mesh to Points first), triangulated surface out. Use it to turn a scatter into a terrain or low-poly surface. Points are projected onto the chosen plane, joined into Delaunay triangles (no sliver-prone long edges), and lifted back to their real 3D positions, so a scatter with height becomes a terrain. 'max points' thins very large clouds.") },
+         { "Voronoi Cells", I18N_KEY("Point cloud in (a mesh is flagged red and ignored), one polygon cell per point out, for cracked-glass, cell and fracture looks: every cell is the region closer to its point than to any other. Points on the outer hull have unbounded cells and are skipped. 'inset' pulls each cell toward its point to leave gaps between them.") },
          { "Points to Vertices", I18N_KEY("Point cloud in, mesh out: one vertex per point, with no edges or faces. This is the bridge that lets a cloud (Particle System, a Distribute node, Image to Points) re-enter the mesh operators that only know how to walk a Mesh. 'alive only' skips dead particles.") },
          { "Merge by Distance", I18N_KEY("Welds vertices closer together than Threshold into one - the cleanup pass that makes a scatter or conversion result usable, closing seams a conversion left behind. Pushed to a large radius it collapses the geometry outright, which is sometimes the point.") },
          { "Set Vertex Color", I18N_KEY("Writes per-element colour - vertex colours on a mesh, per-particle colour on a point cloud, whichever the input actually carries. 'source' picks where the colour comes from: a Flat colour, a two-colour Ramp, Random per element, a patched texture sampled at each element's UV, or a patched Palette node's swatches (offset steps which swatch starts the run). Nothing downstream has to know which - Render 3D reads whatever ended up there.") },
@@ -248,6 +266,7 @@ namespace app
          // ---------------- Audio routing (Utility) ----------------
          { "Audio Out", I18N_KEY("The terminal node for audio, the counterpart of Output for images: whatever is patched in is summed into the selected output device. It has no processing of its own and no output pin. Two cables into one Audio Out is refused on purpose - route them through a Mixer instead, which is the only node in the app that sums audio. With several Audio Outs, plugin delay is compensated between them so they land together; press live to opt this one out when you are playing through it and want the lowest delay.") },
          { "Mixer", I18N_KEY("The only node that sums audio - every other audio input pin takes exactly one cable, so any time two signals have to meet, they meet here. Four to eight slots, each with its own gain, pan, mute and solo, summed to one output.") },
+         { "Spatial Mixer", I18N_KEY("Mixes audio in 3D for headphones and plays it straight to the output (no output pin; it also records its own WAV/FLAC, 16 or 24 bit, always facing front): each input is a dot around a head, and its angle, distance and height (scroll on a dot) change how it is heard. Drop a cable on the empty + pin to add a source; alt-drag a dot for its level; H pins a source in front of your head. Ears use a measured dummy-head set (MIT KEMAR) or a spherical-head model; a limiter holds -1 dB and the meter shows loudness. Head tracking (AirPods Pro/Max etc.) works on macOS 14+ only and turns the room with your head; elsewhere the head stays fixed.") },
          { "Splitter", I18N_KEY("The explicit fan-out point for audio: an ordinary audio output feeds exactly one destination, so sending one signal to several places needs this node. Its own output is the one exempt from that rule. On the audio thread it is a plain copy - it exists for the graph-level visibility and the fan-out cap, not because copying is otherwise needed.") },
          { "Gain", I18N_KEY("A single gain stage in dB, with a level meter - the simplest audio utility there is. Reach for it to trim a source before a Mixer, or to set up a clean level for something that has no output volume of its own.") },
          { "Blend Audio", I18N_KEY("A two-input crossfader: blend 0 is A only, 1 is B only, 0.5 an equal-power centre. Not a second place to sum two signals (that's Mixer) - it picks a point between them, and its blend knob has a modulation pin, so an LFO or Macro can sweep the crossfade.") },
@@ -259,6 +278,7 @@ namespace app
          { "Spectral Synth", I18N_KEY("Image-to-sound additive resynthesis, in the MetaSynth tradition: any image, glyph, drawing or live video patched in is read as a spectrogram and rebuilt out of 64-256 sine partials. X is time (the scan axis), Y is frequency (linear or logarithmic, between min/max Hz), brightness is amplitude, and in Hue-Pan colour mode the hue becomes stereo position. The scan can sync to the transport at a note division, free-run at its own speed, or be scrubbed by hand with position - and with a note cable connected it transposes polyphonically.") },
          { "Wave Terrain", I18N_KEY("Wave terrain synthesis: an image patched in is read as a height field z = T(u,v), and the oscillator's waveform is whatever a closed orbit traced across that terrain reads back. Orbit type/centre/radius/ratio decide the path, so moving the orbit is a timbre control rather than a pitch one - and because the terrain is an ordinary image input, a Noise, Draw, Video or Reaction Diffusion node upstream reshapes the sound live. Each cycle is band-limited through a 10-level mip pyramid, so it stays alias-free however sharp the source image is.") },
          { "Metallic", I18N_KEY("A physical-modelling synth for struck and plucked metal - bells, gongs, bars, plates, chimes, tines and strings - via extended Karplus-Strong waveguides and inharmonic modal resonator banks. 'material' picks the model, transient how hard it is struck, decay how long it rings, stiffness how inharmonic the partials are (which is what separates a bell from a string). Polyphonic with a note cable connected, free-running at 'frequency' when unpatched.") },
+         { "Field Notes", I18N_KEY("A note node whose body is a Field script. The script runs per sample against the transport beat; note(pitch, vel, len) inside an if sends a note out (len in beats, 0 holds as long as the incoming note). tick(div) fires on each beat division, deg(d) is a scale degree under Root/Scale, rand() is 0..1. Wire it into any synth or MIDI-out.") },
          { "Field Synth", I18N_KEY("A polyphonic synthesizer whose voice is a Field kernel you write yourself, compiled to a sample-domain register machine - the note-driven counterpart of Field Effect. `state` declares per-voice memory, `param` exposes a modulatable knob, and the kernel runs once per sample per voice, on the audio thread. maxVoices caps the polyphony; presets are complete starting kernels.") },
 
          // ---------------- Macros ----------------
@@ -305,6 +325,7 @@ namespace app
 #endif
          { "NDI In", I18N_KEY("Receives any NDI video source on the network as an image - pick it from the list, which rescans in the background. Video only, no audio. Needs the free NDI runtime from ndi.video. NDI(R) is a registered trademark of Vizrt NDI AB.") },
          { "FieldPixel", I18N_KEY("Runs a Field kernel once per output pixel, on the GPU - write your own image generator or effect in Field instead of GLSL. `state` declares persistent per-pixel memory that survives to the next frame (which is what makes reaction-diffusion and trail effects expressible here), `param` exposes a modulatable knob, and extra input/output image pins can be declared by the kernel. width/height set the output resolution; presets are complete starting kernels.") },
+         { "Sketch", I18N_KEY("Draws an image from a JavaScript sketch you write in the node - loops, arrays and recursion with a p5.js-style API (rect, circle, line, beginShape, push/pop, translate, rotate, text). param(\"name\", default, lo, hi) in the script becomes a knob you can modulate. A mistake shows its line number and the last working picture stays up. Drop an .svg on the canvas (or onto a Sketch) to animate it by id with svgSet, svgText, svgBox and svgDraw. No file or network access.") },
       };
       auto it = kText.find(typeName);
       return it != kText.end() ? it->second : nullptr;
@@ -317,7 +338,7 @@ namespace app
    const char* FilterHelpText(const std::string& typeName)
    {
       static const std::unordered_map<std::string, const char*> kText = {
-         { "gaussianblur", I18N_KEY("Blurs the image with a Gaussian-weighted kernel - a smooth, natural blur. Radius sets how far it samples.") },
+         { "gaussianblur", I18N_KEY("Blurs the image with a Gaussian-weighted kernel - a smooth, natural blur. Radius sets how far it samples; Quality Smooth samples every pixel for a cleaner result.") },
          { "boxblur", I18N_KEY("Blurs by averaging a flat square of neighbouring pixels - cheaper and blockier than Gaussian Blur. Radius sets the box size.") },
          { "motionblur", I18N_KEY("Smears the image along a straight line, like camera or subject motion. Angle sets the direction, Distance how far it smears.") },
          { "radialblur", I18N_KEY("Blurs outward from a centre point, like a zoom or spin blur. Amount sets the strength, Center X/Y the origin.") },
@@ -331,6 +352,7 @@ namespace app
          { "transform", I18N_KEY("Translates, scales, rotates, and flips (horizontal/vertical) the whole image. Scale X/Y let you stretch non-uniformly on top of the overall Scale. Crop X/Y symmetrically crop the source in from each axis before the rest of the transform is applied.") },
          { "invert", I18N_KEY("Inverts every colour channel (alpha untouched) - a photographic negative. No parameters.") },
          { "posterize", I18N_KEY("Reduces the image to a fixed number of tonal Levels per channel, producing flat colour bands.") },
+         { "dither", I18N_KEY("Reduces the image to a few Levels per channel like Posterize, but spreads the rounding error as a fixed pattern so gradients keep their tone instead of banding. Mode picks an ordered Bayer matrix (2, 4 or 8) or a noise pattern; Mix blends back toward the original.") },
          { "threshold", I18N_KEY("Converts to pure black or white based on luminance, split at Threshold.") },
          { "exposure", I18N_KEY("Multiplies brightness by powers of two, like a camera's exposure stop (compare Levels' linear/gamma remap).") },
          { "bloom", I18N_KEY("Isolates pixels above a brightness Threshold, blurs them outward by Radius, and adds the glow back at Intensity - classic HDR-style bloom.") },
@@ -509,20 +531,25 @@ namespace app
       ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
       ImGui::SetNextWindowSize(ImVec2(680, 520), ImGuiCond_FirstUseEver);
       PushElevatedPanelStyle(/*isChild=*/false);
-      if (!ImGui::Begin("All Shortcuts", open))
+      FormParts::PushWindowPad();   // same 16 pt inset as Settings; cards reach 8 pt into it
+      const bool shortcutsVisible = ImGui::Begin("All Shortcuts", open, ImGuiWindowFlags_NoCollapse);
+      FormParts::PopWindowPad();
+      if (!shortcutsVisible)
       {
          ImGui::End();
          PopElevatedPanelStyle();
          return;
       }
 
+      SectionCard::BeginWindow();
+      FormParts::PushReferenceStyle();
       static char filterBuf[128] = "";
-      ImGui::SetNextItemWidth(250);
-      ImGui::InputTextWithHint("##filter", "Filter shortcuts...", filterBuf, sizeof(filterBuf));
+      FormParts::SearchInput("##filter", "Filter shortcuts...", filterBuf, sizeof(filterBuf), 250.0f);
       ImGui::SameLine();
-      if (filterBuf[0] != '\0' && ImGui::SmallButton(L("Clear")))
+      if (filterBuf[0] != '\0' && FormParts::Button(L("Clear")))
          filterBuf[0] = '\0';
 
+      ImGui::Dummy(ImVec2(0.0f, SectionCard::kPad));   // the first card reaches kPad above its cursor
       std::string filter = filterBuf;
       for (char& c : filter)
          c = (char)tolower((unsigned char)c);
@@ -571,10 +598,12 @@ namespace app
          { I18N_KEY("Canvas & View"), I18N_KEY("Rubber-band Select"), "Shift + Drag", I18N_KEY("Select multiple nodes in box") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Toggle Params"), "Shift+H", I18N_KEY("Show / hide parameter knobs & sliders") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Viewport Panel"), "Shift+V", I18N_KEY("Toggle viewport panel (or dock selected nodes)") },
+         { I18N_KEY("Edit & Canvas"), I18N_KEY("Edit History"), "Shift+U", I18N_KEY("Toggle the docked list of edits; click one to jump to it") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Modulation Matrix"), "Shift+M", I18N_KEY("Toggle docked modulation matrix") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Performance Matrix"), "Shift+P", I18N_KEY("Toggle docked performance matrix") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Arrangement Timeline"), "Shift+T", I18N_KEY("Toggle docked arrangement timeline") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Fit View to Content"), "F / Shift+Y", I18N_KEY("Frame the whole patch in the canvas view") },
+         { I18N_KEY("Canvas & View"), I18N_KEY("Find"), MODKEY "+F", I18N_KEY("Find a node by title, type, comment text or param name. Up / Down step, Enter jumps to it, Esc closes") },
          { I18N_KEY("Canvas & View"), I18N_KEY("Pan Canvas (keys)"), "W / A / S / D", I18N_KEY("Hold to pan the canvas up / left / down / right. Not while a hovered audio keyboard node is using the letters") },
 
          // Transport & Audio
@@ -627,14 +656,14 @@ namespace app
                inTable = false;
             }
             lastCat = s.category;
-            ImGui::SeparatorText(T(s.category));
+            SectionCard::Begin(T(s.category));
          }
 
          if (!inTable)
          {
             char tableId[64];
             snprintf(tableId, sizeof(tableId), "tbl_%s", s.category);
-            if (ImGui::BeginTable(tableId, 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+            if (ImGui::BeginTable(tableId, 3, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
             {
                ImGui::TableSetupColumn(T("Action"), ImGuiTableColumnFlags_WidthFixed, 150.0f);
                ImGui::TableSetupColumn(T("Shortcut"), ImGuiTableColumnFlags_WidthFixed, 180.0f);
@@ -655,8 +684,7 @@ namespace app
             // washes out against light mode's light row background - branch
             // it the same way every other themed accent-text spot in the
             // app does rather than leave it a fixed dark-mode-only colour.
-            ImGui::PushStyleColor(ImGuiCol_Text, IsThemeLight() ? ImVec4(0.05f, 0.35f, 0.68f, 1.0f)
-                                                                : ImVec4(0.45f, 0.82f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, app::AccentEmphasisSelected());
             ImGui::TextUnformatted(s.key);
             ImGui::PopStyleColor();
 
@@ -668,6 +696,9 @@ namespace app
       if (inTable)
          ImGui::EndTable();
 
+      SectionCard::EndWindow();
+      FormParts::PopReferenceStyle();
+      FormParts::WindowEdge();
       ImGui::End();
       PopElevatedPanelStyle();
    }
@@ -683,13 +714,19 @@ namespace app
       ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
       ImGui::SetNextWindowSize(ImVec2(720, 620), ImGuiCond_FirstUseEver);
       PushElevatedPanelStyle(/*isChild=*/false);
-      if (!ImGui::Begin("Infinite - help & module reference", open))
+      FormParts::PushWindowPad();   // same 16 pt inset as Settings
+      const bool helpVisible = ImGui::Begin("Infinite - help & module reference", open, ImGuiWindowFlags_NoCollapse);
+      FormParts::PopWindowPad();
+      if (!helpVisible)
       {
          ImGui::End();
          PopElevatedPanelStyle();
          return;
       }
 
+      SectionCard::BeginWindow();
+      FormParts::PushReferenceStyle(/*headerFill=*/false);   // each section is a card; the header is its title
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Getting started"), ImGuiTreeNodeFlags_DefaultOpen))
       {
          ImGui::TextWrapped("%s", T("Infinite is a node graph. Every node renders an image and passes it down a cable to the next one. A typical patch reads left to right:"));
@@ -701,9 +738,10 @@ namespace app
          ImGui::TextWrapped("%s", T("Nothing enforces that order - any output can feed any input, including back into effects for feedback-style chains."));
       }
 
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Controls"), ImGuiTreeNodeFlags_DefaultOpen))
       {
-         if (ImGui::BeginTable("controls", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+         if (ImGui::BeginTable("controls", 2, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg))
          {
             ImGui::TableSetupColumn(T("Action"));
             ImGui::TableSetupColumn(T("How"));
@@ -740,6 +778,7 @@ namespace app
          }
       }
 
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Transport and modulation"), ImGuiTreeNodeFlags_DefaultOpen))
       {
          ImGui::TextWrapped("%s", T("The top bar holds a global clock: Play/Pause, Rewind and BPM. Everything time-based reads from it - modulators, video playback and animated shaders - so pausing freezes the whole patch and changing the tempo retimes all of it at once."));
@@ -749,6 +788,7 @@ namespace app
          ImGui::TextWrapped("%s", T("Every slider has a small dot to its left. Patch a modulator into that dot and the slider turns amber and becomes read-only - the value is now being driven. Delete the cable to take manual control back."));
       }
 
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Arrangement timeline"), ImGuiTreeNodeFlags_DefaultOpen))
       {
          ImGui::TextWrapped("%s", T("Shift+T opens a timeline docked beside the canvas. It does not replace the patch - it schedules it. A track ('lane') is video or audio, and every clip on it points at a node that already exists in your graph; the clip decides WHEN that node is heard or seen, not what it does."));
@@ -780,6 +820,7 @@ namespace app
          ImGui::TextWrapped("%s", T("Right-click a node that makes notes (Note Sequencer, Note Switcher, Arpeggiator, MIDI File, Audio to MIDI...) > Capture notes to timeline... to record what it plays over a range (default: the loop, else 4 bars from the playhead) onto a new MIDI track, on the instrument it is cabled into or one you pick. It renders offline (MIDI File and Audio to MIDI notes are read directly), one undo step."));
       }
 
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Using Feedback"), ImGuiTreeNodeFlags_DefaultOpen))
       {
          ImGui::TextWrapped("%s", T("A Feedback node outputs what its input produced on the PREVIOUS frame. That one-frame delay is the whole point: it lets you wire a cycle without the graph chasing its own tail forever."));
@@ -797,6 +838,7 @@ namespace app
          ImGui::TextWrapped("%s", T("If you just want trails, use the Trails node instead - it is that same loop wrapped into one node, with decay, drift, zoom and rotation built in. Reaction Diffusion is the other pre-wired feedback node: it needs no input at all and simulates a chemical system frame over frame."));
       }
 
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Module reference")))
       {
          struct Entry { const char* name; const char* text; };
@@ -812,7 +854,7 @@ namespace app
 #endif
                { "Video", I18N_KEY("Plays a video file. Position follows the transport, so it pauses with everything else. Loop and speed (including reverse) are available. Also outputs the clip's own audio track, if it has one, on the same transport-driven clock as the picture (audioEnabled/volume).") },
                { "Shape", I18N_KEY("Twenty vector primitives - circle, ellipse, rectangle, rounded rect, triangle, polygon, star, ring, cross, line, hexagon, heart, arrow, crescent, gear, superellipse, pie, teardrop, chevron and blob - with fill, stroke, feather and background. Each one is also directly spawnable as its own named node.") },
-               { "Noise", I18N_KEY("Procedural noise: value, fBm, ridged, Voronoi, Worley edges and white. Domain warping, octaves and colour mapping included.") },
+               { "Noise", I18N_KEY("Procedural noise: value, fBm, ridged, Voronoi, Worley edges, white, plus gradient Perlin and Simplex (single and fBm) that are identical on every GPU. Domain warping, octaves and colour mapping included.") },
                { "Draw", I18N_KEY("Paint straight onto the node preview. Six procedural brushes, eraser, spacing and jitter. Patch an image in to paint over it. Strokes can be recorded and replayed as an animation.") },
                { "Formula", I18N_KEY("A live GLSL shader. Pick a preset or press 'Edit GLSL...' to write your own; four knobs (uA-uD) are exposed for modulation.") },
                { "Texture", I18N_KEY("Blender-standard procedural textures: Voronoi, Brick, Magic, Wave and Musgrave, each with its own parameter block.") },
@@ -828,15 +870,17 @@ namespace app
 #endif
                { "Audio Texture", I18N_KEY("Turns live audio into an image - scrolling spectrogram, waveform or level field - so any image effect downstream becomes an audio visualiser.") },
                { "FieldPixel", I18N_KEY("An image generated by a Field kernel you write yourself: the per-pixel counterpart of Field Effect, compiled rather than interpreted.") },
+               { "Sketch", I18N_KEY("An image drawn by a JavaScript sketch you write: the loop-and-recursion counterpart of Field Pixel. Its param() calls become modulatable knobs, and it can load and animate an SVG.") },
             } },
             { "3D", {
                { "Render 3D", I18N_KEY("Rasterizes the geometry / camera / light / material graph into an image, with shadow mapping, ambient occlusion and HDR environment reflections (patch an HDRI node into its env input to replace the procedural sky). Antialiasing steps down automatically at large output sizes to stay inside GPU limits.") },
                { "Camera & Light", I18N_KEY("Camera is a 3D viewpoint patched into Render 3D's camera input. Light is a scene light - Render 3D reads up to three, and ignores any beyond that.") },
                { "Primitives & Mesh", I18N_KEY("Geometry covers 24 primitives (plane, cube, sphere, icosphere, torus, cylinder, cone, torus knot, capsule, tube, pyramid, prism, helix, supershape, the platonic solids, rounded cube, Mobius strip, Klein bottle, gear, star, disc, arrow), each also spawnable by name. Plus Model 3D (obj, ply, stl, usd, usdz), Text 3D, Curve, Ocean and Metaballs.") },
-               { "Procedural Operations", I18N_KEY("Transform, Array, Subdivide, Solidify, Extrude, Wireframe, Triangulate, Normals, Explode, Twist, Smooth, Mirror and Screw - plus Select and the ops that act only on its marked faces (Delete / Transform / Extrude Selected), Join Geometry's booleans (Union, Intersect, Difference), Displacement, Wrap and Merge by Distance.") },
+               { "Sketch 3D", I18N_KEY("A mesh built by a JavaScript sketch you write: the loop-and-recursion counterpart of Field Primitive. Its param() calls become modulatable knobs, and the result patches into Render 3D like any other geometry.") },
+               { "Procedural Operations", I18N_KEY("Transform, Array, Subdivide, Solidify, Extrude, Wireframe, Triangulate, Normals, Explode, Twist, Smooth, Mirror, Screw and Decimate - plus Select and the ops that act only on its marked faces (Delete / Transform / Extrude Selected), Join Geometry's booleans (Union, Intersect, Difference), Displacement, Wrap and Merge by Distance.") },
                { "Point Distribution & Instancing", I18N_KEY("Mesh to Points / Edges / Faces, Distribute Points on Faces (area-weighted, random or Poisson), Distribute Points in Grid, Image to Points, Points to Vertices, Set Vertex Color, and Instance on Points to stamp a shape at every point in one instanced call.") },
                { "Audio Displacement", I18N_KEY("Deforms 3D vertex geometries in real-time driven by live audio frequencies or RMS waveforms.") },
-               { "Particle System & Cloth", I18N_KEY("Particle System is a 3D emitter with gravity, turbulence, collision planes and spring-mass dynamics. Cloth is a pinned mass-spring sheet with wind and collision.") },
+               { "Particle System & Cloth", I18N_KEY("Particle System is a 3D emitter with gravity, drag and turbulence. Cloth is a pinned position-based sheet with wind and an optional ground plane.") },
                { "Material, Mapping & HDRI", I18N_KEY("Material is the shading block Render 3D reads per slot (base colour, metal/rough, emission, texture inputs). Mapping controls how a texture is projected onto the geometry. HDRI supplies the environment map for reflections and the background.") },
                { "Field Primitive & Field Modifier", I18N_KEY("Signed-distance geometry written as Field kernels and combined/warped by modifiers, then meshed - the procedural counterpart to the fixed primitives.") },
             } },
@@ -853,7 +897,7 @@ namespace app
                { "LUT", I18N_KEY("Applies a lookup-table image patched into the second input.") },
                { "Gradient Map", I18N_KEY("Remaps luminance onto a two-colour gradient.") },
                { "Color Adjustments", I18N_KEY("All-in-one grading chain - brightness/contrast, levels, colour balance, HSL, vibrance, tone shaper, channel mixer and an optional black & white stage - so a common grade doesn't need eight nodes wired in series.") },
-               { "Color Ramp", I18N_KEY("Recolors any 0-1 grayscale input through user-authored stops, up to 32 of them, with linear or constant interpolation. Unlike Gradient Map, it has no shape of its own - the shape comes from upstream.") },
+               { "Color Ramp", I18N_KEY("Recolors any 0-1 grayscale input through user-authored stops, up to 32 of them, with linear, constant, Oklab or OKLCh interpolation (the Oklab modes mix perceptually, so blue-to-yellow stays bright instead of going grey; OKLCh also keeps saturation by travelling around the hue wheel). Unlike Gradient Map, it has no shape of its own - the shape comes from upstream.") },
                { "Predictive Coloring", I18N_KEY("Learns what 'graded' footage looks like for you and grades incoming frames toward it. Press Learn on already-graded footage to build a target profile (or leave self normalize on to auto-level/contrast without one); mix blends the grade in. Wander makes the grade gently drift among looks the profile has actually seen instead of solving to the exact same answer every frame.") },
 #if defined(_WIN32)
                { "Remove Background", I18N_KEY("On-device segmentation with no network access and no API key: Windows has no Vision equivalent, so a small model (u2netp) ships with the build and runs through ONNX Runtime on the DirectML GPU provider, falling back to CPU when DirectML does not register - the node's header line says which. Both Subject and Person modes use the same model. Segmentation is expensive, so the mask is computed on this interval rather than every frame.") },
@@ -884,7 +928,7 @@ namespace app
                { "Math", I18N_KEY("Combines two modulators - add, subtract, multiply, divide, min, max, average, difference - with gain and offset. Unpatched inputs fall back to a constant.") },
                { "Compare", I18N_KEY("Outputs 1 when the comparison holds, 0 otherwise.") },
                { "Range to Range", I18N_KEY("Remaps one modulator's input range onto a different output range.") },
-               { "Smoothing", I18N_KEY("An exponential moving average over another modulator, to damp jitter.") },
+               { "Smoothing", I18N_KEY("Damps another modulator. Per frame is a simple moving average (the default); Time glides with a time constant; Spring overshoots and settles with a frequency and damping.") },
                { "CV Recorder", I18N_KEY("Records any patched modulator - hit Rec, then it loops the take back with adjustable speed and low/high range.") },
                { "Velocity to CV", I18N_KEY("Turns note velocity into a 0..1 modulator with an adjustable velocity range.") },
                { "Envelope", I18N_KEY("Shapes an incoming modulator with an ADSR contour, gated by it crossing threshold, instead of generating its own trigger.") },
@@ -920,6 +964,7 @@ namespace app
                { "Projection", I18N_KEY("Warp, corner-pin and perspective-correct an image for projectors, flat walls, or curved screens, with built-in alignment test patterns and custom resolution target.") },
                { "OSC Receive", I18N_KEY("Listens on a UDP port for Open Sound Control messages matching an address pattern, and reports the last received value as a modulator (remapped through low/high). Behaves like LFO/Random - patch its output onto any slider's modulation pin.") },
                { "OSC Send", I18N_KEY("Sends its patched modulator input as an Open Sound Control message (address + float) to a host:port over UDP, on change (past an epsilon) or at least every interval - the one node in the patch with no output of its own.") },
+               { "MIDI Out", I18N_KEY("Sends a note cable to a hardware or virtual MIDI device on one channel, so Infinite can play an external synth. Panic releases anything stuck.") },
                { "Audio Out, Gain, Mixer, Splitter, Blend Audio", I18N_KEY("The audio routing family. Audio Out is the terminal node. Every audio input pin takes exactly one cable, so Mixer is the only node that sums (4-8 slots, each with gain/pan/mute/solo) and Splitter is the only fan-out point. Gain is a single dB stage with a meter; Blend Audio is an equal-power crossfade between two inputs.") },
             } },
             { "Notes", {
@@ -950,6 +995,7 @@ namespace app
                { "Metallic", I18N_KEY("Physical modelling for struck and plucked metal - bells, gongs, bars, plates, chimes, tines, strings - via extended Karplus-Strong waveguides and inharmonic modal resonator banks.") },
                { "Oscillator", I18N_KEY("Four classic waveforms (sine, triangle, saw, square) with an interactive amp envelope, unison, filter, hard sync and fine/coarse tuning.") },
                { "Molder & Grain Molder", I18N_KEY("Molder decomposes a sample into tracked harmonic partials plus a real residual, then mutates a parameter genome and re-renders from it, each roll walking further from the last. Grain Molder rearranges grains along a blend between original position and a per-grain metric (level, brightness, random).") },
+               { "Field Notes", I18N_KEY("A note node whose body is a Field script. The script runs per sample against the transport beat; note(pitch, vel, len) inside an if sends a note out (len in beats, 0 holds as long as the incoming note). tick(div) fires on each beat division, deg(d) is a scale degree under Root/Scale, rand() is 0..1. Wire it into any synth or MIDI-out.") },
                { "Field Synth", I18N_KEY("A polyphonic synth whose voice is a Field kernel you write yourself, compiled to a sample-domain register machine - the note-driven counterpart of Field Effect.") },
             } },
             { "AudioEffects", {
@@ -978,7 +1024,7 @@ namespace app
 
          for (const Group& group : groups)
          {
-            ImGui::SeparatorText(group.category);
+            FormParts::Heading(group.category);
             for (const Entry& entry : group.entries)
             {
                ImGui::Bullet();
@@ -992,6 +1038,7 @@ namespace app
          }
       }
 
+      SectionCard::Begin();
       if (ImGui::CollapsingHeader(L("Tips")))
       {
          ImGui::Bullet(); ImGui::TextWrapped("%s", T("Put a Fit node before a Blend or Layer Stack when your sources are different sizes."));
@@ -1007,6 +1054,9 @@ namespace app
 #endif
       }
 
+      SectionCard::EndWindow();
+      FormParts::PopReferenceStyle();
+      FormParts::WindowEdge();
       ImGui::End();
       PopElevatedPanelStyle();
    }

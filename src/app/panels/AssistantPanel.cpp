@@ -23,6 +23,9 @@
 // remembering it. If that transcript is gone (cleaned up, other machine), the
 // first start fails before `init`, and the chat carries on as a new session.
 #include "app/AppShared.h"
+#include "app/ui/design/components/FormParts.h"
+#include "app/ui/design/components/MenuParts.h"
+#include "app/ui/design/components/TintedText.h"
 
 #include "core/RemoteControl.h"
 #include "platform/PlatformProcess.h"
@@ -911,27 +914,19 @@ namespace app
          switch (e.kind)
          {
          case Entry::User:
-            ImGui::PushStyleColor(ImGuiCol_Text, style.Colors[ImGuiCol_ButtonActive]);
-            ImGui::TextWrapped("%s", e.text.c_str());
-            ImGui::PopStyleColor();
+            TintedText::Wrapped(style.Colors[ImGuiCol_ButtonActive], e.text.c_str());
             break;
          case Entry::Assistant:
             ImGui::TextWrapped("%s", e.text.c_str());
             break;
          case Entry::Tool:
-            ImGui::PushStyleColor(ImGuiCol_Text, style.Colors[ImGuiCol_TextDisabled]);
-            ImGui::TextWrapped("  %s", e.text.c_str());
-            ImGui::PopStyleColor();
+            TintedText::WrappedDim(("  " + e.text).c_str());
             break;
          case Entry::Error:
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.45f, 0.40f, 1.0f));
-            ImGui::TextWrapped("%s", e.text.c_str());
-            ImGui::PopStyleColor();
+            TintedText::Wrapped(tok::V4(tok::palf::v_950_450_400_1000), e.text.c_str());
             break;
          case Entry::Info:
-            ImGui::PushStyleColor(ImGuiCol_Text, style.Colors[ImGuiCol_TextDisabled]);
-            ImGui::TextWrapped("%s", e.text.c_str());
-            ImGui::PopStyleColor();
+            TintedText::WrappedDim(e.text.c_str());
             break;
          }
       }
@@ -968,7 +963,7 @@ namespace app
             const bool justCopied = s.copiedIndex == index && ImGui::GetTime() - s.copiedTime < 1.5;
             const char* copyLabel = justCopied ? T("Copied") : T("Copy");
             const bool isUser = e.kind == Entry::User;
-            auto W = [&](const char* label) { return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f; };
+            auto W = [&](const char* label) { return ImGui::CalcTextSize(label).x + tok::space_2 * 2.0f; };
             float w = W(copyLabel);
             if (isUser)
                w += W(T("Edit")) + W(T("Retry")) + style.ItemSpacing.x * 2.0f;
@@ -978,7 +973,7 @@ namespace app
                                                       ImGui::GetColorU32(ImGuiCol_PopupBg), style.FrameRounding);
             ImGui::SetCursorScreenPos(pos);
             ImGui::PushID(index);
-            if (ImGui::SmallButton(copyLabel))
+            if (ActionButton::Draw(copyLabel))
             {
                ImGui::SetClipboardText(e.text.c_str());
                s.copiedIndex = index;
@@ -987,13 +982,13 @@ namespace app
             if (isUser)
             {
                ImGui::BeginDisabled(s.busy);
-               ImGui::SameLine();
-               if (ImGui::SmallButton(L("Edit")))
+               FormParts::Inline();
+               if (ActionButton::Draw(L("Edit")))
                   action = { EntryAction::Edit, index };
                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                   ImGui::SetTooltip("%s", T("Change this question and ask again. The answers after it are dropped."));
-               ImGui::SameLine();
-               if (ImGui::SmallButton(L("Retry")))
+               FormParts::Inline();
+               if (ActionButton::Draw(L("Retry")))
                   action = { EntryAction::Retry, index };
                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                   ImGui::SetTooltip("%s", T("Ask this question again. The answers after it are dropped."));
@@ -1005,7 +1000,7 @@ namespace app
          ImGui::Spacing();
       }
 
-      // Header button drawn as an icon, sized like a SmallButton.
+      // Header button drawn as an icon, as tall as the header's text buttons (frame height).
       bool HeaderIconButton(const char* id, void (*draw)(ImDrawList*, ImVec2, float, ImU32, float), const char* tooltip, bool active = false)
       {
          const float h = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2.0f;
@@ -1027,13 +1022,13 @@ namespace app
          if (!ImGui::BeginPopup("##assistant_history"))
             return;
          ImGui::TextDisabled("%s", T("Chats"));
-         ImGui::Separator();
+         MenuParts::Separator();
          if (s.history.empty())
             ImGui::TextDisabled("%s", T("No saved chats yet."));
          std::string open, remove, copy;
          const ImGuiStyle& style = ImGui::GetStyle();
-         const float deleteW = ImGui::CalcTextSize(T("Delete")).x + style.FramePadding.x * 2.0f;
-         const float copyW = ImGui::CalcTextSize(T("Copy")).x + style.FramePadding.x * 2.0f + style.ItemSpacing.x;
+         const float deleteW = ImGui::CalcTextSize(T("Delete")).x + tok::space_2 * 2.0f;
+         const float copyW = ImGui::CalcTextSize(T("Copy")).x + tok::space_2 * 2.0f + style.ItemSpacing.x;
          const float buttonsW = deleteW + copyW;
          const float rowW = std::max(340.0f, ImGui::GetContentRegionAvail().x);
          for (const ChatMeta& c : s.history)
@@ -1047,15 +1042,15 @@ namespace app
             if (s.busy && !current && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                ImGui::SetTooltip("%s", T("Wait for the current answer, or press Stop, before switching chats."));
             ImGui::EndDisabled();
-            ImGui::SameLine(rowW - buttonsW - 80.0f);
+            FormParts::Inline(rowW - buttonsW - 80.0f);
             ImGui::TextDisabled("%s", FormatWhen(c.updated).c_str());
-            ImGui::SameLine(rowW - buttonsW);
-            if (ImGui::SmallButton(L("Copy")))
+            FormParts::Inline(rowW - buttonsW);
+            if (ActionButton::Draw(L("Copy")))
                copy = c.id;
             if (ImGui::IsItemHovered())
                ImGui::SetTooltip("%s", T("Copy this whole chat as text."));
-            ImGui::SameLine(rowW - deleteW);
-            if (ImGui::SmallButton(L("Delete")))
+            FormParts::Inline(rowW - deleteW);
+            if (ActionButton::Draw(L("Delete")))
                remove = c.id;
             ImGui::PopID();
          }
@@ -1112,7 +1107,7 @@ namespace app
             if (ImGui::MenuItem(L("Retry"), nullptr, false, !s.busy))
                action = { EntryAction::Retry, s.menuIndex };
          }
-         ImGui::Separator();
+         MenuParts::Separator();
          if (ImGui::MenuItem(L("Copy all")))
          {
             ImGui::SetClipboardText(Transcript(s).c_str());
@@ -1175,7 +1170,7 @@ namespace app
       Pump(s);
 
       PushDockedPanelStyle(/*isChild=*/true);
-      ImGui::BeginChild(id, size, ImGuiChildFlags_Border | ImGuiChildFlags_AlwaysUseWindowPadding);
+      ImGui::BeginChild(id, size, ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding);
       PopDockedPanelStyle();
       const ImVec2 wp = ImGui::GetWindowPos();
       const ImVec2 ws = ImGui::GetWindowSize();
@@ -1196,10 +1191,10 @@ namespace app
       const bool allCopied = s.copiedIndex == -1 && ImGui::GetTime() - s.copiedTime < 1.5;
       const char* copyAllLabel = allCopied ? T("Copied") : T("Copy all");
       ImGui::TextUnformatted(T("Assistant"));
-      ImGui::SameLine();
+      FormParts::Inline();
       const float iconW = ImGui::GetFontSize() + style.FramePadding.y * 2.0f;
       const float buttonsW = ImGui::CalcTextSize(copyAllLabel).x + ImGui::CalcTextSize(T("Stop")).x +
-                             style.FramePadding.x * 4.0f + style.ItemSpacing.x * 4.0f + iconW * 3.0f;
+                             tok::space_2 * 4.0f + style.ItemSpacing.x * 4.0f + iconW * 3.0f;
       ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - buttonsW));
       const bool historyOpen = ImGui::IsPopupOpen("##assistant_history");
       if (HeaderIconButton("##assistant_historybtn", &Tabler::DrawList, T("Chat history"), historyOpen))
@@ -1208,34 +1203,34 @@ namespace app
          ImGui::OpenPopup("##assistant_history");
       }
       DrawHistoryPopup(s);
-      ImGui::SameLine();
+      FormParts::Inline();
       ImGui::BeginDisabled(s.log.empty());
-      if (ImGui::SmallButton(copyAllLabel))
+      if (ActionButton::Draw(copyAllLabel))
       {
          ImGui::SetClipboardText(Transcript(s).c_str());
          s.copiedIndex = -1;
          s.copiedTime = ImGui::GetTime();
       }
       ImGui::EndDisabled();
-      ImGui::SameLine();
+      FormParts::Inline();
       ImGui::BeginDisabled(!s.busy);
-      if (ImGui::SmallButton(L("Stop")))
+      if (ActionButton::Draw(L("Stop")))
       {
          s.StopProcess();
          s.log.push_back({ Entry::Info, T("Stopped. Changes made so far stay; undo removes them.") });
          s.dirty = true;
       }
       ImGui::EndDisabled();
-      ImGui::SameLine();
+      FormParts::Inline();
       if (HeaderIconButton("##assistant_new", &Tabler::DrawPlus, T("New chat (this one stays in the history)")))
       {
          SaveChat(s);
          ResetChat(s);
       }
-      ImGui::SameLine();
+      FormParts::Inline();
       if (HeaderIconButton("##assistant_hide", &Tabler::DrawX, T("Hide the assistant. A running answer keeps going; show it again from the top bar.")))
          gAssistantPanelOpen = false;
-      ImGui::Separator();
+      MenuParts::Separator();
 
       const bool listening = RemoteControl::Listening();
       if (s.editIndex >= (int)s.log.size())
@@ -1266,10 +1261,8 @@ namespace app
       DrawEntryMenu(s, action);
       if (s.busy)
       {
-         ImGui::PushStyleColor(ImGuiCol_Text, style.Colors[ImGuiCol_TextDisabled]);
          const int dots = 1 + (int)(ImGui::GetTime() * 2.0) % 3;
-         ImGui::Text("%s%.*s", T("Working"), dots, "...");
-         ImGui::PopStyleColor();
+         ImGui::TextDisabled("%s%.*s", T("Working"), dots, "...");
       }
       if (s.scrollToBottom)
       {
@@ -1308,8 +1301,8 @@ namespace app
       if (s.editIndex >= 0)
       {
          ImGui::TextDisabled("%s", T("Editing a question - sending replaces it and the answers after it."));
-         ImGui::SameLine();
-         if (ImGui::SmallButton(L("Cancel")) ||
+         FormParts::Inline();
+         if (ActionButton::Draw(L("Cancel")) ||
              (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
          {
             s.editIndex = -1;
@@ -1336,14 +1329,14 @@ namespace app
                                                    &InputCallback, &s);
       s.inputActive = ImGui::IsItemActive();
       ImGui::PopID();
-      const bool click = ImGui::Button(s.editIndex >= 0 ? L("Send edit") : L("Send"));
+      const bool click = ActionButton::Draw(s.editIndex >= 0 ? L("Send edit") : L("Send"));
       ImGui::EndDisabled();
-      ImGui::SameLine();
+      FormParts::Inline();
       ImGui::TextDisabled("%s", T("Enter sends, Ctrl+Enter new line"));
       if (s.costUsd > 0.0)
       {
          // Claude Code's own estimate; on a subscription it is notional.
-         ImGui::SameLine();
+         FormParts::Inline();
          ImGui::TextDisabled("  ~$%.3f", s.costUsd);
          if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", T("Estimated API cost of this chat, as Claude Code reports it. On a Claude plan it counts against your usage limits instead."));

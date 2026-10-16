@@ -2186,6 +2186,10 @@ void FrameTest_THEMECONTRASTTEST(int frameId, GLFWwindow* window)
             const bool good = lowest >= 4.499f;
             ok = ok && good;
             printf("[THEMECONTRASTTEST] %-18s lowest %.2f  %s\n", names[i].c_str(), lowest, good ? "ok" : "FAIL");
+            // G15 non-text: the accent (checked / active state) vs panel. Reported only; the recessed frame fill is
+            // deliberately quiet (node-ui-pillars P10), so 3:1 applies to the active state, not the resting frame.
+            printf("[THEMECONTRASTTEST]   accent/panel %.2f%s\n", CategoryColors::ContrastRatio(t.accent, t.panelBg),
+                   CategoryColors::ContrastRatio(t.accent, t.panelBg) < 3.0f ? "  below 3:1" : "");
          }
          printf("[THEMECONTRASTTEST] %s\n", ok ? "THEMECONTRASTTEST OK" : "THEMECONTRASTTEST FAIL");
          glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -3009,6 +3013,181 @@ void FrameTest_FIELDPIXELTEST(int frameId, GLFWwindow* window)
             printf("[FIELDPIXELTEST] Assertion 27 (Advection Transports): %s\n", pass ? "OK" : "FAIL");
          }
 
+
+         // Image-coordinate language corpus: invalid calls must fail in the
+         // front end rather than producing an invalid or misleading shader.
+         {
+            std::ifstream corpus("tests/field/image-offset-corpus.txt");
+            if (!corpus.is_open())
+            {
+               // Cocoa changes cwd to Contents/Resources during glfwInit.
+               // Resolve against this fixture's build-time source path too.
+               auto root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+               corpus.clear();
+               corpus.open(root / "tests/field/image-offset-corpus.txt");
+            }
+            bool pass = corpus.good();
+            int cases = 0;
+            std::string line;
+            while (std::getline(corpus, line))
+            {
+               if (line.empty() || line[0] == '#') continue;
+               size_t a = line.find(" | "), b = line.find(" | ", a + 3);
+               if (a == std::string::npos || b == std::string::npos) { pass = false; continue; }
+               std::string domain = line.substr(0, a), expect = line.substr(a + 3, b - a - 3);
+               std::string code = line.substr(b + 3);
+               for (size_t p = code.find("\\n"); p != std::string::npos; p = code.find("\\n", p + 1))
+                  code.replace(p, 2, "\n");
+               bool ok; std::string error;
+               if (domain == "pixel")
+               {
+                  FieldPixelNode node; node.code = code; ok = node.Apply(); error = node.LastError();
+               }
+               else
+               {
+                  FieldElementNode node; node.code = code; ok = node.Apply(); error = node.LastError();
+               }
+               bool good = expect == "OK" ? ok : (!ok && error.find(expect) != std::string::npos);
+               if (!good) printf("[FIELDPIXELTEST] image corpus case %d FAIL: %s\n", cases, error.c_str());
+               pass = pass && good; ++cases;
+            }
+            printf("[FIELDPIXELTEST] Assertion 28 (Image Read Corpus, %d cases): %s\n", cases, pass && cases == 12 ? "OK" : "FAIL");
+         }
+
+         // Readback proves identity, one-texel shift, half-texel interpolation,
+         // alpha and clamping on a non-square source with a repeat sampler.
+         {
+            const int w = 96, h = 64;
+            FieldPixelNode source;
+            source.width = (float)w; source.height = (float)h;
+            source.code = "col = vec3(uv.x, uv.y, step(0.5, fract(uv.x * 12))); alpha = uv.x;";
+            bool pass = source.Apply(); source.CookIfNeeded(12000);
+            glBindTexture(GL_TEXTURE_2D, source.GetOutputTexture());
+            GLint filter = 0; glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, &filter);
+            pass = pass && filter == GL_LINEAR;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            unsigned int scratch = 0;
+            auto read = [&](FieldPixelNode& node, int nw, int nh) {
+               std::vector<float> pixels;
+               GLUtil::ReadTexturePixels(scratch, node.GetOutputTexture(), nw, nh, pixels);
+               return pixels;
+            };
+            auto src = read(source, w, h);
+            FieldPixelNode effect; effect.width = (float)w; effect.height = (float)h;
+            auto render = [&](const char* expr, int frame) {
+               effect.code = std::string("input pixel image img; c = ") + expr + "; col = c.rgb; alpha = c.a;";
+               bool ok = effect.Apply();
+               if (!ok) printf("[FIELDPIXELTEST] image GPU compile FAIL: %s\n", effect.LastError().c_str());
+               pass = pass && ok;
+               if (effect.DeclaredImageInputCount() > 0) effect.DeclaredImageInput(0)->Connect(&source);
+               effect.CookIfNeeded(frame);
+               return read(effect, (int)effect.width, (int)effect.height);
+            };
+            auto bare = render("img", 12001), identity = render("img(uv)", 12002);
+            auto shift = render("img(uv + vec2(1/res.x, 0))", 12003);
+            auto half = render("img(uv + vec2(0.5/res.x, 0))", 12004);
+            pass = pass && src.size() == (size_t)w*h*4 && bare.size() == src.size() && identity.size() == src.size() && shift.size() == src.size() && half.size() == src.size();
+            if (!pass)
+               printf("[FIELDPIXELTEST] image sampling setup: filter %d (want %d), sizes src %zu bare %zu shift %zu half %zu\n", (int)filter, (int)GL_LINEAR, src.size(), bare.size(), shift.size(), half.size());
+            float errBare = 0, errShift = 0, errHalf = 0;
+            if (pass)
+               for (int y=0; y<h; ++y) for (int x=0; x<w; ++x) for (int c=0; c<4; ++c)
+               {
+                  size_t at = (y*w+x)*4+c, next = (y*w+std::min(x+1,w-1))*4+c;
+                  errBare = std::max(errBare, std::abs(bare[at]-identity[at]));
+                  errShift = std::max(errShift, std::abs(shift[at]-src[next]));
+                  errHalf = std::max(errHalf, std::abs(half[at]-(src[at]+src[next])*0.5f));
+               }
+            const bool passPixels = pass && errBare < 1e-4f && errShift < 0.006f && errHalf < 0.006f;
+            if (pass && !passPixels)
+               printf("[FIELDPIXELTEST] image sampling max error: bare-vs-identity %.5f, shift %.5f, half-texel %.5f\n", errBare, errShift, errHalf);
+            pass = passPixels;
+            // A different output size must clamp to SOURCE texel centres.
+            effect.width = 192; effect.height = 108;
+            auto edge = render("img(vec2(-2, 2))", 12005);
+            size_t topLeft = (h-1)*w*4;
+            const bool edgeSized = edge.size() == (size_t)192*108*4;
+            pass = pass && edgeSized;
+            if (src.size() > topLeft+3 && edge.size() >= 4)
+               for (int c=0; c<4; ++c)
+               {
+                  const bool near = std::abs(edge[c]-src[topLeft+c]) < 0.001f;
+                  if (pass && !near) printf("[FIELDPIXELTEST] image sampling clamp: channel %d got %.5f want %.5f\n", c, edge[c], src[topLeft+c]);
+                  pass = pass && near;
+               }
+            if (!edgeSized) printf("[FIELDPIXELTEST] image sampling clamp: size %zu\n", edge.size());
+            auto disconnected = render("img(uv)", 12006);
+            effect.DeclaredImageInput(0)->Disconnect(); effect.CookIfNeeded(12007);
+            disconnected = read(effect, 192, 108);
+            float maxDisconnected = 0.0f;
+            for (float v : disconnected) maxDisconnected = std::max(maxDisconnected, std::abs(v));
+            const bool disconnectedOk = !disconnected.empty() && maxDisconnected == 0.0f;
+            const bool countsOk = effect.EmitResult().offsetReadCount == 1 && !effect.EmitResult().usesOffsetReads;
+            if (pass && (!disconnectedOk || !countsOk))
+               printf("[FIELDPIXELTEST] image sampling disconnect: empty %d, max %.5f; offsetReadCount %d, usesOffsetReads %d\n",
+                      (int)disconnected.empty(), maxDisconnected, (int)effect.EmitResult().offsetReadCount, (int)effect.EmitResult().usesOffsetReads);
+            pass = pass && disconnectedOk && countsOk;
+            if (scratch) glDeleteFramebuffers(1, &scratch);
+            printf("[FIELDPIXELTEST] Assertion 29 (Image Sampling GPU): %s\n", pass ? "OK" : "FAIL");
+         }
+
+         // Six camera presets render finite pixels at 1080p, including both
+         // mode endpoints. Reusing a node catches stale param-uniform indices.
+         {
+            FieldPixelNode source; source.width = 1920; source.height = 1080;
+            source.code = "col = vec3(uv.x, uv.y, 0.25); alpha = 0.75;";
+            bool pass = source.Apply(); source.CookIfNeeded(13000);
+            FieldPixelNode fx; fx.width = 1920; fx.height = 1080;
+            unsigned int scratch = 0;
+            int count = 0, frame = 13001;
+            const char* names[] = {"Levels", "Scanlines / Interlace", "Lens Dirt + Flare", "Polar Coords", "Chromatic Aberration", "Zoom Blur"};
+            for (const char* name : names)
+               for (const auto& preset : FieldPixelNode::Presets())
+                  if (std::string(preset.name) == name)
+                  {
+                     ++count; fx.code = preset.code;
+                     bool ok = fx.Apply(); pass = pass && ok;
+                     if (!ok) { printf("[FIELDPIXELTEST] camera preset '%s' FAIL: %s\n", name, fx.LastError().c_str()); continue; }
+                     fx.DeclaredImageInput(0)->Connect(&source);
+                     for (int endpoint = 0; endpoint < 3; ++endpoint)
+                     {
+                        if (endpoint > 0)
+                           for (const auto& uniform : fx.EmitResult().uniforms)
+                              if (uniform.paramIndex >= 0)
+                                 if (auto* param = fx.GetParamTable().Find(uniform.varName))
+                                    param->value = endpoint == 1 ? param->minValue : param->maxValue;
+                        fx.CookIfNeeded(frame++);
+                        std::vector<float> px;
+                        GLUtil::ReadTexturePixels(scratch, fx.GetOutputTexture(), 1920, 1080, px);
+                        pass = pass && px.size() == (size_t)1920*1080*4;
+                        for (float v : px) pass = pass && std::isfinite(v);
+                        // A gradient gives an analytic reference for the
+                        // fixed taps; this catches accidentally identical taps.
+                        if (std::string(name) == "Zoom Blur" && px.size() == (size_t)1920*1080*4)
+                        {
+                           const float u = 1440.5f / 1920.0f;
+                           const float amount = fx.GetParamTable().Find("amount")->value;
+                           const float centre = fx.GetParamTable().Find("centreX")->value;
+                           double expected = 0.0;
+                           for (int k = 0; k < 16; ++k)
+                           {
+                              double fraction = (double)k / 15.0;
+                              double coord = u - (u - centre) * amount * fraction;
+                              coord = std::max(0.5 / 1920.0, std::min(1.0 - 0.5 / 1920.0, coord));
+                              expected += coord * (1.0 - 0.5 * fraction) / 12.0;
+                           }
+                           float actual = px[(810*1920+1440)*4];
+                           bool good = std::abs(actual - expected) < 0.003;
+                           if (!good) printf("[FIELDPIXELTEST] zoom taps FAIL: got %f expected %f\n", actual, expected);
+                           pass = pass && good && fx.EmitResult().offsetReadCount == 16;
+                        }
+                     }
+                  }
+            if (scratch) glDeleteFramebuffers(1, &scratch);
+            printf("[FIELDPIXELTEST] Assertion 30 (Camera FX at 1920x1080, %d presets): %s\n", count, pass && count == 6 ? "OK" : "FAIL");
+         }
+
          printf("[FIELDPIXELTEST] Test suite complete.\n");
       }
 }
@@ -3537,5 +3716,121 @@ void FrameTest_FIELDGRAPHRATETEST(int frameId, GLFWwindow* window)
 
          printf("%s\n", allOk ? "FIELDGRAPHRATE OK" : "SUSPECT");
       }
+}
+
+// Cmd/Ctrl+F find on a 400-node patch: by type, by comment text, by title with arrow stepping. Real key and
+// character events, so the shortcut, the field, the match list, the jump and Esc are all exercised.
+void FrameTest_FINDTEST(int frameId, GLFWwindow* window)
+{
+   if (getenv("INFINITE_FINDTEST") == nullptr)
+      return;
+   ImGuiIO& tio = ImGui::GetIO();
+   tio.ConfigInputTrickleEventQueue = false;
+   tio.AddFocusEvent(true);
+   static bool ok = true;
+   static int drumIdx = -1, needleIdx = -1;
+   auto check = [&](bool good, const char* what) {
+      ok = ok && good;
+      printf("findtest %-52s %s\n", what, good ? "ok" : "FAIL");
+   };
+   auto tap = [&](ImGuiKey key, int at, bool ctrl) {
+      if (frameId == at)
+      {
+         if (ctrl) tio.AddKeyEvent(ImGuiMod_Ctrl, true);
+         tio.AddKeyEvent(key, true);
+      }
+      if (frameId == at + 1)
+      {
+         tio.AddKeyEvent(key, false);
+         if (ctrl) tio.AddKeyEvent(ImGuiMod_Ctrl, false);
+      }
+   };
+   auto type = [&](const char* text, int at) {
+      if (frameId == at)
+         for (const char* c = text; *c; ++c) tio.AddInputCharacter(*c);
+   };
+   auto nodeCentreNear = [&](int idx) {
+      GraphNode* gn = FindNodeByIndex(idx);
+      if (gn == nullptr) return false;
+      const ImVec2 p = ed::GetNodePosition(gn->NodeId());
+      const ImVec2 sz = ed::GetNodeSize(gn->NodeId());
+      const ImVec2 mid(p.x + sz.x * 0.5f, p.y + sz.y * 0.5f);
+      return std::fabs(mid.x - gViewCenterCanvas.x) < 90.0f && std::fabs(mid.y - gViewCenterCanvas.y) < 90.0f;
+   };
+   auto onlySelected = [&](int idx) {
+      for (GraphNode& gn : gNodes)
+         if (ed::IsNodeSelected(gn.NodeId()) != (gn.index == idx)) return false;
+      return true;
+   };
+
+   if (frameId == 3)
+   {
+      for (int i = 0; i < 400; ++i)
+      {
+         const float x = (float)(i % 20) * 420.0f, y = (float)(i / 20) * 320.0f;
+         GraphNode* gn = nullptr;
+         if (i == 237) gn = SpawnNode("Drum Sequencer", "Synths", x, y);
+         else if (i % 4 == 0) gn = SpawnNode("Comment", "Compositing", x, y);
+         else gn = SpawnNode("Equation Synth", "Synths", x, y);
+         if (gn == nullptr) continue;
+         const int idx = gn->index;
+         if (i == 237) drumIdx = idx;
+         if (auto* c = dynamic_cast<CommentNode*>(gn->node.get()))
+            c->text = (i == 76) ? "needle-comment-77 retune the bass" : "note " + std::to_string(i);
+         if (i == 76) needleIdx = idx;
+      }
+      check(gNodes.size() >= 400 && drumIdx >= 0 && needleIdx >= 0, "400-node fixture spawned");
+   }
+   // By type.
+   tap(ImGuiKey_F, 14, true);
+   if (frameId == 17) check(FindIsOpen(), "Cmd/Ctrl+F opens the field");
+   type("drum seq", 19);
+   if (frameId == 23)
+   {
+      check(FindMatchCount() == 1 && FindMatchNodeIndex(0) == drumIdx, "type: 'drum seq' finds the one Drum Sequencer");
+      check(!gRequestFitView, "typing in the field raises no fit-view request");
+   }
+   tap(ImGuiKey_Enter, 24, false);
+   if (frameId == 60)
+   {
+      check(onlySelected(drumIdx), "Enter selects exactly that node");
+      check(nodeCentreNear(drumIdx), "Enter centres the view on it");
+   }
+   tap(ImGuiKey_Escape, 62, false);
+   if (frameId == 66) check(!FindIsOpen(), "Esc closes");
+   // By comment text.
+   tap(ImGuiKey_F, 68, true);
+   type("needle comment", 72);
+   if (frameId == 76)
+      check(FindMatchCount() == 1 && FindMatchNodeIndex(0) == needleIdx, "comment: 'needle comment' finds the one comment");
+   tap(ImGuiKey_Enter, 77, false);
+   if (frameId == 115)
+   {
+      check(onlySelected(needleIdx), "comment hit is selected");
+      check(nodeCentreNear(needleIdx), "comment hit is centred");
+   }
+   tap(ImGuiKey_Escape, 117, false);
+   // By title, stepping with the arrows.
+   tap(ImGuiKey_F, 121, true);
+   type("equation", 125);
+   if (frameId == 129) check(FindMatchCount() > 100, "title: 'equation' finds the synths");
+   tap(ImGuiKey_DownArrow, 130, false);
+   tap(ImGuiKey_DownArrow, 132, false);
+   if (frameId == 135) check(FindCurrentMatch() == 2, "two Down presses step to the third match");
+   const int third = frameId == 135 ? FindMatchNodeIndex(2) : -1;
+   static int thirdIdx = -1;
+   if (frameId == 135) thirdIdx = third;
+   tap(ImGuiKey_Enter, 136, false);
+   if (frameId == 175)
+   {
+      check(onlySelected(thirdIdx), "stepped hit is selected");
+      check(nodeCentreNear(thirdIdx), "stepped hit is centred");
+   }
+   tap(ImGuiKey_Escape, 177, false);
+   if (frameId == 181)
+   {
+      check(!FindIsOpen(), "Esc closes again");
+      printf("%s\n", ok ? "FIND TEST OK" : "FIND TEST FAIL");
+   }
 }
 }

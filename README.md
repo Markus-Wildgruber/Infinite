@@ -1,12 +1,17 @@
 # Infinite
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="art/brand/readme/readme-dark.png">
+  <img src="art/brand/readme/readme-light.png" alt="Infinite: a DAW for you. Visuals, music and code on one canvas." width="100%">
+</picture>
+
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/7cpQfCxnx)
 [![YouTube Tutorial](https://img.shields.io/badge/YouTube-Watch%20Tutorial-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=vXRjrDhSq24&t=1421s)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue)](https://github.com/n1m21n/Infinite)
 [![License](https://img.shields.io/badge/License-MIT%20%2F%20GPLv3-green)](LICENSE)
 [<img src="https://trendshift.io/api/badge/trendshift/repositories/187223/daily?language=C%2B%2B" alt="n1m21n%2FInfinite | Trendshift" width="250" height="55"/>](https://trendshift.io/repositories/187223?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-187223)
 
-A unified node-based audiovisual modular workstation for **macOS**, **Windows**, and **Linux**. Real-time GPU image/video compositing, procedural 3D geometry and physics, and a full modular synthesizer rack with native AU and VST3 plugin hosting — all interconnected through a universal modulation graph. Most nodes do one fixed thing; **Field**, Infinite's embedded programming language, lets you write what a node does instead.
+**Infinite is a free, open-source audiovisual workstation made by Naman Soni (n1m21n).** A unified node-based audiovisual modular workstation for **macOS**, **Windows**, and **Linux**. Real-time GPU image/video compositing, procedural 3D geometry and physics, and a full modular synthesizer rack with native AU and VST3 plugin hosting — all interconnected through a universal modulation graph. Most nodes do one fixed thing; **Field**, Infinite's embedded programming language, lets you write what a node does instead.
 
 ![Infinite Screenshot](website/assets/screenshot.png)
 
@@ -39,21 +44,21 @@ Always the newest release. All files, checksums and release notes are on the [Re
 
 ## Node Library Overview
 
-Infinite features **290+ modular node types**:
+Infinite features **300+ modular node types**:
 
 | Domain | Key Nodes |
 |---|---|
-| **2D & Video** | Image, folder Slideshow, Video (hardware-accelerated), Syphon In / Spout In, NDI In, Paint/Draw canvas, GLSL Formula editor, Shapes (SDF), Noise & Gradient Ramps |
-| **2D FX & Grading** | Blur, Bloom, Glitch (6 modes), Twirl, Ripple, Displace, Halftone, Curves (RGB/Luma splines), Color Ramp, .cube LUTs, Gradient Map, Palette extraction |
+| **2D & Video** | Image, folder Slideshow, Video (hardware-accelerated), Syphon In / Spout In, NDI In, Paint/Draw canvas, GLSL Formula editor, Sketch (JavaScript-drawn images, with SVG animation), Shapes (SDF), Noise & Gradient Ramps |
+| **2D FX & Grading** | Blur, Bloom, Glitch (6 modes), Twirl, Ripple, Displace, Halftone, Curves (RGB/Luma splines), Dither, Color Ramp, .cube LUTs, Gradient Map, Palette extraction |
 | **Compositing & Masks** | Blend (32 modes), Layer Stack, Remove Background (on-device ML segmentation), Chroma/Luma Key, Feedback loop, Reaction-Diffusion, Resynthesize |
-| **3D Geometry & FX** | Primitives, USD/OBJ/PLY/STL/glTF/GLB import, 3D Text, 3D Curves, Point Distribution, Mesh Deconstruction, Taubin Smooth, Array, Instancing, Metaballs |
+| **3D Geometry & FX** | Primitives, USD/OBJ/PLY/STL/glTF/GLB import, 3D Text, 3D Curves, Point Distribution, Sketch 3D (JavaScript-built meshes), Mesh Deconstruction, Delaunay Mesh, Voronoi Cells, Decimate, Curve Ops, Taubin Smooth, Array, Instancing, Metaballs |
 | **3D Scene & Render** | Camera (orbit/perspective/ortho), Lights, 32-bit HDRI Environment, PBR Materials, ACES Tonemapping, Multisampled Antialiasing |
 | **Synths & Sound** | Wavetable synth, Metallic modal resonator, Granular synth, PaulStretch, Molder / Grain Molder (spectral resynthesis), Sampler, Slicer (onset-detecting sample chopper), 8-track Drum Sequencer, 16-pad MPC sampler (polyphonic, per-pad mode / tempo-quantised sync / volume / pitch / pan / speed / fine tune / fades, all modulatable), Looper (record / overdub, tempo-synced, latency-compensated, Sampler-style playback controls), Multi-waveform Oscillator |
 | **Field Language** | Field Modifier, Field Primitive, Field Effect, Field Synth, Field Pixel, Field Graph — see [below](#field-write-what-a-node-does) |
-| **Notes & MIDI** | Live MIDI input/clock, Arpeggiator, Note Sequencer, Chorder, Strum, Bouncing Balls (physics notes), Humanizer, Quantizer |
+| **Notes & MIDI** | Live MIDI input/clock, Arpeggiator, Note Sequencer, Chorder, Strum, Bouncing Balls (physics notes), Humanizer, Quantizer, MIDI File player, MIDI Out (hardware and virtual ports, CC and clock), Field Notes (a Field script that plays notes) |
 | **Audio FX & Plugins** | **AU / VST3 Plugin Host**, Filters, EQ, Dynamics, Lookahead Limiter, Delay, Reverb, Drive/Saturation, Pitch & Frequency Shifters, Chorus, Phaser, Formant |
-| **Modulators & Analysis** | LFO, Random, Pattern CV, Envelope Follower, Math, XY Pad, Audio Analyze (8-band FFT / onset), Image Analyze (luminance / motion) |
-| **Output & I/O** | PNG snapshot, H.264/MOV video recording with synchronized audio, Syphon Out / Spout Out, NDI Out |
+| **Modulators & Analysis** | LFO, Random, Pattern CV, Envelope Follower, Math, XY Pad, Audio Analyze (8-band FFT / onset), Image Analyze (luminance / motion), Hand / Face / Pose Track (camera to modulators, via the Tracking pack) |
+| **Output & I/O** | Spatial Mixer (3D headphone mix with head tracking), PNG snapshot, H.264/MOV video recording with synchronized audio, Syphon Out / Spout Out, NDI Out |
 
 The full catalogue, including every node's pins and parameters, is in the [Node Reference Manual](Infinite_Node_Reference_Manual.pdf).
 
@@ -73,7 +78,7 @@ P.y += sin(P.x * 4.0 + t) * 0.2          // once per point in a mesh — a geome
 out = in * gain                          // once per audio sample — a DSP effect
 ```
 
-That's the one idea underneath the whole language: a **kernel**, run once per element of a **domain**, forever. You never declare where it runs — the domain (and therefore the backend it compiles to) is inferred. Field currently spans five domains and six node types:
+That's the one idea underneath the whole language: a **kernel**, run once per element of a **domain**, forever. You never declare where it runs — the domain (and therefore the backend it compiles to) is inferred. Field currently spans five domains and seven node types:
 
 | Node | Domain | What it does |
 |---|---|---|
@@ -82,6 +87,7 @@ That's the one idea underneath the whole language: a **kernel**, run once per el
 | **Field Effect** | sample | Per-sample audio DSP kernel; `in`/`out`, `state` for per-voice memory, `param` for knobs |
 | **Field Synth** | sample | Polyphonic note-driven synth voice using the same sample compiler, with `freq`/`gate` in place of an audio input |
 | **Field Pixel** | pixel | Per-pixel kernel compiled straight to GLSL; `state` cells with `[wrap]` support feedback and stencils |
+| **Field Notes** | sample | Per-sample note kernel: `note(pitch, vel, len)` sends notes out, and `tick(div)`, `deg(d)`, `rand()` and `beat` read the transport |
 | **Field Graph** | graph | Runs once at edit time — `emit()`/`connect()`/`set()`/`place()` declaratively mount and wire real Infinite nodes into a bundle ("Instrument Mode" collapses it to one box; "Unpack to Canvas" expands it back out) |
 
 Any element/pixel/sample kernel can also declare **dynamic pins** right in its code, adding real, cable-wireable, save/load-safe I/O to the node without touching C++. Finished devices — kernel plus params plus presets — save, load, export and import as portable `.field` files, so a Field patch is shareable like an audio plugin preset. The full language reference — syntax, domain-transfer operators, reserved words, and the complete node/format reference — is in the [Field Language Manual](Field_Language_Manual.pdf).
@@ -97,17 +103,15 @@ Any element/pixel/sample kernel can also declare **dynamic pins** right in its c
 ### Pre-built App (macOS, Windows & Linux)
 Download the latest build for your platform from [GitHub Releases](https://github.com/n1m21n/Infinite/releases): `Infinite.dmg` for macOS, `Infinite-windows-x64.zip` / `Infinite-windows-ARM64.zip` for Windows, or `Infinite-x86_64.AppImage` for Linux.
 
-**macOS**
+**macOS** (Infinite is not notarized by Apple, so the first launch needs one extra step)
 1. Open the DMG and drag `Infinite.app` to Applications.
-2. Right-click `Infinite.app` → **Open** → Click **Open** (ad-hoc signed).
-3. If blocked by Gatekeeper quarantine, run in Terminal:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Infinite.app
-   ```
+2. Double-click `Fix & Open Infinite.command` in the DMG and press `y`. It clears the download flag on Infinite only, then opens it.
+   - Or do it by hand: try to open Infinite once, then **System Settings → Privacy & Security → Open Anyway** (macOS 15 and later), or right-click `Infinite.app` → **Open** (older macOS).
+   - Or in Terminal: `xattr -dr com.apple.quarantine /Applications/Infinite.app`
 
 **Windows**
 1. Unzip the `x64` or `ARM64` build for your CPU.
-2. Run `Infinite.exe`. If SmartScreen blocks it, click **More info** → **Run anyway**.
+2. Run `Infinite.exe`. The build is not code-signed, so Windows SmartScreen may say "Windows protected your PC": click **More info**, then **Run anyway**. It asks once per download.
 
 **Linux**
 1. `chmod +x Infinite-x86_64.AppImage`
@@ -197,6 +201,12 @@ Contributions, bug reports, and node ideas are welcome!
 ## Prior Art & Acknowledgements
 
 The tools and papers Infinite builds on are named in [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md), and the people who contributed are credited in [CONTRIBUTING.md](CONTRIBUTING.md#community-and-contributors).
+
+---
+
+## Cite & credit
+
+If you write about, review or build on Infinite, please credit it as: *Infinite, by Naman Soni (n1m21n), https://infinitedevices.org*. GitHub's "Cite this repository" button uses [CITATION.cff](CITATION.cff).
 
 ---
 

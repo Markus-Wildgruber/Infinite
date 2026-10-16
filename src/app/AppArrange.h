@@ -3,6 +3,7 @@
 // Split out of AppShared.h so ArrangeModel.h, NodeViewport.h and, through it,
 // Geometry3DNodes.h are not in every app/ TU
 // (docs/plans/compile-times/include-split.md, Phase 3).
+#include "app/ui/design/TokenColors.h" // tok:: palette for kArrangePalette
 #include "app/AppShared.h"
 #include "arrange/ArrangeMediaImport.h"
 #include "arrange/ArrangeModel.h"
@@ -222,6 +223,7 @@ extern uint64_t gArrangeRenamingLaneId;
 extern bool     gArrangeRenameJustStarted;
 
 extern bool     gArrangeClipSettingsPanelOpen;
+extern ImVec2   gArrangeInspectorMin, gArrangeInspectorMax;
 
 extern uint64_t gArrangeSettingsPanelTarget;
 
@@ -365,16 +367,16 @@ uint32_t ArrangeMarkerRGBA(ImU32 col);
 
 
    inline const ArrangePaletteEntry kArrangePalette[10] = {
-      { "Default", IM_COL32(110, 120, 140, 255) },
-      { "Crimson", IM_COL32(239, 68, 68, 255) },
-      { "Orange",  IM_COL32(249, 115, 22, 255) },
-      { "Amber",   IM_COL32(245, 158, 11, 255) },
-      { "Emerald", IM_COL32(16, 185, 129, 255) },
-      { "Cyan",    IM_COL32(6, 182, 212, 255) },
-      { "Blue",    IM_COL32(59, 130, 246, 255) },
-      { "Purple",  IM_COL32(139, 92, 246, 255) },
-      { "Magenta", IM_COL32(217, 70, 239, 255) },
-      { "Rose",    IM_COL32(244, 63, 94, 255) }
+      { "Default", tok::U32(tok::pal::c_6E788CFF) },
+      { "Crimson", tok::U32(tok::pal::c_EF4444FF) },
+      { "Orange",  tok::U32(tok::pal::c_F97316FF) },
+      { "Amber",   tok::U32(tok::pal::c_F59E0BFF) },
+      { "Emerald", tok::U32(tok::pal::c_10B981FF) },
+      { "Cyan",    tok::U32(tok::pal::c_06B6D4FF) },
+      { "Blue",    tok::U32(tok::pal::c_3B82F6FF) },
+      { "Purple",  tok::U32(tok::pal::c_8B5CF6FF) },
+      { "Magenta", tok::U32(tok::pal::c_D946EFFF) },
+      { "Rose",    tok::U32(tok::pal::c_F43F5EFF) }
    };
 
 

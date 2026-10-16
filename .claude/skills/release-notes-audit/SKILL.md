@@ -1,6 +1,6 @@
 ---
 name: release-notes-audit
-description: "Audit GitHub release notes against the code at each tag: features credited to the wrong release, technical claims that don't match the implementation. Use for \"vet the release\", \"is the changelog accurate\", \"audit past releases\", or before/after editing a published release body. Not artifact verification."
+description: "Check GitHub release notes against the code at each tag. Use for \"vet the release\", \"is the changelog accurate\", or before/after editing a published release body."
 ---
 
 ## When to use (full scope)
@@ -184,3 +184,11 @@ gh release edit <tag> --notes-file /tmp/<tag>-corrected.md
   status, version-string consistency, download-link health) — that's a
   separate concern from whether the prose is true. If asked to "vet the
   release" broadly, do both, but treat them as independent passes.
+
+## Shipped templates
+
+The starter templates are a user-visible claim, so check them like any feature. The list for a tag is
+`git show <tag>:assets/templates/index.txt` (one line each: slug, group, title, one line). A release note that
+names a template, or says "N templates", must match that list. Each one is also covered by `ROUNDTRIPTEST`
+(reads, node types exist, at least two Comment nodes, thumbnail present, write/read keeps the same counts), so a
+tag whose `driver.sh` run was green already shows `templates: N/N round trip  OK`.

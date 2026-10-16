@@ -42,6 +42,8 @@ namespace Platform
    // .field device files (and legacy .infdev). Same contract as the patch
    // dialogs above - Save returns the chosen path, or "" if cancelled.
    std::string OpenDeviceDialog();
+   // Extension pack files (.infpack, a zip). Returns the chosen path, or "" if cancelled.
+   std::string OpenExtensionPackDialog();
    std::string SaveDeviceDialog(const std::string& suggestedName = "Untitled.field");
 
    // ---- text outlines -----------------------------------------------------

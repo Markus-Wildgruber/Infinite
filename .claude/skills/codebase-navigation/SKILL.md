@@ -1,6 +1,6 @@
 ---
 name: codebase-navigation
-description: "How to search Infinite completely: trace an interface to every implementer and hand-maintained registration site, check every platform path, use the hotspot map. Use at the start of ANY investigation, sweep or plan touching src/, before claiming \"the code does X\". Add new wiring hotspots to it."
+description: "How to search Infinite completely: every implementer, registration site and platform path, plus the hotspot map. Use at the start of ANY investigation, sweep or plan touching src/."
 ---
 
 ## When to use (full scope)
@@ -300,6 +300,11 @@ entry if a refactor makes it stale.
   seek while stopped must not sound the step); a node prepared while stopped still fires its
   first step once, which AUDIOPARAMSWEEPTEST's clockless rigs (`SweepNeedsClock() == false`,
   transport paused) depend on.
+- **Field pixel image coordinate reads** connect two declaration paths in
+  `FieldIR.cpp` (shared `LowerAstStmt` and `LowerPixelProgramToIR` pin pre-scan)
+  to `GlslBackend.cpp`'s `ImageRead` and `FieldPixelNode::CookIfNeeded`'s unit-1
+  binding. Both paths must mark image symbols. Image fetches count toward
+  `offsetReadCount`; `usesOffsetReads` stays state-only because it selects 32F.
 
 ## Adding to this map
 

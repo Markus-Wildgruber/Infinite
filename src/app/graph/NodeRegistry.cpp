@@ -104,6 +104,16 @@
 #include "nodes/VideoSourceNode.h"
 #include "nodes/WaveTerrainNode.h"
 #include "nodes/WavetableNode.h"
+#include "nodes/CurveOpsNode.h"
+#include "nodes/DelaunayNodes.h"
+#include "nodes/FaceTrackNode.h"
+#include "nodes/FieldNotesNode.h"
+#include "nodes/HandTrackNode.h"
+#include "nodes/MidiOutNode.h"
+#include "nodes/PoseTrackNode.h"
+#include "nodes/Sketch3DNode.h"
+#include "nodes/SketchNode.h"
+#include "nodes/SpatialMixerNode.h"
 
 namespace app
 {
@@ -124,6 +134,7 @@ namespace app
       }
       REGISTER_NODE(FormulaNode, Formula, "Source");
       REGISTER_NODE(FieldPixelNode, FieldPixel, "Source");
+      REGISTER_NODE(SketchNode, Sketch, "Source");
       REGISTER_NODE(TextNode, Text, "Source");
       REGISTER_NODE(VideoSourceNode, Video, "Source");
       REGISTER_NODE(VideoInNode, Video In, "Source");
@@ -196,8 +207,12 @@ namespace app
       REGISTER_NODE(WrapNode, Wrap, "3D");
       REGISTER_NODE(FieldElementNode, Field Modifier, "3D");
       REGISTER_NODE(FieldPrimitiveNode, Field Primitive, "3D");
+      REGISTER_NODE(Sketch3DNode, Sketch 3D, "3D");
       REGISTER_NODE(DistributePointsOnFacesNode, Distribute Points on Faces, "3D");
       REGISTER_NODE(PointsToVerticesNode, Points to Vertices, "3D");
+      REGISTER_NODE(CurveOpsNode, Curve Ops, "3D");
+      REGISTER_NODE(DelaunayMeshNode, Delaunay Mesh, "3D");
+      REGISTER_NODE(VoronoiCellsNode, Voronoi Cells, "3D");
       REGISTER_NODE(DistributePointsInGridNode, Distribute Points in Grid, "3D");
       REGISTER_NODE(MergeByDistanceNode, Merge by Distance, "3D");
       REGISTER_NODE(Switcher3DNode, Switcher 3D, "3D");
@@ -267,6 +282,9 @@ namespace app
       REGISTER_NODE(ConstantNode, Constant, "Modulators");
       REGISTER_NODE(NullModulatorNode, Null Modulator, "Modulators");
       REGISTER_NODE(ImageAnalyzeNode, Image Analyze, "Modulators");
+      REGISTER_NODE(HandTrackNode, Hand Track, "Modulators");
+      REGISTER_NODE(FaceTrackNode, Face Track, "Modulators");
+      REGISTER_NODE(PoseTrackNode, Pose Track, "Modulators");
       REGISTER_NODE(PaletteNode, Palette, "Modulators");
       REGISTER_NODE(AudioFileNode, Audio File, "Modulators");
       REGISTER_NODE(AudioAnalyzeNode, Audio Analyze, "Modulators");
@@ -292,6 +310,7 @@ namespace app
       REGISTER_NODE(GrainMolderNode, Grain Molder, "Synths");
       REGISTER_NODE(GranularNode, Granular, "Synths");
       REGISTER_NODE(FieldSynthNode, Field Synth, "Synths");
+      REGISTER_NODE(FieldNotesNode, Field Notes, "Notes");
       REGISTER_NODE(FieldSampleNode, Field Effect, "AudioEffects");
       // Field Graph: registered so NodeFactory::MakeNode still resolves it
       // for loading a patch saved before this pass, but excluded from every
@@ -313,6 +332,7 @@ namespace app
       // P2.8 routing nodes - the system's only summing/fan-out points, see
       // docs/plans/audio/audio-graph-semantics.md §1/§2.
       REGISTER_NODE(MixerNode, Mixer, "Utility");
+      REGISTER_NODE(SpatialMixerNode, Spatial Mixer, "Utility");
       REGISTER_NODE(SplitterNode, Splitter, "Utility");
       // "Blend Audio" not "Blend" - that name is taken by the image
       // compositing node (REGISTER_NODE(BlendNode, Blend, "Compositing") above).
@@ -327,6 +347,7 @@ namespace app
       // docs/plans/audio/P3a-notes-prompt.md; Part 2 adds Note Filter/
       // Modify/Echo/Router/Display and the Arpeggiator.
       REGISTER_NODE(MidiNotesNode, MIDI Notes, "Notes");
+      REGISTER_NODE(MidiOutNode, MIDI Out, "Utility");
       // The hardware-free note source: on-screen piano plus a QWERTY typing
       // mapping, for playing/testing a patch with no MIDI controller at all.
       REGISTER_NODE(KeyboardNode, Keyboard, "Notes");

@@ -1,4 +1,5 @@
 // Field node parameter bodies and scopes (moved verbatim from main.cpp).
+#include "app/ui/design/TokenColors.h"
 #include "app/AppShared.h"
 // Non-core headers this file uses (docs/plans/compile-times/include-split.md).
 #include "core/UpdateCheck.h"
@@ -9,6 +10,8 @@
 #include "nodes/FieldSampleNode.h"
 #include "nodes/FieldSynthNode.h"
 #include "nodes/WavetableNode.h"
+#include "app/ui/design/components/AudioViz.h"
+#include "nodes/FieldNotesNode.h"
 
 namespace app
 {
@@ -34,7 +37,7 @@ namespace app
       const ImVec2 origin = ImGui::GetCursorScreenPos();
       ImDrawList* dl = ImGui::GetWindowDrawList();
       const ImVec2 br(origin.x + w, origin.y + h);
-      dl->AddRectFilled(origin, br, ScopeBgCol(), 4.0f);
+      AudioViz::Fill(dl, origin, br);
       dl->PushClipRect(origin, br, true);
 
       const float midY = origin.y + h * 0.5f;
@@ -57,8 +60,8 @@ namespace app
                dl->PathLineTo(ImVec2(origin.x + t * w, midY - v * h * 0.45f));
             }
             const ImU32 strokeCol = isLight
-               ? (pass == 0 ? IM_COL32(30, 110, 230, 50) : IM_COL32(20, 100, 230, 255))
-               : (pass == 0 ? IM_COL32(120, 200, 255, 46) : IM_COL32(150, 214, 255, 245));
+               ? (pass == 0 ? tok::U32(tok::pal::c_1E6EE632) : tok::U32(tok::pal::c_1464E6FF))
+               : (pass == 0 ? tok::U32(tok::pal::c_78C8FF2E) : tok::U32(tok::pal::c_96D6FFF5));
             dl->PathStroke(strokeCol, 0, pass == 0 ? 4.5f : 1.6f);
          }
       }
@@ -68,7 +71,7 @@ namespace app
       }
 
       dl->PopClipRect();
-      dl->AddRect(origin, br, ScopeBorderCol(), 4.0f);
+      AudioViz::Border(dl, origin, br);
       ImGui::Dummy(ImVec2(w, h));
    }
 
@@ -92,7 +95,7 @@ namespace app
       const ImVec2 origin = ImGui::GetCursorScreenPos();
       ImDrawList* dl = ImGui::GetWindowDrawList();
       const ImVec2 br(origin.x + w, origin.y + h);
-      dl->AddRectFilled(origin, br, ScopeBgCol(), 4.0f);
+      AudioViz::Fill(dl, origin, br);
       dl->PushClipRect(origin, br, true);
 
       const float midY = origin.y + h * 0.5f;
@@ -115,8 +118,8 @@ namespace app
                dl->PathLineTo(ImVec2(origin.x + t * w, midY - v * h * 0.45f));
             }
             const ImU32 strokeCol = isLight
-               ? (pass == 0 ? IM_COL32(30, 110, 230, 50) : IM_COL32(20, 100, 230, 255))
-               : (pass == 0 ? IM_COL32(120, 200, 255, 46) : IM_COL32(150, 214, 255, 245));
+               ? (pass == 0 ? tok::U32(tok::pal::c_1E6EE632) : tok::U32(tok::pal::c_1464E6FF))
+               : (pass == 0 ? tok::U32(tok::pal::c_78C8FF2E) : tok::U32(tok::pal::c_96D6FFF5));
             dl->PathStroke(strokeCol, 0, pass == 0 ? 4.5f : 1.6f);
          }
       }
@@ -126,7 +129,7 @@ namespace app
       }
 
       dl->PopClipRect();
-      dl->AddRect(origin, br, ScopeBorderCol(), 4.0f);
+      AudioViz::Border(dl, origin, br);
       ImGui::Dummy(ImVec2(w, h));
    }
 
@@ -150,7 +153,7 @@ namespace app
       const ImVec2 origin = ImGui::GetCursorScreenPos();
       ImDrawList* dl = ImGui::GetWindowDrawList();
       const ImVec2 br(origin.x + w, origin.y + h);
-      dl->AddRectFilled(origin, br, ScopeBgCol(), 4.0f);
+      AudioViz::Fill(dl, origin, br);
       dl->PushClipRect(origin, br, true);
 
       const float midY = origin.y + h * 0.5f;
@@ -173,8 +176,8 @@ namespace app
                dl->PathLineTo(ImVec2(origin.x + t * w, midY - v * h * 0.45f));
             }
             const ImU32 strokeCol = isLight
-               ? (pass == 0 ? IM_COL32(30, 110, 230, 50) : IM_COL32(20, 100, 230, 255))
-               : (pass == 0 ? IM_COL32(120, 200, 255, 46) : IM_COL32(150, 214, 255, 245));
+               ? (pass == 0 ? tok::U32(tok::pal::c_1E6EE632) : tok::U32(tok::pal::c_1464E6FF))
+               : (pass == 0 ? tok::U32(tok::pal::c_78C8FF2E) : tok::U32(tok::pal::c_96D6FFF5));
             dl->PathStroke(strokeCol, 0, pass == 0 ? 4.5f : 1.6f);
          }
       }
@@ -184,13 +187,80 @@ namespace app
       }
 
       dl->PopClipRect();
-      dl->AddRect(origin, br, ScopeBorderCol(), 4.0f);
+      AudioViz::Border(dl, origin, br);
+      ImGui::Dummy(ImVec2(w, h));
+   }
+
+
+   // Last two bars (8 beats) of what the script played: one bar per note,
+   // pitch on the y axis (auto-ranged to what is on screen, never narrower
+   // than an octave), brightness = velocity. Reads main-thread readouts only.
+   void DrawFieldNotesRoll(FieldNotesNode* n, float h, float width)
+   {
+      const float w = width > 0.0f ? width : gAudioContentW;
+      const ImVec2 origin = ImGui::GetCursorScreenPos();
+      ImDrawList* dl = ImGui::GetWindowDrawList();
+      const ImVec2 br(origin.x + w, origin.y + h);
+      AudioViz::Fill(dl, origin, br);
+      dl->PushClipRect(origin, br, true);
+
+      constexpr double kWindowBeats = 8.0;
+      const double nowBeat = Transport::Instance().Beats();
+      const double startBeat = nowBeat - kWindowBeats;
+
+      for (int i = 1; i < 8; i++)
+         dl->AddLine(ImVec2(origin.x + w * i / 8.0f, origin.y), ImVec2(origin.x + w * i / 8.0f, br.y),
+                     ScopeGridCol(), 1.0f);
+
+      float lo = 127.0f, hi = 0.0f;
+      int visible = 0;
+      for (int i = 0; i < n->RollCount(); i++)
+      {
+         const auto& r = n->RollAt(i);
+         if (r.beat < startBeat || r.beat > nowBeat + 0.01) continue;
+         lo = std::min(lo, r.note);
+         hi = std::max(hi, r.note);
+         visible++;
+      }
+
+      if (visible == 0)
+      {
+         dl->AddText(ImVec2(origin.x + 8.0f, origin.y + 4.0f), ScopeTextCol(), "idle");
+      }
+      else
+      {
+         if (hi - lo < 11.0f)
+         {
+            const float mid = 0.5f * (hi + lo);
+            lo = mid - 5.5f;
+            hi = mid + 5.5f;
+         }
+         const bool isLight = IsThemeLight();
+         const float barH = std::max(2.0f, h / (hi - lo + 2.0f));
+         const float barW = std::max(2.0f, w / (float)(kWindowBeats * 8.0));
+         for (int i = 0; i < n->RollCount(); i++)
+         {
+            const auto& r = n->RollAt(i);
+            if (r.beat < startBeat || r.beat > nowBeat + 0.01) continue;
+            const float x = origin.x + (float)((r.beat - startBeat) / kWindowBeats) * w;
+            const float y = br.y - barH - ((r.note - lo + 1.0f) / (hi - lo + 2.0f)) * (h - barH);
+            const float v = std::max(0.15f, std::min(1.0f, r.vel));
+            const ImU32 col = isLight ? tok::U32(tok::pal::c_1464E6FF) : tok::U32(tok::pal::c_96D6FFF5);
+            ImVec4 c = ImGui::ColorConvertU32ToFloat4(col);
+            c.w *= v;
+            dl->AddRectFilled(ImVec2(x, y), ImVec2(x + barW, y + barH), ImGui::ColorConvertFloat4ToU32(c), 1.0f);
+         }
+      }
+
+      dl->PopClipRect();
+      AudioViz::Border(dl, origin, br);
       ImGui::Dummy(ImVec2(w, h));
    }
 
 
    void DrawFieldElementParams(FieldElementNode* n)
    {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);   // sliders as wide as the preview and buttons above them
       n->SetNodeIndex(gCurrentNodeIndex);
 
       if (!gParamRegisterOnly)
@@ -198,7 +268,7 @@ namespace app
          DrawFieldDeviceControls<FieldElementNode>(n, "element", &FieldElementNode::PresetNames(),
                                                    [](FieldElementNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
 
-         if (ImGui::Button("Edit Field...", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
          {
             gFieldElementEditor = n;
             gFieldElementEditorOpen = true;
@@ -214,14 +284,14 @@ namespace app
          if (n->WasTruncated())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Truncated to %d vertices", n->ActualElementCount());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_800_200_1000), "Truncated to %d vertices", n->ActualElementCount());
             ImGui::PopTextWrapPos();
          }
 
          if (!n->Notice().empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", n->Notice().c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_700_200_1000), "%s", n->Notice().c_str());
             ImGui::PopTextWrapPos();
          }
 
@@ -254,7 +324,7 @@ namespace app
          if (!gParamRegisterOnly && !n->pinRefusal.empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", n->pinRefusal.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", n->pinRefusal.c_str());
             ImGui::PopTextWrapPos();
          }
       }
@@ -265,6 +335,7 @@ namespace app
 
    void DrawFieldPrimitiveParams(FieldPrimitiveNode* n)
    {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);   // sliders as wide as the preview and buttons above them
       n->SetNodeIndex(gCurrentNodeIndex);
 
       if (!gParamRegisterOnly)
@@ -272,7 +343,7 @@ namespace app
          DrawFieldDeviceControls<FieldPrimitiveNode>(n, "primitive", &FieldPrimitiveNode::PresetNames(),
                                                      [](FieldPrimitiveNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
 
-         if (ImGui::Button("Edit Field...", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
          {
             gFieldPrimitiveEditor = n;
             gFieldPrimitiveEditorOpen = true;
@@ -288,14 +359,14 @@ namespace app
          if (n->WasTruncated())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Truncated to %d vertices", n->ActualElementCount());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_800_200_1000), "Truncated to %d vertices", n->ActualElementCount());
             ImGui::PopTextWrapPos();
          }
 
          if (!n->Notice().empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", n->Notice().c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_700_200_1000), "%s", n->Notice().c_str());
             ImGui::PopTextWrapPos();
          }
 
@@ -332,7 +403,7 @@ namespace app
          if (!gParamRegisterOnly && !n->pinRefusal.empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", n->pinRefusal.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", n->pinRefusal.c_str());
             ImGui::PopTextWrapPos();
          }
       }
@@ -343,6 +414,7 @@ namespace app
 
    void DrawFieldSampleParams(FieldSampleNode* n)
    {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);   // sliders as wide as the preview and buttons above them
       n->SetNodeIndex(gCurrentNodeIndex);
 
       if (!gParamRegisterOnly)
@@ -350,7 +422,7 @@ namespace app
          DrawFieldDeviceControls<FieldSampleNode>(n, "sample", &FieldSampleNode::PresetNames(),
                                                   [](FieldSampleNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
 
-         if (ImGui::Button("Edit Field...", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
          {
             gFieldSampleEditor = n;
             gFieldSampleEditorOpen = true;
@@ -366,7 +438,7 @@ namespace app
          if (!n->Notice().empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", n->Notice().c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_700_200_1000), "%s", n->Notice().c_str());
             ImGui::PopTextWrapPos();
          }
 
@@ -374,7 +446,7 @@ namespace app
          if (faults > 0)
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%llu NaN/inf recovery event(s)", (unsigned long long)faults);
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%llu NaN/inf recovery event(s)", (unsigned long long)faults);
             ImGui::PopTextWrapPos();
          }
       }
@@ -396,7 +468,7 @@ namespace app
          if (!gParamRegisterOnly && !n->pinRefusal.empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", n->pinRefusal.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", n->pinRefusal.c_str());
             ImGui::PopTextWrapPos();
          }
       }
@@ -407,6 +479,7 @@ namespace app
 
    void DrawFieldSynthParams(FieldSynthNode* n)
    {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);   // sliders as wide as the preview and buttons above them
       n->SetNodeIndex(gCurrentNodeIndex);
 
       if (!gParamRegisterOnly)
@@ -414,7 +487,7 @@ namespace app
          DrawFieldDeviceControls<FieldSynthNode>(n, "synth", &FieldSynthNode::PresetNames(),
                                                  [](FieldSynthNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
 
-         if (ImGui::Button("Edit Field...", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
          {
             gFieldSynthEditor = n;
             gFieldSynthEditorOpen = true;
@@ -430,7 +503,7 @@ namespace app
          if (!n->Notice().empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", n->Notice().c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_700_200_1000), "%s", n->Notice().c_str());
             ImGui::PopTextWrapPos();
          }
 
@@ -438,7 +511,7 @@ namespace app
          if (faults > 0)
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%llu NaN/inf recovery event(s)", (unsigned long long)faults);
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%llu NaN/inf recovery event(s)", (unsigned long long)faults);
             ImGui::PopTextWrapPos();
          }
       }
@@ -468,7 +541,7 @@ namespace app
          if (!gParamRegisterOnly && !n->pinRefusal.empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", n->pinRefusal.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", n->pinRefusal.c_str());
             ImGui::PopTextWrapPos();
          }
       }
@@ -477,8 +550,60 @@ namespace app
    }
 
 
+   void DrawFieldNotesParams(FieldNotesNode* n)
+   {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);
+      n->SetNodeIndex(gCurrentNodeIndex);
+
+      if (!gParamRegisterOnly)
+      {
+         DrawFieldDeviceControls<FieldNotesNode>(n, "notes", &FieldNotesNode::PresetNames(),
+                                                 [](FieldNotesNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
+
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
+         {
+            gFieldNotesEditor = n;
+            gFieldNotesEditorOpen = true;
+         }
+
+         if (!n->LastError().empty())
+         {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
+            ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", n->LastError().c_str());
+            ImGui::PopTextWrapPos();
+         }
+
+         if (!n->Notice().empty())
+         {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_700_200_1000), "%s", n->Notice().c_str());
+            ImGui::PopTextWrapPos();
+         }
+
+         if (n->DroppedTotal() > 0)
+         {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%llu note(s) dropped", (unsigned long long)n->DroppedTotal());
+            ImGui::PopTextWrapPos();
+         }
+      }
+
+      {
+         int root = n->root;
+         if (ModSliderInt("root", &root, 0, 11))
+            n->root = root;
+         int scale = n->scale;
+         if (ModSliderInt("scale", &scale, 0, MusicTime::kNumScaleTypes - 1))
+            n->scale = scale;
+      }
+
+      DrawFieldParamSliders(n);
+   }
+
+
    void DrawFieldGraphParams(FieldGraphNode* n)
    {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);   // sliders as wide as the preview and buttons above them
       n->SetNodeIndex(gCurrentNodeIndex);
 
       if (!gParamRegisterOnly)
@@ -486,7 +611,7 @@ namespace app
          DrawFieldDeviceControls<FieldGraphNode>(n, "graph", &FieldGraphNode::PresetNames(),
                                                  [](FieldGraphNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
 
-         if (ImGui::Button("Edit Field...", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
          {
             gFieldGraphEditor = n;
             gFieldGraphEditorOpen = true;
@@ -496,7 +621,7 @@ namespace app
          // nested inside ed::Begin()/ed::End(), and Regenerate() spawns/
          // removes/reconnects real nodes - see gFieldGraphPendingRegenerate's
          // drain after ed::End() (trap T14).
-         if (ImGui::Button("Regenerate", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Regenerate", ImVec2(kPreviewSize, 0)))
             gFieldGraphPendingRegenerate = n;
 
          // Build step 16: only meaningful once there is something
@@ -508,7 +633,7 @@ namespace app
          const bool canUnpack = n->encapsulated && !n->MountedIndices().empty();
          if (!canUnpack)
             ImGui::BeginDisabled();
-         if (ImGui::Button("Unpack to Canvas", ImVec2(kPreviewSize, 0)) && canUnpack)
+         if (ActionButton::Draw("Unpack to Canvas", ImVec2(kPreviewSize, 0)) && canUnpack)
             gFieldGraphPendingUnpack = n;
          if (!canUnpack)
             ImGui::EndDisabled();
@@ -523,7 +648,7 @@ namespace app
          if (!n->Notice().empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "%s", n->Notice().c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_700_200_1000), "%s", n->Notice().c_str());
             ImGui::PopTextWrapPos();
          }
       }
@@ -545,7 +670,7 @@ namespace app
          if (!gParamRegisterOnly && !n->pinRefusal.empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", n->pinRefusal.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", n->pinRefusal.c_str());
             ImGui::PopTextWrapPos();
          }
       }
@@ -556,6 +681,7 @@ namespace app
 
    void DrawFieldPixelParams(FieldPixelNode* n)
    {
+      gParamWidthLive = std::max(gParamWidthLive, kPreviewSize);   // sliders as wide as the preview and buttons above them
       n->SetNodeIndex(gCurrentNodeIndex);
 
       if (!gParamRegisterOnly)
@@ -563,7 +689,7 @@ namespace app
          DrawFieldDeviceControls<FieldPixelNode>(n, "pixel", &FieldPixelNode::PresetNames(),
                                                  [](FieldPixelNode* n2, int i) { n2->presetIndex = i; n2->LoadPreset(i); });
 
-         if (ImGui::Button("Edit Field...", ImVec2(kPreviewSize, 0)))
+         if (ActionButton::Draw("Edit Field...", ImVec2(kPreviewSize, 0)))
          {
             gFieldPixelEditor = n;
             gFieldPixelEditorOpen = true;
@@ -618,7 +744,7 @@ namespace app
          if (!gParamRegisterOnly && !n->pinRefusal.empty())
          {
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kPreviewSize);
-            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", n->pinRefusal.c_str());
+            ImGui::TextColored(tok::V4(tok::palf::v_1000_600_200_1000), "%s", n->pinRefusal.c_str());
             ImGui::PopTextWrapPos();
          }
       }

@@ -34,6 +34,9 @@ namespace app
       // here, so the two entry kinds coexist with no remapping.
       bool arrangeOnly = false;
       Arrange::Model arrange;
+      // What the edit this entry undoes was called ("Move node"). Empty until named: a call site that passed no label
+      // gets one derived from the before/after patches the first time something shows it. Never written to a patch.
+      std::string label;
    };
 
 extern std::deque<UndoEntry> gUndoStack;

@@ -1,0 +1,78 @@
+/* Infinite: glass layer (docs/brand/BRAND.md 2.3).
+   Glass only sits behind short labels (header, nav, chips, pills) at 72 to 78% opacity, never behind body text.
+   Cards are solid surfaces: depth comes from the surface step and the stacked shadows, never an outline. */
+:root {
+  --glass-blur: blur(20px) saturate(1.6);
+  --glass-hi: inset 0 1px 0 color-mix(in srgb, var(--surface-2) 95%, transparent);
+  --solid: linear-gradient(180deg, color-mix(in srgb, var(--ink) 84%, var(--surface-1)), var(--ink));
+  --solid-hover: var(--ink);
+  --solid-hi: inset 0 1px 0 color-mix(in srgb, var(--ground) 28%, transparent);
+  --glass-shadow: 0 1px 2px color-mix(in srgb, var(--shadow) 5%, transparent), 0 10px 28px color-mix(in srgb, var(--shadow) 8%, transparent);
+}
+
+/* cards, panels, frames: solid surface-1 */
+.slab, .predict-card, .wave-card, .setup-card, .download-card, .modal-card, .film-frame {
+  background: var(--surface-1); box-shadow: var(--shadow-1);
+}
+.download-card, .film-frame, .predict-card, .wave-card { box-shadow: var(--shadow-2); }
+
+/* short labels only: pills, chips, tabs */
+.btn-ghost, .tab-pill, .lib-chip, .lib-view, .platform-chip {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-hi), var(--glass-shadow);
+}
+.btn-ghost:hover { box-shadow: var(--glass-hi), 0 14px 32px color-mix(in srgb, var(--shadow) 12%, transparent); }
+
+/* header: nav labels over glass at 78% */
+.site-header {
+  background: color-mix(in srgb, var(--ground) 78%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.7); backdrop-filter: blur(24px) saturate(1.7);
+}
+.site-header.scrolled { box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow) 6%, transparent); }
+.nav-links > a:hover, .nav-links > a[aria-current] { background: var(--glass); box-shadow: var(--glass-hi); }
+.nav-links > a[aria-current] { color: var(--ink); }
+.icon-btn:hover { background: var(--glass); box-shadow: var(--glass-hi); }
+
+/* primary: Midnight with a lit top edge */
+.btn-primary {
+  background: var(--solid);
+  box-shadow: var(--solid-hi), var(--glass-shadow);
+}
+.btn-primary:hover { background: var(--solid-hover); }
+
+/* node cards: solid white surface; the mock keeps its own light inks */
+.node, .pnode { --app-panel: var(--surface-2); --app-text: var(--ink); --app-dim: var(--ink-2); --app-border: var(--line); }
+.node { background: var(--surface-1); box-shadow: var(--shadow-2); }
+
+/* pressed chips and toggles: Midnight */
+.lib-chip[aria-pressed="true"], .lib-view button[aria-pressed="true"] {
+  background: var(--solid); color: var(--ground);
+  box-shadow: var(--solid-hi);
+}
+.lib-view button { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.lib-dl { background: var(--solid); color: var(--ground); box-shadow: var(--solid-hi), 0 4px 12px color-mix(in srgb, var(--shadow) 25%, transparent); }
+.lib-dl:hover { background: var(--solid-hover); }
+.lib-price { background: var(--deep); box-shadow: none; }
+.lib-copy { background: var(--deep); color: var(--ink); }
+.lib-copy:hover { background: var(--surface-3); }
+.step { box-shadow: none; }
+
+.site-footer { background: var(--surface-1); border-top: 0; }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass: color-mix(in srgb, var(--surface-1) 94%, transparent); }
+  .site-header { background: color-mix(in srgb, var(--ground) 95%, transparent); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root { --glass: var(--surface-1); }
+  .site-header { background: var(--ground); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .btn-ghost, .tab-pill, .lib-chip, .lib-view, .platform-chip { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+.lib-menu { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(1.7); backdrop-filter: blur(24px) saturate(1.7); box-shadow: var(--glass-hi), var(--shadow-2); }
+.lib-select { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-hi), var(--glass-shadow); }
+@media (prefers-reduced-transparency: reduce) { .lib-menu { background: var(--surface-1); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+/* marquee pills: ~600 of them move at once, so no backdrop blur (it re-blurs every frame); the tint is the glass colour, solid */
+.ticker-pill { background: color-mix(in srgb, var(--surface-1) 92%, var(--ink)); box-shadow: var(--glass-hi), 0 1px 2px color-mix(in srgb, var(--shadow) 8%, transparent); }
